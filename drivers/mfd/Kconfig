@@ -262,6 +262,23 @@ config MFD_CS47L90
 	help
 	  Support for Cirrus Logic CS47L90 and CS47L91 Smart Codecs
 
+config MFD_TACNA
+	bool
+
+config MFD_TACNA_SPI
+	bool "Cirrus Logic Tacna codecs with SPI"
+	select MFD_CORE
+	select MFD_TACNA
+	select TACNA_IRQ
+	select PINCTRL_TACNA
+	select REGMAP
+	select REGMAP_SPI
+	select REGMAP_IRQ
+	depends on SPI_MASTER
+	help
+	  Support for the Cirrus Logic Tacna platform audio SoC
+	  core functionality controlled via SPI.
+
 config MFD_ASIC3
 	bool "Compaq ASIC3"
 	depends on GPIOLIB && ARM
