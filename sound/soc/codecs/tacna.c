@@ -957,10 +957,12 @@ int tacna_put_out_vu(struct snd_kcontrol *kcontrol,
 		     struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *comp = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(comp);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
 	int ret;
 
+	snd_soc_dapm_mutex_lock(dapm);
 	snd_soc_component_update_bits(comp, mc->reg, TACNA_OUT_VU, 0);
 	if (mc->rreg)
 		snd_soc_component_update_bits(comp, mc->rreg, TACNA_OUT_VU,
@@ -973,6 +975,8 @@ int tacna_put_out_vu(struct snd_kcontrol *kcontrol,
 	if (mc->rreg)
 		snd_soc_component_update_bits(comp, mc->rreg, TACNA_OUT_VU,
 					      TACNA_OUT_VU);
+	snd_soc_dapm_mutex_unlock(dapm);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(tacna_put_out_vu);
