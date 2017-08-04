@@ -3450,13 +3450,13 @@ EXPORT_SYMBOL_GPL(tacna_set_output_mode);
 
 int tacna_get_accdet_for_output(struct snd_soc_component *comp, int output)
 {
-/*	struct tacna *tacna = dev_get_drvdata(comp->dev->parent);
+	struct tacna *tacna = dev_get_drvdata(comp->dev->parent);
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(tacna->pdata.accdet); i++) {
+	for (i = 0; i < ARRAY_SIZE(tacna->pdata.accdet); i++)
 		if (tacna->pdata.accdet[i].output == output)
 			return i;
-*/
+
 	return -ENODEV;
 }
 EXPORT_SYMBOL_GPL(tacna_get_accdet_for_output);
