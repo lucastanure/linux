@@ -38,7 +38,8 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 	 * Don't try to run this on the emulated platform, only on real
 	 * hardware
 	 */
-	if (devid != CLSIC_SUPPORTED_ID_48AB50)
+	if (devid != CLSIC_SUPPORTED_ID_48AB50 &&
+	    devid != CLSIC_SUPPORTED_ID_48AC40)
 		return -EIO;
 
 	tacna = devm_kzalloc(&pdev->dev, sizeof(struct tacna), GFP_KERNEL);

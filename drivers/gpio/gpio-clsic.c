@@ -175,6 +175,7 @@ static int clsic_gpio_probe(struct platform_device *pdev)
 
 	switch (clsic->devid) {
 	case CLSIC_SUPPORTED_ID_48AB50:
+	case CLSIC_SUPPORTED_ID_48AC40:
 		clsic_gpio->gpio_chip.ngpio = CLSIC_NUM_GPIOS;
 		break;
 	default:
