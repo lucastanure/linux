@@ -2671,13 +2671,15 @@ static int tacna_fllhj_apply(struct tacna_fll *fll, int fin)
 		return -EINVAL;
 	}
 
+	/* clear the ctrl_upd bit to guarantee we write to it later. */
 	regmap_update_bits(tacna->regmap,
 			   fll->base + TACNA_FLL_CONTROL2_OFFS,
 			   TACNA_FLL1_LOCKDET_THR_MASK |
 			   TACNA_FLL1_CLK_VCO_FAST_SRC_MASK |
 			   TACNA_FLL1_PHASEDET_MASK |
 			   TACNA_FLL1_REFCLK_DIV_MASK |
-			   TACNA_FLL1_N_MASK,
+			   TACNA_FLL1_N_MASK |
+			   TACNA_FLL1_CTRL_UPD_MASK,
 			   (lockdet_thr << TACNA_FLL1_LOCKDET_THR_SHIFT) |
 			   (fast_clk << TACNA_FLL1_CLK_VCO_FAST_SRC_SHIFT) |
 			   (1 << TACNA_FLL1_PHASEDET_SHIFT) |
@@ -2745,12 +2747,6 @@ static int tacna_fllhj_enable(struct tacna_fll *fll)
 			   TACNA_FLL1_EN_MASK);
 
 out:
-	/* Release the hold so that flln locks to external frequency */
-	regmap_update_bits(tacna->regmap,
-			   fll->base + TACNA_FLL_CONTROL1_OFFS,
-			   TACNA_FLL1_HOLD_MASK,
-			   0);
-
 	regmap_update_bits(tacna->regmap,
 			   fll->base + TACNA_FLL_CONTROL2_OFFS,
 			   TACNA_FLL1_LOCKDET_MASK,
@@ -2760,6 +2756,12 @@ out:
 			   fll->base + TACNA_FLL_CONTROL1_OFFS,
 			   TACNA_FLL1_CTRL_UPD_MASK,
 			   TACNA_FLL1_CTRL_UPD_MASK);
+
+	/* Release the hold so that flln locks to external frequency */
+	regmap_update_bits(tacna->regmap,
+			   fll->base + TACNA_FLL_CONTROL1_OFFS,
+			   TACNA_FLL1_HOLD_MASK,
+			   0);
 
 	if (!already_enabled)
 		tacna_wait_for_fll(fll, true);
