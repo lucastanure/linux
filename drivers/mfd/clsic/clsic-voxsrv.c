@@ -783,6 +783,32 @@ no_pop_exit:
 	return ret;
 }
 
+static void vox_check_pm(struct clsic *clsic, struct clsic_vox *vox)
+{
+	union clsic_vox_msg *mode_msg = (union clsic_vox_msg *) vox->cmd;
+	uint8_t service_instance = vox->service->service_instance;
+
+	if (mode_msg->cmd_set_mode.mode == CLSIC_VOX_MODE_IDLE) {
+		/* mark VOX idle */
+		clsic_pm_service_mark(clsic, service_instance, false);
+
+	} else {
+		/*
+		 * Handle special case of CLSIC_VOX_MODE_LISTEN
+		 * where we want secure processor to be turned off
+		 * while hardware is waiting for trigger (so powered)
+		 *
+		 * The mixer will have an established route that will hold the
+		 * device power on.
+		 */
+		if (mode_msg->cmd_set_mode.mode == CLSIC_VOX_MODE_LISTEN)
+			clsic_pm_service_mark(clsic, service_instance, false);
+		else
+			/* mark VOX busy */
+			clsic_pm_service_mark(clsic, service_instance, true);
+	}
+}
+
 static int vox_cmd_tlv_put(struct snd_kcontrol *kcontrol,
 			   int op_flag,
 			   unsigned int size,
@@ -843,6 +869,9 @@ static int vox_cmd_tlv_put(struct snd_kcontrol *kcontrol,
 
 	/* Insert the vox service instance */
 	clsic_set_srv_inst(vox->cmd, vox->service->service_instance);
+
+	if (cmdhdr->msgid == CLSIC_VOX_MSG_CR_SET_MODE)
+		vox_check_pm(vox->clsic, vox);
 
 	/*
 	 * Send the cmd (don't provide a rsp buf let the msg layer allocate the
