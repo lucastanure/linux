@@ -463,7 +463,11 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
 	clsic_purge_message_queues(clsic);
 	mutex_unlock(&clsic->message_lock);
 
-	schedule_work(&clsic->maintenance_handler);
+	/*
+	 * If the device panics don't attempt to recover it automatically,
+	 * the user will need to reboot or trigger a device reset
+	 * schedule_work(&clsic->maintenance_handler);
+	 */
 }
 
 /*
@@ -478,8 +482,7 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
  * If the device state is inactive then the driver is in a first touch
  * situation, reset then enumerate the device.
  *
- * If the state is panic then the driver will need to run through the same
- * steps as inactive to get the device working again.
+ * If the state is panic then the driver will stay halted
  *
  * If the device is starting or active then do nothing as no work is required,
  * either it is already running or the driver will receive a further
@@ -498,9 +501,6 @@ void clsic_maintenance(struct work_struct *data)
 					   maintenance_handler);
 
 	switch (clsic->state) {
-	case CLSIC_STATE_PANIC:
-		clsic_set_state(clsic, CLSIC_STATE_INACTIVE);
-		/* fallthrough */
 	case CLSIC_STATE_INACTIVE:
 		clsic_soft_reset(clsic);
 		break;
@@ -514,6 +514,9 @@ void clsic_maintenance(struct work_struct *data)
 	case CLSIC_STATE_STOPPING:
 	case CLSIC_STATE_STOPPED:
 	case CLSIC_STATE_ACTIVE:
+		break;
+	case CLSIC_STATE_PANIC:
+		clsic_info(clsic, "Device has sent a panic notification\n");
 		break;
 	case CLSIC_STATE_LOST:
 		clsic_info(clsic, "Device failed to start\n");
