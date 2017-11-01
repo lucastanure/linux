@@ -47,7 +47,6 @@
 /*
  * IP blocks missing from FPGA - enabling these will halt the system firmware
  */
-#define ENABLE_DMIC_INPUTS 1
 #define ENABLE_ASRC 1
 #endif
 
@@ -324,7 +323,6 @@ static const struct snd_kcontrol_new clsic_dsp1_rate_controls[] = {
 };
 
 static const struct snd_kcontrol_new clsic_snd_controls[] = {
-#ifdef ENABLE_DMIC_INPUTS
 SOC_ENUM("IN1 OSR", tacna_in_dmic_osr[0]),
 SOC_ENUM("IN2 OSR", tacna_in_dmic_osr[1]),
 SOC_ENUM("IN3 OSR", tacna_in_dmic_osr[2]),
@@ -360,7 +358,6 @@ SOC_SINGLE_TLV("IN4R Digital Volume", TACNA_IN4R_CONTROL2,
 
 SOC_ENUM("Input Ramp Up", tacna_in_vi_ramp),
 SOC_ENUM("Input Ramp Down", tacna_in_vd_ramp),
-#endif
 
 TACNA_MIXER_CONTROLS("EQ1", TACNA_EQ1MIX_INPUT1),
 TACNA_MIXER_CONTROLS("EQ2", TACNA_EQ2MIX_INPUT1),
@@ -467,7 +464,6 @@ TACNA_RATE_ENUM("ASRC2 Rate 1", tacna_asrc2_rate[0]),
 TACNA_RATE_ENUM("ASRC2 Rate 2", tacna_asrc2_rate[1]),
 #endif
 
-#ifdef ENABLE_DMIC_INPUTS
 SOC_ENUM_EXT("IN1L Rate", tacna_input_rate[0],
 	     snd_soc_get_enum_double, tacna_in_rate_put),
 SOC_ENUM_EXT("IN1R Rate", tacna_input_rate[1],
@@ -484,7 +480,6 @@ SOC_ENUM_EXT("IN4L Rate", tacna_input_rate[6],
 	     snd_soc_get_enum_double, tacna_in_rate_put),
 SOC_ENUM_EXT("IN4R Rate", tacna_input_rate[7],
 	     snd_soc_get_enum_double, tacna_in_rate_put),
-#endif
 
 TACNA_MIXER_CONTROLS("ASP1TX1", TACNA_ASP1TX1MIX_INPUT1),
 TACNA_MIXER_CONTROLS("ASP1TX2", TACNA_ASP1TX2MIX_INPUT1),
@@ -733,7 +728,6 @@ SND_SOC_DAPM_SUPPLY("SLIMBUSCLK", SND_SOC_NOPM,
 
 SND_SOC_DAPM_SIGGEN("TONE"),
 
-#ifdef ENABLE_DMIC_INPUTS
 SND_SOC_DAPM_INPUT("IN1L"),
 SND_SOC_DAPM_INPUT("IN1R"),
 SND_SOC_DAPM_INPUT("IN2L"),
@@ -742,7 +736,6 @@ SND_SOC_DAPM_INPUT("IN3L"),
 SND_SOC_DAPM_INPUT("IN3R"),
 SND_SOC_DAPM_INPUT("IN4L"),
 SND_SOC_DAPM_INPUT("IN4R"),
-#endif
 
 SND_SOC_DAPM_OUTPUT("DRC1 Signal Activity"),
 SND_SOC_DAPM_OUTPUT("DRC2 Signal Activity"),
@@ -844,7 +837,6 @@ SND_SOC_DAPM_PGA("Tone Generator 1", TACNA_TONE_GENERATOR1,
 SND_SOC_DAPM_PGA("Tone Generator 2", TACNA_TONE_GENERATOR1,
 		 TACNA_TONE2_EN_SHIFT, 0, NULL, 0),
 
-#ifdef ENABLE_DMIC_INPUTS
 SND_SOC_DAPM_PGA_E("IN1L PGA", TACNA_INPUT_CONTROL, TACNA_IN1L_EN_SHIFT,
 		   0, NULL, 0, tacna_in_ev,
 		   SND_SOC_DAPM_PRE_PMD |
@@ -861,7 +853,22 @@ SND_SOC_DAPM_PGA_E("IN2R PGA", TACNA_INPUT_CONTROL, TACNA_IN2R_EN_SHIFT,
 		   0, NULL, 0, tacna_in_ev,
 		   SND_SOC_DAPM_PRE_PMD |
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU),
-#endif
+SND_SOC_DAPM_PGA_E("IN3L PGA", TACNA_INPUT_CONTROL, TACNA_IN3L_EN_SHIFT,
+		   0, NULL, 0, tacna_in_ev,
+		   SND_SOC_DAPM_PRE_PMD |
+		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU),
+SND_SOC_DAPM_PGA_E("IN3R PGA", TACNA_INPUT_CONTROL, TACNA_IN3R_EN_SHIFT,
+		   0, NULL, 0, tacna_in_ev,
+		   SND_SOC_DAPM_PRE_PMD |
+		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU),
+SND_SOC_DAPM_PGA_E("IN4L PGA", TACNA_INPUT_CONTROL, TACNA_IN4L_EN_SHIFT,
+		   0, NULL, 0, tacna_in_ev,
+		   SND_SOC_DAPM_PRE_PMD |
+		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU),
+SND_SOC_DAPM_PGA_E("IN4R PGA", TACNA_INPUT_CONTROL, TACNA_IN4R_EN_SHIFT,
+		   0, NULL, 0, tacna_in_ev,
+		   SND_SOC_DAPM_PRE_PMD |
+		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU),
 
 SND_SOC_DAPM_AIF_IN("ASP1RX1", NULL, 0, TACNA_ASP1_ENABLES1,
 		    TACNA_ASP1_RX1_EN_SHIFT, 0),
@@ -1141,14 +1148,21 @@ SND_SOC_DAPM_OUTPUT("MICSUPP"),
 }; /* end of clsic_dapm_widgets[] */
 
 /*
- * TODO: Update table when enabling DMIC inputs and ASRC1
+ * TODO: Update table when enabling ASRC1
  *
- * ENABLE_DMIC_INPUTS
  * ENABLE_ASRC
  */
 #define TACNA_MIXER_INPUT_ROUTES(name) \
 	{ name, "Tone Generator 1", "Tone Generator 1" }, \
 	{ name, "Tone Generator 2", "Tone Generator 2" }, \
+	{ name, "IN1L", "IN1L PGA" }, \
+	{ name, "IN1R", "IN1R PGA" }, \
+	{ name, "IN2L", "IN2L PGA" }, \
+	{ name, "IN2R", "IN2R PGA" }, \
+	{ name, "IN3L", "IN3L PGA" }, \
+	{ name, "IN3R", "IN3R PGA" }, \
+	{ name, "IN4L", "IN4L PGA" }, \
+	{ name, "IN4R", "IN4R PGA" }, \
 	{ name, "ASP1RX1", "ASP1RX1" }, \
 	{ name, "ASP1RX2", "ASP1RX2" }, \
 	{ name, "ASP1RX3", "ASP1RX3" }, \
@@ -1294,7 +1308,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "ASRC2IN1L", NULL, "ASRC2R1CLK" },
 	{ "ASRC2IN1R", NULL, "ASRC2R1CLK" },
 #endif
-#ifdef ENABLE_DMIC_INPUTS
 	{ "IN1L", NULL, "SYSCLK" },
 	{ "IN1R", NULL, "SYSCLK" },
 	{ "IN2L", NULL, "SYSCLK" },
@@ -1303,7 +1316,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "IN3R", NULL, "SYSCLK" },
 	{ "IN4L", NULL, "SYSCLK" },
 	{ "IN4R", NULL, "SYSCLK" },
-#endif
 	{ "Tone Generator 1", NULL, "SYSCLK" },
 	{ "Tone Generator 2", NULL, "SYSCLK" },
 
@@ -1401,7 +1413,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "Slim2 Capture", NULL, "SYSCLK" },
 	{ "Slim3 Capture", NULL, "SYSCLK" },
 
-#ifdef ENABLE_DMIC_INPUTS
 	{ "IN1L PGA", NULL, "IN1L" },
 	{ "IN1R PGA", NULL, "IN1R" },
 	{ "IN2L PGA", NULL, "IN2L" },
@@ -1410,7 +1421,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "IN3R PGA", NULL, "IN3R" },
 	{ "IN4L PGA", NULL, "IN4L" },
 	{ "IN4R PGA", NULL, "IN4R" },
-#endif
 
 	TACNA_MIXER_ROUTES("ASP1TX1", "ASP1TX1"),
 	TACNA_MIXER_ROUTES("ASP1TX2", "ASP1TX2"),
@@ -1789,6 +1799,17 @@ static int clsic_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static const unsigned int clsic_digital_vu[] = {
+	TACNA_IN1L_CONTROL2,
+	TACNA_IN1R_CONTROL2,
+	TACNA_IN2L_CONTROL2,
+	TACNA_IN2R_CONTROL2,
+	TACNA_IN3L_CONTROL2,
+	TACNA_IN3R_CONTROL2,
+	TACNA_IN4L_CONTROL2,
+	TACNA_IN4R_CONTROL2,
+};
+
 static int clsic_set_fll(struct snd_soc_codec *codec, int fll_id, int source,
 			   unsigned int fref, unsigned int fout)
 {
@@ -1908,13 +1929,11 @@ static int clsic_probe(struct platform_device *pdev)
 	for (i = 0; i < ARRAY_SIZE(clsic_dai); i++)
 		tacna_init_dai(&clsic_codec->core, i);
 
-#if 0
 	/* Latch volume update bits */
 	for (i = 0; i < ARRAY_SIZE(clsic_digital_vu); i++)
 		regmap_update_bits(clsic_codec->core.tacna->regmap,
 				   clsic_digital_vu[i],
 				   TACNA_IN_VU_MASK, TACNA_IN_VU);
-#endif
 
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_idle(&pdev->dev);

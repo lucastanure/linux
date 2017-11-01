@@ -192,7 +192,6 @@ bool clsic_readable_register(struct device *dev, unsigned int reg)
 	case TACNA_FLL2_CONTROL5:
 	case TACNA_FLL2_CONTROL6:
 	case TACNA_FLL2_GPIO_CLOCK:
-#if 0
 	case TACNA_INPUT_CONTROL:
 	case TACNA_INPUT_STATUS:
 	case TACNA_INPUT_RATE_CONTROL:
@@ -220,7 +219,6 @@ bool clsic_readable_register(struct device *dev, unsigned int reg)
 	case TACNA_IN_SIG_DET_CONTROL:
 	case TACNA_INPUT_HPF_CONTROL:
 	case TACNA_INPUT_VOL_CONTROL:
-#endif
 	case TACNA_ASP1_ENABLES1:
 	case TACNA_ASP1_CONTROL1:
 	case TACNA_ASP1_CONTROL2:
