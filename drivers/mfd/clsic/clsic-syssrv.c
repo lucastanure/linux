@@ -320,9 +320,8 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		 * code (this just means that the services are sparse)
 		 */
 		if (msg_rsp.rsp_srv_info.hdr.err == CLSIC_ERR_INVAL_SI) {
-			clsic_info(clsic,
-				   "getserviceinfo %d: no service\n",
-				   service_instance);
+			clsic_dbg(clsic, "getserviceinfo %d: no service\n",
+				  service_instance);
 			continue;
 		}
 		services_found++;

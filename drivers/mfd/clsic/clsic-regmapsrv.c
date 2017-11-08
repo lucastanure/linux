@@ -476,9 +476,8 @@ int clsic_regmap_service_start(struct clsic *clsic,
 		if ((regmapsrv_struct->clsic == clsic) &&
 		    (regmapsrv_struct->service_instance ==
 		     handler->service_instance)) {
-			clsic_info(clsic,
-				   "%p handler structure is a full match",
-				   handler);
+			clsic_dbg(clsic, "%p handler structure is a full match",
+				  handler);
 
 			/*
 			 * Mark dirty, switch off cache only then sync to the

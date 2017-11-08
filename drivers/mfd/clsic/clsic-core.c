@@ -616,7 +616,7 @@ int clsic_register_service_handler(struct clsic *clsic,
 	struct clsic_service *tmp_handler;
 	int ret = 0;
 
-	clsic_info(clsic, "%p %d: %pF\n", clsic, service_instance, start);
+	clsic_dbg(clsic, "%p %d: %pF\n", clsic, service_instance, start);
 
 	if (service_instance > CLSIC_SERVICE_MAX) {
 		clsic_err(clsic, "%p:%d out of range\n", start,
@@ -626,8 +626,8 @@ int clsic_register_service_handler(struct clsic *clsic,
 
 	mutex_lock(&clsic->service_lock);
 	if (clsic->service_handlers[service_instance] != NULL) {
-		clsic_err(clsic, "%d pre-registered %p\n",
-			  service_instance, start);
+		clsic_dbg(clsic, "%d pre-registered %p\n", service_instance,
+			  start);
 
 		/*
 		 * Check the service type matches, if not call stop and
