@@ -563,7 +563,7 @@ DEFINE_SIMPLE_ATTRIBUTE(clsic_triggerworker_fops, NULL,
 			clsic_triggerworker_write, "%llu\n");
 
 /*
- * The debug control interface is an interface intended to be used by cirrus
+ * The debug control interface is an interface intended to be used by Cirrus
  * tools during device bring up and integration.
  *
  * For more details see the debugcontrol.h header file.
@@ -574,9 +574,11 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 	int ret = 0;
 	struct completion a_completion;
 
+	clsic_info(clsic, "Begin state: %d (%s) : %llu\n",
+		   clsic->state, clsic_state_to_string(clsic->state), val);
+
 	switch (val) {
 	case CLSIC_DEBUGCONTROL_RELEASED:
-		clsic_info(clsic, "release from state: %d\n", clsic->state);
 		/*
 		 * if the state was 0, it was already released
 		 * if the state was 1, there was a request pending, interrupt it
@@ -602,8 +604,6 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 
 		break;
 	case CLSIC_DEBUGCONTROL_REQUESTED:
-		clsic_info(clsic, "request in state: %d\n", clsic->state);
-
 		/*
 		 * if was state 0 and no current message -> successful lock
 		 * if was state 1, someone is already attempting to lock
@@ -651,12 +651,14 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		}
 		mutex_unlock(&clsic->message_lock);
 
-		clsic_info(clsic, "state : %d\n", clsic->state);
-
 		break;
 	default:
-		clsic_info(clsic, "defaulted\n");
+		clsic_dbg(clsic, "defaulted 0x%llx\n", val);
 	}
+
+	clsic_info(clsic, "Final state: %d (%s)\n", clsic->state,
+		   clsic_state_to_string(clsic->state));
+
 	return ret;
 }
 
