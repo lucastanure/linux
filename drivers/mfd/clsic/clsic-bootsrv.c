@@ -487,37 +487,6 @@ void clsic_bootsrv_state_handler(struct clsic *clsic)
 		clsic_set_state(clsic, CLSIC_STATE_LOST);
 }
 
-#ifdef CONFIG_DEBUG_FS
-/*
- * NOTE: The debugfs mechanism to trigger the firmware update is a test
- * interface, it is not intended to be be used in a product as OS software may
- * have built state on top of the driver interfaces.
- */
-static int clsic_fwupdate_write(void *data, u64 val)
-{
-	struct clsic *clsic = data;
-	int ret = -EINVAL;
-
-	/*
-	 * Only allow firmware update from the initial cold and from the
-	 * regular enumerated driver states.
-	 *
-	 * Attempt to park the device by sending a shutdown message before
-	 * initiating device reset.
-	 */
-	if ((clsic->state == CLSIC_STATE_ACTIVE) ||
-	    (clsic->state == CLSIC_STATE_INACTIVE)) {
-		clsic_send_shutdown_cmd(clsic);
-		ret = clsic_fwupdate_reset(clsic);
-	}
-
-	return ret;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(clsic_fwupdate_fops, NULL,
-			clsic_fwupdate_write, "%llu\n");
-#endif
-
 static ssize_t clsic_show_file_fw_version(struct device *dev,
 					  struct device_attribute *attr,
 					  char *buf)
@@ -586,13 +555,6 @@ int clsic_bootsrv_service_start(struct clsic *clsic,
 
 	device_create_file(clsic->dev, &dev_attr_device_fw_version);
 	device_create_file(clsic->dev, &dev_attr_file_fw_version);
-
-#ifdef CONFIG_DEBUG_FS
-	debugfs_create_file("triggerfwupdate",
-			    S_IWUSR | S_IWGRP,
-			    clsic->debugfs_root,
-			    clsic, &clsic_fwupdate_fops);
-#endif
 
 	return ret;
 }

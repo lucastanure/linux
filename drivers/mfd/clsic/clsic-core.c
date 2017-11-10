@@ -826,49 +826,6 @@ static int clsic_bootdone_write(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(clsic_bootdone_fops, NULL,
 			clsic_bootdone_write, "%llu\n");
 
-static ssize_t clsic_state_read_file(struct file *file,
-				     char __user *user_buf,
-				     size_t count, loff_t *ppos)
-{
-	struct clsic *clsic = file_inode(file)->i_private;
-	const char *state_string;
-	ssize_t ret = 0;
-
-	state_string = clsic_state_to_string(clsic->state);
-
-	ret = simple_read_from_buffer(user_buf, count, ppos, state_string,
-				      strlen(state_string));
-
-	return ret;
-}
-
-static const struct file_operations clsic_state_fops = {
-	.read = &clsic_state_read_file,
-	.llseek = &default_llseek,
-};
-
-static int clsic_devid_read(void *data, u64 *val)
-{
-	struct clsic *clsic = data;
-	uint32_t scratchid;
-
-	/*
-	 * If the id has been read from the device return it, else attempt to
-	 * read it directly
-	 */
-	if (clsic->devid != 0)
-		*val = clsic->devid;
-	else {
-		regmap_read(clsic->regmap, CLSIC_DEVID, &scratchid);
-		*val = scratchid;
-		clsic_err(clsic, "read 0x%x\n", scratchid);
-	}
-
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(clsic_devid_fops, clsic_devid_read, NULL, "0x%08llx\n");
-
 static ssize_t clsic_services_read_file(struct file *file,
 					char __user *user_buf,
 					size_t count, loff_t *ppos)
@@ -969,14 +926,6 @@ void clsic_init_debugfs(struct clsic *clsic)
 
 	debugfs_create_file("services", S_IRUSR | S_IRGRP | S_IROTH,
 			    clsic->debugfs_root, clsic, &clsic_services_fops);
-
-	debugfs_create_file("devid",
-			    S_IRUSR | S_IRGRP | S_IROTH,
-			    clsic->debugfs_root, clsic, &clsic_devid_fops);
-
-	debugfs_create_file("state",
-			    S_IRUSR | S_IRGRP,
-			    clsic->debugfs_root, clsic, &clsic_state_fops);
 
 	debugfs_create_file("last_panic",
 			    S_IRUSR | S_IRGRP,
