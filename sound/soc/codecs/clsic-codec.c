@@ -94,7 +94,6 @@ int clsic_codec_asr_stream_open(struct snd_compr_stream *stream)
 	return clsic_vox_asr_stream_open(priv->clsic, stream);
 }
 
-/* FIXME: should consider having a vox codec driver */
 static struct snd_compr_ops clsic_vox_compr_ops = {
 	.open = clsic_codec_asr_stream_open,
 	.free = clsic_vox_asr_stream_free,
@@ -194,7 +193,6 @@ int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 
 		return wm_halo_early_event(w, kcontrol, event);
 	case SND_SOC_DAPM_PRE_PMD:
-		/* TODO: make sure disable path is handled correctly */
 		ret = wm_halo_early_event(w, kcontrol, event);
 		clsic_dsp_memory_disable(priv, 1);
 		return ret;
@@ -448,7 +446,7 @@ SOC_ENUM("LHPF4 Mode", tacna_lhpf4_mode),
 SOC_ENUM("Sample Rate 2", tacna_sample_rate[0]),
 SOC_ENUM("Sample Rate 3", tacna_sample_rate[1]),
 SOC_ENUM("Async Sample Rate 1", tacna_sample_rate[2]),
-SOC_ENUM("Async Sample Rate 2", tacna_sample_rate[3]), /* XXX present? */
+SOC_ENUM("Async Sample Rate 2", tacna_sample_rate[3]),
 
 TACNA_RATE_ENUM("FX Rate", tacna_fx_rate),
 
@@ -666,9 +664,10 @@ SND_SOC_DAPM_SUPPLY("OPCLK", TACNA_OUTPUT_SYS_CLK, TACNA_OPCLK_EN_SHIFT,
 		    0, NULL, 0),
 SND_SOC_DAPM_SUPPLY("ASYNCOPCLK", TACNA_OUTPUT_ASYNC_CLK,
 		    TACNA_OPCLK_ASYNC_EN_SHIFT, 0, NULL, 0),
-/* TODO: don't think DSPCLK can be controlled */
-//SND_SOC_DAPM_SUPPLY("DSPCLK", TACNA_DSP_CLOCK1, TACNA_DSP_CLK_EN_SHIFT,
-//		    0, NULL, 0),
+/*
+ * we don't control DSPCLK, but define it for consistency with usual tacna-class
+ * devices
+ */
 SND_SOC_DAPM_SUPPLY("DSPCLK", SND_SOC_NOPM, TACNA_DSP_CLK_EN_SHIFT,
 		    0, NULL, 0),
 
@@ -1394,8 +1393,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "ASP4RX7", NULL, "ASP4 Playback" },
 	{ "ASP4RX8", NULL, "ASP4 Playback" },
 
-	/* TODO: may be missing some slimbus routing */
-
 	{ "ASP1 Playback", NULL, "SYSCLK" },
 	{ "ASP2 Playback", NULL, "SYSCLK" },
 	{ "ASP3 Playback", NULL, "SYSCLK" },
@@ -1741,17 +1738,6 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 	ret = tacna_init_inputs(codec);
 	if (ret)
 		return ret;
-
-#if 0
-	/* TODO: no auxpdm? */
-	ret = tacna_init_auxpdm(codec, CS47L94_N_AUXPDM);
-	if (ret)
-		return ret;
-
-	ret = tacna_init_eq(&clsic_codec->core);
-	if (ret)
-		return ret;
-#endif
 
 	clsic_codec->codec = codec;
 	clsic_codec->nb.notifier_call = clsic_codec_notify;
