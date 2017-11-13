@@ -904,6 +904,45 @@ int clsic_deregister_codec_controls(struct clsic *clsic,
 					    &cbdata);
 }
 
+/*
+ * This allow services to mark themselves busy(= 1)/idle(= 0).
+ * If any registered service in system is busy, shut-down of secure
+ * processor is not scheduled.
+ */
+void clsic_pm_service_mark(struct clsic *clsic, uint8_t service_instance,
+			   bool mark_active)
+{
+	uint8_t bit_val = (1 << service_instance);
+
+	if (mark_active) {
+		if (!test_and_set_bit(bit_val, clsic->clsic_services_state)) {
+			clsic_pm_use(clsic);
+			clsic_msgproc_shutdown_cancel(clsic, true);
+		} else
+			clsic_info(clsic, "double mark %d", service_instance);
+	} else {
+		if (test_and_clear_bit(bit_val, clsic->clsic_services_state)) {
+			clsic_pm_release(clsic);
+			mutex_lock(&clsic->message_lock);
+			if (list_empty(&clsic->waiting_to_send) &&
+			    list_empty(&clsic->waiting_for_response))
+				clsic_msgproc_shutdown_schedule(clsic);
+			mutex_unlock(&clsic->message_lock);
+		} else
+			clsic_info(clsic, "double clear %d", service_instance);
+	}
+}
+
+/*
+ * Check the services bitmap
+ * If at-least one service is active (= 1), return false
+ * If all registered services are idle (= 0), return true
+ */
+bool clsic_pm_services_active(struct clsic *clsic)
+{
+	return !bitmap_empty(clsic->clsic_services_state, CLSIC_SERVICE_COUNT);
+}
+
 #ifdef CONFIG_PM
 static int clsic_pm_service_transition(struct clsic *clsic, int pm_event)
 {

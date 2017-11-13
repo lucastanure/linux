@@ -42,8 +42,6 @@
 static void clsic_message_worker(struct work_struct *data);
 
 #define CLSIC_MSGPROC_SHUTDOWN_TIMEOUT 10
-static int clsic_msgproc_shutdown_schedule(struct clsic *clsic);
-static bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync);
 
 /*
  * Buffer size required to hold biggest msg2message string
@@ -286,9 +284,10 @@ static ssize_t clsic_messages_read_file(struct file *file,
 
 	/* populate header */
 	len = snprintf(buf + ret, PAGE_SIZE - ret,
-		       "Sent: %d Received: %d\nWaiting to send:\n",
+		       "Sent: %d Received: %d (msgproc: %d)\nWaiting to send:\n",
 		       clsic->messages_sent,
-		       clsic->messages_received);
+		       clsic->messages_received,
+		       clsic->msgproc);
 	if (len >= 0)
 		ret += len;
 
@@ -750,9 +749,16 @@ static void clsic_msgproc_shutdown_fn(struct work_struct *data)
 	clsic_send_shutdown_cmd(clsic);
 }
 
-static int clsic_msgproc_shutdown_schedule(struct clsic *clsic)
+int clsic_msgproc_shutdown_schedule(struct clsic *clsic)
 {
 	int ret;
+
+	/*
+	 * If services are using the messaging processor then don't start the
+	 * timer
+	 */
+	if (clsic_pm_services_active(clsic))
+		return -EBUSY;
 
 	ret = schedule_delayed_work(&clsic->clsic_msgproc_shutdown_work,
 				    (HZ * CLSIC_MSGPROC_SHUTDOWN_TIMEOUT));
@@ -762,7 +768,7 @@ static int clsic_msgproc_shutdown_schedule(struct clsic *clsic)
 	return ret;
 }
 
-static bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync)
+bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync)
 {
 	bool ret = 0;
 

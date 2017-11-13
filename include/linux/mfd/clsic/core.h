@@ -16,6 +16,8 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
+#include <linux/atomic.h>
+#include <linux/bitmap.h>
 #include <linux/pm_runtime.h>
 
 #ifndef PACKED
@@ -255,6 +257,7 @@ struct clsic {
 	bool vdd_d_powered_off;
 
 	struct delayed_work clsic_msgproc_shutdown_work;
+	DECLARE_BITMAP(clsic_services_state, CLSIC_SERVICE_COUNT);
 };
 
 int clsic_dev_init(struct clsic *clsic);
@@ -359,6 +362,9 @@ static inline const char *clsic_pm_rpm_to_string(int event)
 	}
 }
 
+void clsic_pm_service_mark(struct clsic *clsic, uint8_t service_instance,
+			   bool mark_active);
+bool clsic_pm_services_active(struct clsic *clsic);
 
 /*
  * The clsic_pm functions make it straightforward to introduce instrumentation
