@@ -33,7 +33,6 @@
 
 #define DRV_NAME "cs47l96-codec"
 
-#define CS47L96_MONO_OUTPUTS 1
 #define CS47L96_N_AUXPDM 3
 #define CS47L96_N_FLL 2
 #define CS47L96_NUM_DSP 1
@@ -2359,6 +2358,25 @@ static const struct snd_soc_dapm_route cs47l96_dapm_routes[] = {
 	CS47L96_ANC_OUTPUT_ROUTES("OUT5R PGA", "OUT5R"),
 };
 
+static const struct snd_soc_dapm_route cs47l96_out1_mono_routes[] = {
+	{ "OUT1R PGA", NULL, "OUT1L PGA" },
+};
+
+static const struct tacna_mono_route cs47l96_mono_routes[] = {
+	{
+		.routes = cs47l96_out1_mono_routes,
+		.n_routes = ARRAY_SIZE(cs47l96_out1_mono_routes),
+		/* default demux position - initialize mono bit from pdata */
+		.cfg_reg = TACNA_OUT1L_CONTROL_1,
+	},
+	{
+		.routes = cs47l96_out1_mono_routes,
+		.n_routes = ARRAY_SIZE(cs47l96_out1_mono_routes),
+		/* non-default - demux handles mono bit */
+		.cfg_reg = 0,
+	},
+};
+
 static struct snd_soc_dai_driver cs47l96_dai[] = {
 	{
 		.name = "cs47l96-asp1",
@@ -2585,9 +2603,10 @@ static int cs47l96_component_probe(struct snd_soc_component *comp)
 	if (ret)
 		return ret;
 
-	ret = tacna_init_outputs(comp, CS47L96_MONO_OUTPUTS);
-	if (ret)
-		return ret;
+	BUILD_BUG_ON(ARRAY_SIZE(cs47l96_mono_routes) >
+		     ARRAY_SIZE(tacna->pdata.codec.out_mono));
+	ret = tacna_init_outputs(comp, cs47l96_mono_routes,
+				 ARRAY_SIZE(cs47l96_mono_routes));
 
 	ret = tacna_init_eq(&cs47l96->core);
 	if (ret)
