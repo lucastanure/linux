@@ -377,6 +377,12 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 						    service_version,
 						    clsic_vox_service_start);
 			break;
+		case CLSIC_SRV_TYPE_DBG:
+			clsic_register_service_handler(clsic,
+						       service_instance,
+						       service_type,
+						       service_version, NULL);
+			break;
 		default:
 			/* unrecognised */
 			clsic_err(clsic,
