@@ -278,8 +278,6 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		service_count = CLSIC_SERVICE_COUNT;
 	}
 
-	clsic_set_state(clsic, CLSIC_STATE_ENUMERATING);
-
 	/* Enumerate services */
 	for (service_instance = 0;
 	     (services_found < service_count) &&
