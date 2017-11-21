@@ -283,7 +283,8 @@ int clsic_vox_service_start(struct clsic *clsic, struct clsic_service *service)
 	vox->ctrls[VOX_CMD_CTRL].tlv.c = vox_cmd_tlv_put;
 	vox->ctrls[VOX_CMD_CTRL].private_value =
 		(unsigned long)(&(vox->cmd_ext));
-	vox->ctrls[VOX_CMD_CTRL].access = SNDRV_CTL_ELEM_ACCESS_TLV_WRITE |
+	vox->ctrls[VOX_CMD_CTRL].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+		SNDRV_CTL_ELEM_ACCESS_TLV_WRITE |
 		SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 		SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
@@ -579,7 +580,6 @@ static int vox_rsp_tlv_get(struct snd_kcontrol *kcontrol,
 	mutex_lock(&vox->rsplock);
 
 	if (vox->rsp_count == 0) {
-		ret = -EINVAL;
 		goto err_unlock;
 	} else {
 		rsp = vox->rsp[vox->rsp_read_head];
@@ -800,6 +800,9 @@ static int vox_cmd_tlv_put(struct snd_kcontrol *kcontrol,
 	uint8_t *tx_bulk = NULL;
 	size_t tx_bulk_sz = 0;
 	int ret = 0;
+
+	if (op_flag == SNDRV_CTL_TLV_OP_READ)
+		return 0;
 
 	if (op_flag != SNDRV_CTL_TLV_OP_WRITE) {
 		clsic_err(vox->clsic, "Err:%s op_flag unexpected value of %d.\n",
