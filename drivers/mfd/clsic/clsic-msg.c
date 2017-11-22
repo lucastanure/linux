@@ -1120,17 +1120,35 @@ static int clsic_send_message_core(struct clsic *clsic,
 		return -EINVAL;
 
 	/*
-	 * Messages with bulk bit set must have a non zero size buffer to
-	 * transmit and the header must be set appropriately
+	 * Bulk message sanity checks
+	 *
+	 * - if a bulk buffer is provided then the size must also be set
+	 * - if the size is set then a bulk buffer must also be provided
+	 *
+	 * This rule applies for both transmit and receive buffers
 	 */
-	if (clsic_get_bulk_bit(msg->fsm.cmd.hdr.sbc)) {
-		if ((msg->bulk_txbuf == NULL) ||
-		    (msg->bulk_txbuf_maxsize == 0) ||
-		    (msg->fsm.bulk_cmd.hdr.bulk_sz == 0))
+	if (((msg->bulk_txbuf != NULL) && (msg->bulk_txbuf_maxsize == 0)) ||
+	    ((msg->bulk_txbuf_maxsize != 0) && (msg->bulk_txbuf == NULL)) ||
+	    ((msg->bulk_rxbuf != NULL) && (msg->bulk_rxbuf_maxsize == 0)) ||
+	    ((msg->bulk_rxbuf_maxsize != 0) && (msg->bulk_rxbuf == NULL)))
+		return -EINVAL;
+
+	/*
+	 * If this is a message with a bulk transmit buffer then sanity check
+	 * the fields in the message payload
+	 * - the bulk_sz should be non zero
+	 * - the bulk_sz should not be greater than the provided buffer
+	 *
+	 * If the message gets through those checks then also set the bulk bit.
+	 */
+	if (msg->bulk_txbuf != NULL) {
+		if (msg->fsm.bulk_cmd.hdr.bulk_sz == 0)
 			return -EINVAL;
 
 		if (msg->fsm.bulk_cmd.hdr.bulk_sz > msg->bulk_txbuf_maxsize)
 			return -EINVAL;
+
+		clsic_set_bulk(&msg->fsm.cmd.hdr.sbc, 1);
 	}
 
 	/*
