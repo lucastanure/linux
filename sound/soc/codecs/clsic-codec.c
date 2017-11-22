@@ -1706,11 +1706,11 @@ static int clsic_codec_notify(struct notifier_block *nb,
 	struct clsic_controls_cb_data *cb_data = data;
 	int ret;
 
-	pr_err("%s() nb: %p event: %ld data: %p\n", __func__, nb, event, data);
+	pr_info("%s() nb: %p event: %ld data: %p\n", __func__, nb, event, data);
 
-	pr_err("%s() cs48codec: %p codec: %p controls: %d @ %p\n",
-	       __func__, clsic_codec, clsic_codec->codec,
-	       cb_data->kcontrol_count, cb_data->kcontrols);
+	pr_info("%s() clsiccodec: %p codec: %p controls: %d @ %p\n",
+		__func__, clsic_codec, clsic_codec->codec,
+		cb_data->kcontrol_count, cb_data->kcontrols);
 
 	switch (event) {
 	case CLSIC_NOTIFY_ADD_KCONTROLS:
@@ -1734,7 +1734,7 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_codec_get_drvdata(codec);
 	int ret;
 
-	dev_err(codec->dev, "%s() %p\n", __func__, codec);
+	dev_info(codec->dev, "%s() %p\n", __func__, codec);
 
 	clsic_codec->core.tacna->dapm = snd_soc_codec_get_dapm(codec);
 
@@ -1787,7 +1787,7 @@ static int clsic_codec_remove(struct snd_soc_codec *codec)
 		snd_soc_codec_get_drvdata(codec);
 	struct tacna *tacna = clsic_codec->core.tacna;
 
-	dev_err(codec->dev, "%s() %p\n", __func__, codec);
+	dev_info(codec->dev, "%s() %p\n", __func__, codec);
 
 	tacna->dapm = NULL;
 
@@ -1834,7 +1834,7 @@ static struct regmap *clsic_get_regmap(struct device *dev)
 {
 	struct clsic_codec *clsic_codec = dev_get_drvdata(dev);
 
-	dev_err(dev, "%s() codec: %p regmap: %p\n", __func__,
+	dev_dbg(dev, "%s() codec: %p regmap: %p\n", __func__,
 		clsic_codec, clsic_codec->core.tacna->regmap);
 
 	return clsic_codec->core.tacna->regmap;
@@ -1954,8 +1954,7 @@ static int clsic_probe(struct platform_device *pdev)
 		snd_soc_unregister_platform(&pdev->dev);
 	}
 
-	dev_err(&pdev->dev, "%s() REGISTERED: %p ret %d\n", __func__,
-		&pdev->dev, ret);
+	dev_info(&pdev->dev, "%s() dev %p ret %d\n", __func__, &pdev->dev, ret);
 
 	return ret;
 }
@@ -1966,7 +1965,7 @@ static int clsic_remove(struct platform_device *pdev)
 	struct tacna *tacna = dev_get_drvdata(pdev->dev.parent);
 	struct clsic *clsic = dev_get_drvdata(tacna->dev->parent);
 
-	dev_err(&pdev->dev, "%s() DEREGISTERING dev %p cs48 %p priv %p\n",
+	dev_dbg(&pdev->dev, "%s() dev %p clsic %p priv %p\n",
 		__func__, &pdev->dev, clsic, clsic_codec);
 
 	/* TODO XXX The stashed regmap is not valid from this point on */
