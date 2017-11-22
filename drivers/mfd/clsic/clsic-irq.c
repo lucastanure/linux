@@ -39,14 +39,12 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
 			clsic_handle_incoming_messages(clsic);
 
 		if ((reg & TACNA_BOOT_DONE_EINT1_MASK) != 0) {
-			/*
-			 * The device has just cold booted, ack the
-			 * interrupt and schedule work to continue the
-			 * driver initialisation
-			 */
 			regmap_write(clsic->regmap, TACNA_IRQ1_EINT2,
 				     TACNA_BOOT_DONE_EINT1);
-
+			/*
+			 * The device has just cold booted, schedule work to
+			 * continue the driver initialisation
+			 */
 			if (clsic->state == CLSIC_STATE_INACTIVE) {
 				clsic_set_state(clsic, CLSIC_STATE_ENUMERATING);
 

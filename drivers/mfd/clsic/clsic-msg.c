@@ -1172,11 +1172,10 @@ static int clsic_send_message_core(struct clsic *clsic,
 		break;
 	case CLSIC_STATE_BOOTLOADER_BEGIN ... CLSIC_STATE_BOOTLOADER_WFR:
 		/*
-		 * When the device is in the bootloader state only allow
+		 * When the device is in the bootloader states only allow
 		 * bootloader messages to be enqueued.
 		 */
-		if (clsic_get_servinst(msg) !=
-		    CLSIC_SRV_INST_BLD)
+		if (clsic_get_servinst(msg) != CLSIC_SRV_INST_BLD)
 			return -ENXIO;
 		break;
 	default:

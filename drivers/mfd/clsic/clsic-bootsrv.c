@@ -293,8 +293,7 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 		return ret;
 	}
 
-	clsic_info(clsic, "%s len: %d (%%4 = %d)\n", filename,
-		   firmware->size, firmware->size % sizeof(uint32_t));
+	clsic_info(clsic, "%s len: %d\n", filename, firmware->size);
 
 	if (firmware->size < sizeof(struct clsic_fwheader)) {
 		clsic_info(clsic, "Firmware file too small\n");
@@ -355,6 +354,21 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 				    struct clsic_message *msg)
 {
 	uint8_t msgid = clsic_get_messageid(msg);
+	int ret = CLSIC_HANDLED;
+	bool purge_message_queues = false;
+
+	mutex_lock(&clsic->message_lock);
+
+	if ((clsic->state >= CLSIC_STATE_BOOTLOADER_BEGIN) &&
+	    (clsic->state <= CLSIC_STATE_BOOTLOADER_WFR)) {
+
+		/*
+		 * Entering the bootloader handler for the first time, a
+		 * bootloader notification is a messaging reset (all
+		 * outstanding commands should be interrupted
+		 */
+		purge_message_queues = true;
+	}
 
 	/*
 	 * Most of the notifications result in the driver setting state to
@@ -384,17 +398,22 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 	case CLSIC_BL_MSG_N_FLASH_CORRUPTED:
 		clsic_dbg(clsic, "CSLIC boot fail %d\n", msgid);
 		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_BEGIN);
-		mutex_lock(&clsic->message_lock);
-		clsic_purge_message_queues(clsic);
-		mutex_unlock(&clsic->message_lock);
+
+		purge_message_queues = true;
+
 		break;
 	default:
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
-		return CLSIC_UNHANDLED;
+		ret = CLSIC_UNHANDLED;
 	}
 
+	if (purge_message_queues)
+		clsic_purge_message_queues(clsic);
+
+	mutex_unlock(&clsic->message_lock);
+
 	schedule_work(&clsic->maintenance_handler);
-	return CLSIC_HANDLED;
+	return ret;
 }
 
 /*
@@ -513,6 +532,7 @@ static ssize_t clsic_store_device_fw_version(struct device *dev,
 
 	if (!strncmp(buf, "update", strlen("update"))) {
 		clsic_send_shutdown_cmd(clsic);
+		clsic_set_state(clsic, CLSIC_STATE_STOPPED);
 		clsic_fwupdate_reset(clsic);
 	}
 
