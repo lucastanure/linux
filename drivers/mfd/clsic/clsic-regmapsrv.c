@@ -76,14 +76,11 @@ static int clsic_ras_simple_readregister(
 	clsic = regmapsrv->clsic;
 
 	/* Format and send a message to the remote access service */
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-	clsic_set_cran(&msg_cmd.cmd_rdreg.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_srv_inst(&msg_cmd.cmd_rdreg.hdr.sbc,
-			   regmapsrv->service_instance);
-	msg_cmd.cmd_rdreg.hdr.msgid = CLSIC_RAS_MSG_CR_RDREG;
-	clsic_set_bulk(&msg_cmd.cmd_rdreg.hdr.sbc, 0);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   regmapsrv->service_instance,
+			   CLSIC_RAS_MSG_CR_RDREG);
 	msg_cmd.cmd_rdreg.addr = address;
+
 	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
@@ -133,15 +130,12 @@ static int clsic_ras_simple_writeregister(
 	clsic = regmapsrv->clsic;
 
 	/* Format and send a message to the remote access service */
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-	clsic_set_cran(&msg_cmd.cmd_wrreg.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_srv_inst(&msg_cmd.cmd_wrreg.hdr.sbc,
-			   regmapsrv->service_instance);
-	msg_cmd.cmd_wrreg.hdr.msgid = CLSIC_RAS_MSG_CR_WRREG;
-	clsic_set_bulk(&msg_cmd.cmd_wrreg.hdr.sbc, 0);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   regmapsrv->service_instance,
+			   CLSIC_RAS_MSG_CR_WRREG);
 	msg_cmd.cmd_wrreg.addr = address;
 	msg_cmd.cmd_wrreg.value = value;
+
 	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
@@ -228,18 +222,14 @@ static int clsic_ras_read(void *context, const void *reg_buf,
 
 	for (i = 0; i < val_size; i += CLSIC_RAS_MAX_BULK_SZ) {
 		/* Format and send a message to the remote access service */
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   regmapsrv->service_instance,
+				   CLSIC_RAS_MSG_CR_RDREG_BULK);
 		frag_sz = min(val_size - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
-
-		clsic_set_cran(&msg_cmd.cmd_rdreg_bulk.hdr.sbc, CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd_rdreg_bulk.hdr.sbc,
-				   regmapsrv->service_instance);
-		msg_cmd.cmd_rdreg_bulk.hdr.msgid = CLSIC_RAS_MSG_CR_RDREG_BULK;
-		clsic_set_bulk(&msg_cmd.cmd_rdreg_bulk.hdr.sbc, 0);
 		msg_cmd.cmd_rdreg_bulk.addr =
 			reg + ((i / CLSIC_RAS_REG_BYTES) * CLSIC_RAS_STRIDE);
 		msg_cmd.cmd_rdreg_bulk.byte_count = frag_sz;
+
 		ret = clsic_send_msg_sync(
 				    clsic,
 				    (union t_clsic_generic_message *) &msg_cmd,
@@ -327,21 +317,16 @@ static int clsic_ras_write(void *context, const void *val_buf,
 
 	for (i = 0; i < payload_sz; i += CLSIC_RAS_MAX_BULK_SZ) {
 		/* Format and send a message to the remote access service */
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-		memset(&msg_rsp, 0, CLSIC_FIXED_MSG_SZ);
-
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   regmapsrv->service_instance,
+				   CLSIC_RAS_MSG_CR_WRREG_BULK);
 		frag_sz = min(payload_sz - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
-
-		clsic_set_cran(&msg_cmd.blkcmd_wrreg_bulk.hdr.sbc,
-			       CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.blkcmd_wrreg_bulk.hdr.sbc,
-				   regmapsrv->service_instance);
-		msg_cmd.blkcmd_wrreg_bulk.hdr.msgid =
-			CLSIC_RAS_MSG_CR_WRREG_BULK;
-		clsic_set_bulk(&msg_cmd.blkcmd_wrreg_bulk.hdr.sbc, 1);
 		msg_cmd.blkcmd_wrreg_bulk.addr =
 			addr + ((i / CLSIC_RAS_REG_BYTES) * CLSIC_RAS_STRIDE);
 		msg_cmd.blkcmd_wrreg_bulk.hdr.bulk_sz = frag_sz;
+
+		/* XXX check - we shouldn't need to clear response structures */
+		memset(&msg_rsp, 0, CLSIC_FIXED_MSG_SZ);
 		ret = clsic_send_msg_sync(
 				    clsic,
 				    (union t_clsic_generic_message *) &msg_cmd,

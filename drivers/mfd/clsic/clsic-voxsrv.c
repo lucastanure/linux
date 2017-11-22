@@ -914,15 +914,13 @@ static int vox_install_phrase(struct snd_kcontrol *kcontrol,
 		return -EBADF;
 	}
 
-	memset(&voxcmd, 0, sizeof(union clsic_vox_msg));
-	clsic_set_srv_inst(&(voxcmd.cmd_install_phrase.hdr.sbc),
-			   vox->service->service_instance);
-	clsic_set_bulk(&(voxcmd.cmd_install_phrase.hdr.sbc), 0x1);
-	clsic_set_cran(&(voxcmd.cmd_install_phrase.hdr.sbc), CLSIC_CRAN_CMD);
-	voxcmd.cmd_install_phrase.hdr.msgid = CLSIC_VOX_MSG_CR_INSTALL_PHRASE;
+	clsic_init_message((union t_clsic_generic_message *)&voxcmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_INSTALL_PHRASE);
 	voxcmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
 	voxcmd.cmd_install_phrase.phraseid =
 		vox_convert_to_clsic_phraseid(phraseid);
+
 	ret = clsic_send_msg_sync(vox->clsic,
 			       (union t_clsic_generic_message *) voxcmd.raw_msg,
 			       (union t_clsic_generic_message *) voxrsp.raw_msg,
@@ -1229,14 +1227,11 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 
 	trace_clsic_vox_asr_stream_data_start(asr_stream->copied_total);
 
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
 	/* queue up the first read */
-	clsic_set_cran(&msg_cmd.cmd_get_asr_block.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_srv_inst(&msg_cmd.cmd_get_asr_block.hdr.sbc,
-			   vox->service->service_instance);
-	msg_cmd.cmd_get_asr_block.hdr.msgid = CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK;
-	clsic_set_bulk(&msg_cmd.cmd_get_asr_block.hdr.sbc, 0);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
+
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1270,16 +1265,11 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		/* instruct the service to enter listen mode */
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-		clsic_set_cran(&msg_cmd.cmd_set_mode.hdr.sbc,
-			       CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd_set_mode.hdr.sbc,
-				   vox->service->service_instance);
-		msg_cmd.cmd_set_mode.hdr.msgid =
-			CLSIC_VOX_MSG_CR_SET_MODE;
-		clsic_set_bulk(&msg_cmd.cmd_set_mode.hdr.sbc, 0);
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_SET_MODE);
 		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
+
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -1297,16 +1287,11 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			return -EIO;
 		}
 
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-		clsic_set_cran(&msg_cmd.cmd_set_mode.hdr.sbc,
-			       CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd_set_mode.hdr.sbc,
-				   vox->service->service_instance);
-		msg_cmd.cmd_set_mode.hdr.msgid =
-			CLSIC_VOX_MSG_CR_SET_MODE;
-		clsic_set_bulk(&msg_cmd.cmd_set_mode.hdr.sbc, 0);
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_SET_MODE);
 		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_LISTEN;
+
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -1324,19 +1309,14 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			return -EIO;
 		}
 
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-		clsic_set_cran(&msg_cmd.cmd_listen_start.hdr.sbc,
-			       CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd_listen_start.hdr.sbc,
-				   vox->service->service_instance);
-		msg_cmd.cmd_listen_start.hdr.msgid =
-			CLSIC_VOX_MSG_CR_LISTEN_START;
-		clsic_set_bulk(&msg_cmd.cmd_listen_start.hdr.sbc, 0);
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_LISTEN_START);
 		/* TODO: add handling for external trigger */
 		msg_cmd.cmd_listen_start.trgr_domain =
 			CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
+
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -1370,16 +1350,11 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-		clsic_set_cran(&msg_cmd.cmd_set_mode.hdr.sbc,
-			       CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd_set_mode.hdr.sbc,
-				   vox->service->service_instance);
-		msg_cmd.cmd_set_mode.hdr.msgid =
-			CLSIC_VOX_MSG_CR_SET_MODE;
-		clsic_set_bulk(&msg_cmd.cmd_set_mode.hdr.sbc, 0);
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_SET_MODE);
 		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
+
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -1463,14 +1438,11 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 		return -EIO;
 	}
 
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
 	/* queue up next read */
-	clsic_set_cran(&msg_cmd.cmd_get_asr_block.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_srv_inst(&msg_cmd.cmd_get_asr_block.hdr.sbc,
-			   vox->service->service_instance);
-	msg_cmd.cmd_get_asr_block.hdr.msgid = CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK;
-	clsic_set_bulk(&msg_cmd.cmd_get_asr_block.hdr.sbc, 0);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
+
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,

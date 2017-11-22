@@ -75,12 +75,9 @@ static void clsic_debug_service_stop(struct clsic *clsic,
 	 * services can send messages in their stop() functions.
 	 */
 	if (debugsrv_struct->state != CLSIC_DEBUGSRV_STATE_IDLE) {
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-		clsic_set_cran(&msg_cmd.cmd.hdr.sbc, CLSIC_CRAN_CMD);
-		clsic_set_srv_inst(&msg_cmd.cmd.hdr.sbc,
-				   handler->service_instance);
-		msg_cmd.cmd.hdr.msgid = CLSIC_DEBUGSRV_CMD_DEACTIVATE;
-		clsic_set_bulk(&msg_cmd.cmd.hdr.sbc, 0);
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   handler->service_instance,
+				   CLSIC_DEBUGSRV_CMD_DEACTIVATE);
 
 		ret = clsic_send_msg_sync(clsic, &msg_cmd, &msg_rsp,
 					  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,

@@ -233,12 +233,9 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 	 * If the device is dead then this command may also timeout - in that
 	 * case initiate recovery measures.
 	 */
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-	clsic_set_cran(&msg_cmd.cmd_sys_info.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_bulk(&msg_cmd.cmd_sys_info.hdr.sbc, 0);
-	clsic_set_srv_inst(&msg_cmd.cmd_sys_info.hdr.sbc,
-			   CLSIC_SRV_INST_SYS);
-	msg_cmd.cmd_sys_info.hdr.msgid = CLSIC_SYS_MSG_CR_SYS_INFO;
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   CLSIC_SRV_INST_SYS, CLSIC_SYS_MSG_CR_SYS_INFO);
+
 	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
@@ -284,13 +281,11 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		clsic_dbg(clsic, "Examine instance %d (found count %d)",
 			  service_instance, services_found);
 		/* Read the service type */
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-		clsic_set_cran(&msg_cmd.cmd_srv_info.hdr.sbc, CLSIC_CRAN_CMD);
-		clsic_set_bulk(&msg_cmd.cmd_srv_info.hdr.sbc, 0);
-		clsic_set_srv_inst(&msg_cmd.cmd_srv_info.hdr.sbc,
-				   CLSIC_SRV_INST_SYS);
-		msg_cmd.cmd_srv_info.hdr.msgid = CLSIC_SYS_MSG_CR_SRV_INFO;
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   CLSIC_SRV_INST_SYS,
+				   CLSIC_SYS_MSG_CR_SRV_INFO);
 		msg_cmd.cmd_srv_info.srv_inst = service_instance;
+
 		ret = clsic_send_msg_sync(clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,
@@ -475,12 +470,10 @@ int clsic_send_shutdown_cmd(struct clsic *clsic)
 	 */
 	if (clsic->clsic_secproc_message_sent
 	    || clsic->clsic_secproc_responded) {
-		memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-		clsic_set_cran(&msg_cmd.cmd_sp_shdn.hdr.sbc, CLSIC_CRAN_CMD);
-		clsic_set_bulk(&msg_cmd.cmd_sp_shdn.hdr.sbc, 0);
-		clsic_set_srv_inst(&msg_cmd.cmd_sp_shdn.hdr.sbc,
-				   CLSIC_SRV_INST_SYS);
-		msg_cmd.cmd_sp_shdn.hdr.msgid = CLSIC_SYS_MSG_CR_SP_SHDN;
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   CLSIC_SRV_INST_SYS,
+				   CLSIC_SYS_MSG_CR_SP_SHDN);
+
 		ret = clsic_send_msg_sync(clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,

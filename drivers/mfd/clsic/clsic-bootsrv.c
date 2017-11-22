@@ -315,14 +315,10 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 	}
 
 	/* Finally send the file as the bulk data payload of the given msgid */
-	memset(&msg_cmd, 0, CLSIC_FIXED_MSG_SZ);
-
-	clsic_set_cran(&msg_cmd.bulk_cmd.hdr.sbc, CLSIC_CRAN_CMD);
-	clsic_set_srv_inst(&msg_cmd.bulk_cmd.hdr.sbc,
-			   CLSIC_SRV_INST_BLD);
-	msg_cmd.bulk_cmd.hdr.msgid = msgid;
-	clsic_set_bulk(&msg_cmd.bulk_cmd.hdr.sbc, 1);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   CLSIC_SRV_INST_BLD, msgid);
 	msg_cmd.bulk_cmd.hdr.bulk_sz = firmware->size;
+
 	ret = clsic_send_msg_sync(clsic, &msg_cmd,
 				  (union t_clsic_generic_message *)msg_rsp,
 				  firmware->data, firmware->size,
