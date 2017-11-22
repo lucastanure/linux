@@ -469,6 +469,10 @@ config SND_SOC_CS42L42
 	tristate "Cirrus Logic CS42L42 CODEC"
 	depends on I2C
 
+config SND_SOC_CLSIC_VOX
+	tristate "Cirrus Logic CLSIC VOX"
+	depends on MFD_CLSIC
+
 config SND_SOC_CS42L51
 	tristate
 

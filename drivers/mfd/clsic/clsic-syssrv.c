@@ -119,6 +119,8 @@ struct clsic_syssrv_struct {
 	struct snd_kcontrol_new srvinfo_ctrl;
 	char srvinfo_ctrl_name[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
 	struct soc_bytes_ext srvinfo_ext;
+
+	struct mfd_cell clsic_vox_dev;
 };
 
 static int sys_srv_info_get(struct snd_kcontrol *kcontrol,
@@ -390,11 +392,32 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 						    clsic_regmap_service_start);
 			break;
 		case CLSIC_SRV_TYPE_VOX:
-			clsic_register_service_handler(clsic,
-						    service_instance,
-						    service_type,
-						    service_version,
-						    clsic_vox_service_start);
+			if (clsic->service_handlers[service_instance] == NULL) {
+				/* Do this once - find a nicer way */
+				clsic_register_service_handler(clsic,
+							       service_instance,
+							       service_type,
+							       service_version,
+							       NULL);
+				/* clsic_vox_service_start */
+				clsic->service_handlers[service_instance]->data
+					= clsic;
+
+				syssrv->clsic_vox_dev.name = "clsic-vox";
+				syssrv->clsic_vox_dev.platform_data =
+				      clsic->service_handlers[service_instance];
+				syssrv->clsic_vox_dev.pdata_size =
+					sizeof(struct clsic_service);
+
+				ret = mfd_add_devices(clsic->dev,
+						      PLATFORM_DEVID_NONE,
+						      &syssrv->clsic_vox_dev, 1,
+						      NULL, 0, NULL);
+				if (ret)
+					clsic_err(clsic,
+						  "Failed to add vox device %d\n",
+						  ret);
+			}
 			break;
 		case CLSIC_SRV_TYPE_DBG:
 			clsic_register_service_handler(clsic,
