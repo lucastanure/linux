@@ -445,7 +445,7 @@ static struct regmap_config regmap_config_ras = {
  */
 static struct mfd_cell clsic_devs[] = {
 	{ .name = "clsic-tacna", },
-	{ .name = "clsic-gpio", }, /* TODO: move to clsic-tacna */
+	{ .name = "clsic-gpio", },
 };
 
 /*
@@ -531,7 +531,7 @@ int clsic_regmap_service_start(struct clsic *clsic,
 	clsic_devs[1].platform_data = regmapsrv_struct;
 	clsic_devs[1].pdata_size = sizeof(struct clsic_regmapsrv_struct);
 
-	ret = mfd_add_devices(clsic->dev, -1, clsic_devs,
+	ret = mfd_add_devices(clsic->dev, PLATFORM_DEVID_NONE, clsic_devs,
 			      ARRAY_SIZE(clsic_devs), NULL, 0, NULL);
 
 	clsic_dbg(clsic, "mfd_add_devices: ret %d\n", ret);

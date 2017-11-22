@@ -18,7 +18,6 @@
 
 static struct mfd_cell clsic_tacna_devs[] = {
 	{ .name = "clsic-codec", },
-	/* { .name = "clsic-gpio", }, */
 };
 
 static int clsic_tacna_probe(struct platform_device *pdev)
