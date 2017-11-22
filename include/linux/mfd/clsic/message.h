@@ -388,4 +388,23 @@ int clsic_fifo_readbulk_payload(struct clsic *clsic,
 				uint8_t *dest,
 				size_t maxsize);
 
+static inline void clsic_init_message(union t_clsic_generic_message *msg,
+				      const uint8_t service_instance,
+				      const uint8_t msgid)
+{
+		memset(msg, 0, CLSIC_FIXED_MSG_SZ);
+
+		/*
+		 * Clearing the structure will set the CRAN message type to CMD
+		 * (as that is represented as all bits clear) and clear the
+		 * bulk bit.
+		 *
+		 * clsic_set_cran(&msg->cmd.hdr.sbc, CLSIC_CRAN_CMD);
+		 * clsic_set_bulk(&msg->cmd.hdr.sbc, 0);
+		 */
+
+		clsic_set_srv_inst(&msg->cmd.hdr.sbc, service_instance);
+		msg->cmd.hdr.msgid = msgid;
+}
+
 #endif
