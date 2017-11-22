@@ -1887,6 +1887,7 @@ int clsic_send_msg_sync(struct clsic *clsic,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(clsic_send_msg_sync);
 
 int clsic_send_msg_async(struct clsic *clsic,
 			 const union t_clsic_generic_message *fsm_tx,
