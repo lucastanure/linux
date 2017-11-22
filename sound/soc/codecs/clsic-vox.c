@@ -27,6 +27,7 @@
 #include "tacna.h"
 
 #include <linux/mfd/clsic/core.h>
+#include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/voxsrv.h>
 
 struct clsic_vox {
@@ -73,6 +74,8 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	struct clsic_service *vox_service = dev_get_platdata(&pdev->dev);
 	struct clsic_vox *clsic_vox;
 	int ret;
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
 
 	dev_info(&pdev->dev, "%s() service %p.\n", __func__,
 		 vox_service);
@@ -107,9 +110,38 @@ static int clsic_vox_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register codec: %d.\n", ret);
 	}
 
-
 	dev_info(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
 		 &pdev->dev, ret);
+
+	if (ret == 0) {
+		dev_info(&pdev->dev, "%s() test sending idle message.\n",
+			 __func__);
+
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   vox_service->service_instance,
+				   CLSIC_VOX_MSG_CR_SET_MODE);
+		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
+
+		ret = clsic_send_msg_sync(clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+		dev_info(&pdev->dev, "%s() idle message %d %d.\n",
+			 __func__, ret, msg_rsp.rsp_set_mode.hdr.err);
+
+		if (ret) {
+			clsic_err(clsic, "Error sending msg: %d.\n", ret);
+			return -EIO;
+		}
+		if (msg_rsp.rsp_set_mode.hdr.err) {
+			clsic_err(clsic,
+				  "Failed to enter idle mode: %d.\n",
+				  msg_rsp.rsp_set_mode.hdr.err);
+			return -EIO;
+		}
+	}
 
 	return ret;
 }
