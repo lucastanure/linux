@@ -111,9 +111,7 @@ struct clsic_srvs_info {
 	struct clsic_srv_info info[CLSIC_SERVICE_COUNT];
 } __packed;
 
-/*
- * Structure containing the System Service's ALSA controls
- */
+/* Structure containing the System Service instance data */
 struct clsic_syssrv_struct {
 	struct clsic *clsic;
 
@@ -248,7 +246,7 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	if (ret != 0) {
-		clsic_err(clsic, "getcount ret %d\n", ret);
+		clsic_err(clsic, "sysinfo ret %d\n", ret);
 		if (ret == -ETIMEDOUT) {
 			/*
 			 * First touch message timed out - restart the device
@@ -259,21 +257,21 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		return -EIO;
 	}
 
-	clsic_dbg(clsic, "getcount ret 0x%x 0x%x 0x%x\n",
+	clsic_dbg(clsic, "Sysinfo ret 0x%x 0x%x 0x%x\n",
 		  msg_rsp.rsp_sys_info.hdr.sbc,
 		  msg_rsp.rsp_sys_info.hdr.msgid,
 		  msg_rsp.rsp_sys_info.hdr.err);
 
 	service_count = msg_rsp.rsp_sys_info.srv_count;
 
-	clsic_dbg(clsic, "getcount %d\n", service_count);
+	clsic_dbg(clsic, "Sysinfo service count %d\n", service_count);
 
 	/*
 	 * The message size is stored in a byte, but there is only 5 bits of
 	 * addressable services
 	 */
 	if (service_count > CLSIC_SERVICE_COUNT) {
-		clsic_err(clsic, "Getcount response larger than max %d\n",
+		clsic_err(clsic, "Sysinfo response larger than max %d\n",
 			  service_count);
 		service_count = CLSIC_SERVICE_COUNT;
 	}
