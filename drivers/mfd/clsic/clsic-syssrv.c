@@ -336,25 +336,32 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 
 		switch (service_type) {
 		case CLSIC_SRV_TYPE_SYS:
-			clsic_info(clsic,
-				   "System service fw version %d.%d.%d",
-				   (service_version & CLSIC_SVCVER_MAJ_MASK) >>
-				   CLSIC_SVCVER_MAJ_SHIFT,
-				   (service_version & CLSIC_SVCVER_MIN_MASK) >>
-				   CLSIC_SVCVER_MIN_SHIFT,
-				   (service_version & CLSIC_SVCVER_BLD_MASK) >>
-				   CLSIC_SVCVER_BLD_SHIFT);
+			/*
+			 * Print the version if changes (The version is
+			 * initialised to zero so it should always be printed
+			 * on first boot)
+			 */
+			if (clsic->service_handlers[service_instance]
+					->service_version != service_version)
+				clsic_info(clsic,
+					   "System service fw version %d.%d.%d",
+					   (service_version &
+					    CLSIC_SVCVER_MAJ_MASK) >>
+					   CLSIC_SVCVER_MAJ_SHIFT,
+					   (service_version &
+					    CLSIC_SVCVER_MIN_MASK) >>
+					   CLSIC_SVCVER_MIN_SHIFT,
+					   (service_version &
+					    CLSIC_SVCVER_BLD_MASK) >>
+					   CLSIC_SVCVER_BLD_SHIFT);
 			/* fallthrough */
 		case CLSIC_SERVICE_TYPE_BOOTLOADER:
-			/* preregistered handlers */
 			clsic_dbg(clsic,
 				  " Service %d is a standard service (type 0x%x)",
 				  service_instance, service_type);
 
-			if (clsic->service_handlers[service_instance] != NULL) {
-				clsic->service_handlers[service_instance]
-					->service_version = service_version;
-			}
+			clsic->service_handlers[service_instance]
+				->service_version = service_version;
 			break;
 		case CLSIC_SERVICE_TYPE_DEBUG_EMU:
 			clsic_register_service_handler(clsic,
