@@ -490,7 +490,6 @@ static enum clsic_message_cb_ret clsic_vox_rsp_handler(struct clsic *clsic,
 						      struct clsic_message *msg)
 {
 	struct clsic_vox *vox = clsic_get_vox_from_core(clsic);
-	struct clsic_message *rsp;
 	uint32_t next_write_head;
 
 	/* check is rsp size is more than permitted */
@@ -512,7 +511,6 @@ static enum clsic_message_cb_ret clsic_vox_rsp_handler(struct clsic *clsic,
 	mutex_lock(&vox->rsplock);
 	next_write_head = (vox->rsp_write_head + 1) % VOX_RSP_QUEUE_SZ;
 	if (next_write_head == vox->rsp_read_head) {
-		rsp = vox->rsp[vox->rsp_read_head];
 		clsic_dump_message(clsic, msg, "Err:VoxRspFlushedOut");
 		vox->rsp_read_head =
 			(vox->rsp_read_head + 1) % VOX_RSP_QUEUE_SZ;
@@ -678,7 +676,6 @@ static int clsic_vox_nty_handler(struct clsic *clsic,
 
 	next_write_head = (vox->nty_write_head + 1) % VOX_NTY_QUEUE_SZ;
 	if (next_write_head == vox->nty_read_head) {
-		nty = vox->nty + (vox->nty_read_head * CLSIC_FIXED_MSG_SZ);
 		clsic_dump_message(clsic, msg, "Err:VoxNtyFlushedOut");
 		vox->nty_read_head =
 			(vox->nty_read_head + 1) % VOX_NTY_QUEUE_SZ;

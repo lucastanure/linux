@@ -166,7 +166,6 @@ int clsic_system_service_start(struct clsic *clsic,
 	 */
 	if ((handler->stop == &clsic_system_service_stop) &&
 	    (handler->data != NULL)) {
-		syssrv = handler->data;
 		return 0;
 	}
 
