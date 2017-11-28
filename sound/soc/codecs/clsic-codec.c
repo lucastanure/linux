@@ -79,35 +79,6 @@ static const unsigned int clsic_dsp2_sram_power_regs[] = {
 	0, /* end of list */
 };
 
-int clsic_codec_asr_stream_open(struct snd_compr_stream *stream)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_codec *priv = snd_soc_codec_get_drvdata(rtd->codec);
-
-	if (strcmp(rtd->codec_dai->name, "clsic-dsp-vox-asr") != 0) {
-		dev_err(priv->core.tacna->dev,
-			"No compressed stream supported for: %s\n",
-			rtd->codec_dai->name);
-		return -EINVAL;
-	}
-
-	return clsic_vox_asr_stream_open(priv->clsic, stream);
-}
-
-static struct snd_compr_ops clsic_vox_compr_ops = {
-	.open = clsic_codec_asr_stream_open,
-	.free = clsic_vox_asr_stream_free,
-	.set_params = clsic_vox_asr_stream_set_params,
-	.trigger = clsic_vox_asr_stream_trigger,
-	.pointer = clsic_vox_asr_stream_pointer,
-	.copy = clsic_vox_asr_stream_copy,
-	.get_caps = clsic_vox_asr_stream_get_caps,
-};
-
-static struct snd_soc_platform_driver clsic_vox_compr_platform = {
-	.compr_ops = &clsic_vox_compr_ops,
-};
-
 #define TACNA_DSP_CLOCK_FREQ_OFFS		0x00000
 #define TACNA_DSP_CLOCK_STATUS_OFFS		0x00008
 
@@ -1672,27 +1643,6 @@ static struct snd_soc_dai_driver clsic_dai[] = {
 		 },
 		.ops = &tacna_simple_dai_ops,
 	},
-	{
-		.name = "clsic-cpu-vox-asr",
-		.capture = {
-			.stream_name = "VOX ASR CPU",
-			.channels_min = 2,
-			.channels_max = 2,
-			.rates = TACNA_RATES,
-			.formats = TACNA_FORMATS,
-		},
-		.compress_new = snd_soc_new_compress,
-	},
-	{
-		.name = "clsic-dsp-vox-asr",
-		.capture = {
-			.stream_name = "VOX ASR DSP",
-			.channels_min = 2,
-			.channels_max = 2,
-			.rates = TACNA_RATES,
-			.formats = TACNA_FORMATS,
-		},
-	},
 };
 
 static int clsic_codec_notify(struct notifier_block *nb,
@@ -1720,7 +1670,6 @@ static int clsic_codec_notify(struct notifier_block *nb,
 	default:
 		pr_err("%s() defaulted ret: %ld\n", __func__, event);
 	}
-
 
 	return NOTIFY_DONE;
 }
@@ -1928,12 +1877,6 @@ static int clsic_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_idle(&pdev->dev);
 
-	ret = snd_soc_register_platform(&pdev->dev, &clsic_vox_compr_platform);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register platform: %d\n", ret);
-		return ret;
-	}
-
 	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_clsic,
 				     clsic_dai, ARRAY_SIZE(clsic_dai));
 	if (ret < 0) {
@@ -1957,7 +1900,6 @@ static int clsic_remove(struct platform_device *pdev)
 
 	/* TODO XXX The stashed regmap is not valid from this point on */
 
-	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_codec(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 

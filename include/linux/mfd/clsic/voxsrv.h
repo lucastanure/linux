@@ -214,21 +214,4 @@ struct clsic_bio_result_key_out {
 
 #define CLSIC_MAX_RSP_SIZE	sizeof(struct clsic_get_asr_block_out)
 
-int clsic_vox_asr_stream_open(struct clsic *clsic,
-			      struct snd_compr_stream *stream);
-int clsic_vox_asr_stream_free(struct snd_compr_stream *stream);
-int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
-				    struct snd_compr_params *params);
-int clsic_vox_asr_stream_get_params(struct snd_compr_stream *stream,
-				    struct snd_codec *params);
-int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd);
-int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
-				 struct snd_compr_tstamp *tstamp);
-int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
-			      size_t count);
-int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
-				  struct snd_compr_caps *caps);
-int clsic_vox_asr_stream_get_codec_caps(struct snd_compr_stream *stream,
-					struct snd_compr_codec_caps *codec);
-
 #endif

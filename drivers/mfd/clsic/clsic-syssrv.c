@@ -408,6 +408,8 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 				      clsic->service_handlers[service_instance];
 				syssrv->clsic_vox_dev.pdata_size =
 					sizeof(struct clsic_service);
+				syssrv->clsic_vox_dev.of_compatible =
+					"cirrus,clsic-vox";
 
 				ret = mfd_add_devices(clsic->dev,
 						      PLATFORM_DEVID_NONE,
