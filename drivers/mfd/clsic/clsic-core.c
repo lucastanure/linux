@@ -321,6 +321,9 @@ int clsic_dev_init(struct clsic *clsic)
 		goto err_reset;
 	}
 
+	clsic->volatile_memory = of_property_read_bool(clsic->dev->of_node,
+						       "volatile_memory");
+
 	INIT_WORK(&clsic->maintenance_handler, clsic_maintenance);
 
 	clsic_init_sysfs(clsic);
@@ -423,6 +426,10 @@ int clsic_soft_reset(struct clsic *clsic)
 	clsic_dbg(clsic, "%p\n", clsic);
 
 	clsic_irq_disable(clsic);
+
+	if (clsic->volatile_memory)
+		regmap_update_bits(clsic->regmap, CLSIC_FW_UPDATE_REG,
+				   CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
 
 	/* Initiate chip software reset */
 	regmap_write(clsic->regmap, TACNA_SFT_RESET, CLSIC_SOFTWARE_RESET_CODE);

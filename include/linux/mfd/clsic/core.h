@@ -139,6 +139,13 @@ struct clsic {
 
 	struct device *dev;
 	uint32_t devid;
+
+	/*
+	 * Devices that have volatile memory need to have their firmware
+	 * downloaded on every reset or power on.
+	 */
+	bool volatile_memory;
+
 	int irq;
 
 	uint8_t instance; /* instance number */
