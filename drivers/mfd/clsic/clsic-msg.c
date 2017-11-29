@@ -1444,9 +1444,12 @@ void clsic_handle_message_rxdma_status(struct clsic *clsic,
 	 * - i.e. sending a bulk message command will never defer handling with
 	 * an ACK
 	 */
-	if ((clsic->current_msg == NULL) ||
-	    !clsic_ismatch(clsic, clsic->current_msg, svcinst, msgid)
-	    || !clsic_get_bulkbit(clsic->current_msg)) {
+	if (clsic->current_msg == NULL) {
+		clsic_err(clsic, "RXDMASTATUS no current message 0x%x 0x%x\n",
+			  svcinst, msgid);
+		goto rxdmastatus_error;
+	} else if (!clsic_ismatch(clsic, clsic->current_msg, svcinst, msgid)
+		   || !clsic_get_bulkbit(clsic->current_msg)) {
 		clsic_err(clsic,
 			  "RXDMASTATUS mismatch svcinst 0x%x 0x%x\n",
 			  svcinst, clsic_get_servinst(clsic->current_msg));
@@ -1455,9 +1458,7 @@ void clsic_handle_message_rxdma_status(struct clsic *clsic,
 			  msgid, clsic_get_messageid(clsic->current_msg));
 		clsic_err(clsic, "RXDMASTATUS mismatch\n");
 		clsic_dump_message(clsic, clsic->current_msg, "Current");
-		clsic_set_state(clsic, CLSIC_STATE_PANIC);
-		clsic_purge_message_queues(clsic);
-		schedule_work(&clsic->maintenance_handler);
+		goto rxdmastatus_error;
 	} else {
 		/*
 		 * Copy back the payload and signal the caller to continue
@@ -1471,6 +1472,13 @@ void clsic_handle_message_rxdma_status(struct clsic *clsic,
 		queue_work(clsic->message_worker_queue, &clsic->message_work);
 	}
 
+	mutex_unlock(&clsic->message_lock);
+	return;
+
+rxdmastatus_error:
+	clsic_set_state(clsic, CLSIC_STATE_PANIC);
+	clsic_purge_message_queues(clsic);
+	schedule_work(&clsic->maintenance_handler);
 	mutex_unlock(&clsic->message_lock);
 }
 
