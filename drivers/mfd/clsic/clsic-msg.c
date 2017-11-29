@@ -1228,7 +1228,8 @@ static int clsic_send_message_core(struct clsic *clsic,
 	queue_work(clsic->message_worker_queue, &clsic->message_work);
 
 	/*
-	 * This context now waits for the message to finish it's journey.
+	 * Synchronous message contexts now wait for the message to finish it's
+	 * journey.
 	 *
 	 * This is a potentially interruptible operation, if this context is
 	 * signalled then we attempt to remove the message from the system if
@@ -1237,12 +1238,15 @@ static int clsic_send_message_core(struct clsic *clsic,
 	 * The function cannot return until the message layer has completely
 	 * finished with the structure.
 	 */
-	ret = wait_for_completion_interruptible(&msg->completion);
-	if (ret == -ERESTARTSYS) {
-		clsic_err(clsic, "%p interrupted %d\n", msg, msg->state);
-		ret = clsic_send_message_interrupted(clsic, msg);
-		if (ret == -EINTR)
-			return ret;
+	if (msg->cb != NULL) {
+		ret = wait_for_completion_interruptible(&msg->completion);
+		if (ret == -ERESTARTSYS) {
+			clsic_err(clsic, "%p interrupted %d\n", msg,
+				  msg->state);
+			ret = clsic_send_message_interrupted(clsic, msg);
+			if (ret == -EINTR)
+				return ret;
+		}
 	}
 
 	/*
@@ -1257,9 +1261,8 @@ static int clsic_send_message_core(struct clsic *clsic,
 		clsic_dump_message(clsic, msg,
 				   "clsic_send_message_core() timed out");
 		ret = -ETIMEDOUT;
-	} else if ((CLSIC_GET_MSGSTATE(msg) == CLSIC_MSG_ACK)
-		   && (msg->cb != NULL)) {
-		/* Async messages can be ACK'd */
+	} else if (msg->cb != NULL) {
+		/* Async message */
 		ret = 0;
 	} else if (CLSIC_GET_MSGSTATE(msg) != CLSIC_MSG_SUCCESS) {
 		/*
@@ -1416,11 +1419,6 @@ static void clsic_handle_message_acknowledgment(struct clsic *clsic,
 		 * the messaging layer so it may send another command message.
 		 */
 		clsic_set_msgstate(clsic->current_msg, CLSIC_MSG_ACK);
-
-		/* if this is an async message then wake it */
-		if (clsic->current_msg->cb != NULL)
-			complete(&clsic->current_msg->completion);
-
 		clsic->current_msg = NULL;
 	} else if (clsic->current_msg != NULL) {
 		/*
