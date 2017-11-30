@@ -1102,19 +1102,17 @@ static int clsic_send_message_interrupted(struct clsic *clsic,
 }
 
 /*
- * This is the message sending internals of the clsic_send_message()
- * function, it handles the interactions with the messaging layer.
+ * This is the message sending internals of the clsic_send_message() function,
+ * it handles the interactions with the messaging layer.
  *
  * It's primary function is to make that the integrity of the data structures
  * in the messaging layer are preserved, this function introduces the message
- * structure into the layer and ensures that it is completely finished with
- * before returning.
+ * structure into the layer and returns. The calling sync and async utility
+ * functions handle whether to block or return to the calling context.
  */
 static int clsic_send_message_core(struct clsic *clsic,
 				   struct clsic_message *msg)
 {
-	int ret = 0;
-
 	/* Sanity check message to be sent */
 	if (clsic_get_cran(msg->fsm.cmd.hdr.sbc) != CLSIC_CRAN_CMD)
 		return -EINVAL;
@@ -1216,75 +1214,9 @@ static int clsic_send_message_core(struct clsic *clsic,
 
 	mutex_unlock(&clsic->message_lock);
 
-	/*
-	 * At this point the message has been introduced to the messaging layer
-	 * and as the message_lock has been released the messaging worker
-	 * thread may already be processing it
-	 *
-	 * But, we schedule work to make sure that the worker thread runs
-	 * (there is no issue if the worker thread runs and there is nothing
-	 * for it to do).
-	 */
 	queue_work(clsic->message_worker_queue, &clsic->message_work);
 
-	/*
-	 * Synchronous message contexts now wait for the message to finish it's
-	 * journey.
-	 *
-	 * This is a potentially interruptible operation, if this context is
-	 * signalled then we attempt to remove the message from the system if
-	 * possible or wait until it is dealt with.
-	 *
-	 * The function cannot return until the message layer has completely
-	 * finished with the structure.
-	 */
-	if (msg->cb != NULL) {
-		ret = wait_for_completion_interruptible(&msg->completion);
-		if (ret == -ERESTARTSYS) {
-			clsic_err(clsic, "%p interrupted %d\n", msg,
-				  msg->state);
-			ret = clsic_send_message_interrupted(clsic, msg);
-			if (ret == -EINTR)
-				return ret;
-		}
-	}
-
-	/*
-	 * At this point the message has been handled by the messaging layer,
-	 * determine an appropriate return value
-	 */
-	if (CLSIC_GET_MSGSTATE(msg) == CLSIC_MSG_TIMEOUT) {
-		/*
-		 * Messaging layer detected a timeout - the message was sent
-		 * but there was no ACK or response.
-		 */
-		clsic_dump_message(clsic, msg,
-				   "clsic_send_message_core() timed out");
-		ret = -ETIMEDOUT;
-	} else if (msg->cb != NULL) {
-		/* Async message */
-		ret = 0;
-	} else if (CLSIC_GET_MSGSTATE(msg) != CLSIC_MSG_SUCCESS) {
-		/*
-		 * Not a success - this indicates that there was an issue with
-		 * sending the message through the messaging layer to the
-		 * device.
-		 *
-		 * There is a case to be made that this should return -EIO
-		 */
-		clsic_dump_message(clsic, msg,
-				   "clsic_send_message_core() failed");
-		ret = -EINTR;
-	} else {
-		/*
-		 * Succeeded - this means that the message passed through the
-		 * layer successfully, but the response to the message may
-		 * indicate an error.
-		 */
-		ret = 0;
-	}
-
-	return ret;
+	return 0;
 }
 
 /*
@@ -1903,6 +1835,58 @@ int clsic_send_msg_sync(struct clsic *clsic,
 	msg->bulk_rxbuf_maxsize = rxsize;
 
 	ret = clsic_send_message_core(clsic, msg);
+
+	/*
+	 * Synchronous messages now wait for the message to finish it's
+	 * journey.
+	 *
+	 * This is a potentially interruptible operation, if this context is
+	 * signalled then we attempt to remove the message from the system if
+	 * possible or wait until it is dealt with.
+	 *
+	 * The function cannot return until the message layer has completely
+	 * finished with the structure.
+	 */
+	ret = wait_for_completion_interruptible(&msg->completion);
+	if (ret == -ERESTARTSYS) {
+		clsic_err(clsic, "%p interrupted %d\n", msg,
+			  msg->state);
+		ret = clsic_send_message_interrupted(clsic, msg);
+		if (ret == -EINTR)
+			return ret;
+	}
+
+	/*
+	 * At this point the message has been handled by the messaging layer,
+	 * determine an appropriate return value
+	 */
+	if (CLSIC_GET_MSGSTATE(msg) == CLSIC_MSG_TIMEOUT) {
+		/*
+		 * Messaging layer detected a timeout - the message was sent
+		 * but there was no ACK or response.
+		 */
+		clsic_dump_message(clsic, msg,
+				   "clsic_send_message_core() timed out");
+		ret = -ETIMEDOUT;
+	} else if (CLSIC_GET_MSGSTATE(msg) != CLSIC_MSG_SUCCESS) {
+		/*
+		 * Not a success - this indicates that there was an issue with
+		 * sending the message through the messaging layer to the
+		 * device.
+		 *
+		 * There is a case to be made that this should return -EIO
+		 */
+		clsic_dump_message(clsic, msg,
+				   "clsic_send_message_core() failed");
+		ret = -EINTR;
+	} else {
+		/*
+		 * Succeeded - this means that the message passed through the
+		 * layer successfully, but the response to the message may
+		 * indicate an error.
+		 */
+		ret = 0;
+	}
 
 	memcpy(fsm_rx, msg->response.raw, sizeof(msg->response));
 
