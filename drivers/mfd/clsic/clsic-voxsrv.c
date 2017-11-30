@@ -454,7 +454,7 @@ static bool clsic_vox_is_msg_allowed_over_alsa_ctl(uint8_t msgid)
 	case CLSIC_VOX_MSG_CR_INSTALL_USER_COMPLETE:
 	/* Listen modes */
 	case CLSIC_VOX_MSG_CR_LISTEN_START:
-	case CLSIC_VOX_MSG_CR_SET_TRGR_INFO:
+	case CLSIC_VOX_MSG_CR_SET_TRGR_DETECT:
 	/* Stream modes */
 	case CLSIC_VOX_MSG_CR_GET_TRGR_INFO:
 	case CLSIC_VOX_MSG_CR_GET_AVAIL_ASR_DATA:
