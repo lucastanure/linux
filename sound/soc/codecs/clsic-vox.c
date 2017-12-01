@@ -21,7 +21,6 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
-#include <sound/tlv.h>
 
 #include <linux/mfd/tacna/core.h>
 #include <linux/mfd/tacna/registers.h>
@@ -33,11 +32,17 @@
 #include <linux/mfd/clsic/voxsrv.h>
 #include <linux/mfd/clsic/irq.h>
 
+#include "clsic-vox.h"
+
 /* TODO: may require tuning */
 #define VOX_ASR_MIN_FRAGMENT_SZ	0
 #define VOX_ASR_MAX_FRAGMENT_SZ	307200
 #define VOX_ASR_MIN_FRAGMENTS	4
 #define VOX_ASR_MAX_FRAGMENTS	256
+
+#define VOX_MAX_PHRASES		5
+
+#define VOX_NUM_NEW_KCONTROLS	2
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -69,14 +74,20 @@ struct clsic_vox {
 	struct clsic *clsic;
 	struct clsic_service *service;
 	struct snd_soc_codec *codec;
-	struct soc_bytes_ext ext;
-	struct snd_kcontrol_new test_ctrl;
 
 	/* ASR data stream */
 	struct clsic_asr_stream asr_stream;
 
 	/* The trigger detect callback */
 	void (*trig_det_cb)(struct clsic *clsic, struct clsic_service *service);
+
+	struct snd_kcontrol_new kcontrol_new[VOX_NUM_NEW_KCONTROLS];
+	struct mutex mgmt_mode_lock;
+	int mgmt_mode;
+	int error_info;
+
+	struct soc_enum soc_enum_mode;
+	struct soc_enum soc_enum_error_info;
 };
 
 static const struct {
@@ -151,6 +162,23 @@ static struct {
 	[CLSIC_VOX_PHRASE_VDT1]	= { .file = "bpb.p00" },
 	[CLSIC_VOX_PHRASE_TI]	= { .file = "bpb.p04" },
 };
+
+/*
+ * This lookup function is necessary because the CLSIC error codes are not
+ * sequential. i.e. the error code is not necessarily equal to the array offset.
+ */
+static const char *clsic_error_string(int error_index)
+{
+	int array_size = sizeof(vega_response_codes) /
+			 sizeof(struct vega_response_codes_struct);
+	int i;
+
+	for (i = 0; i < array_size; i++)
+		if (vega_response_codes[i].code == error_index)
+			return vega_response_codes[i].name;
+
+	return "Unrecognised CLSIC error code";
+}
 
 int clsic_vox_asr_stream_open(struct clsic_vox *vox,
 			      struct snd_compr_stream *stream)
@@ -722,24 +750,65 @@ static struct snd_soc_platform_driver clsic_vox_compr_platform = {
 	.compr_ops = &clsic_vox_compr_ops,
 };
 
-static int vox_test(struct snd_kcontrol *kcontrol,
-			   int op_flag,
-			   unsigned int size,
-			   unsigned int __user *tlv)
+static int vox_ctrl_error_info_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *bytes_ext =
-		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(bytes_ext, struct clsic_vox, ext);
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	ucontrol->value.enumerated.item[0] = vox->error_info;
+
+	return 0;
+}
+
+static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	if (ucontrol->value.enumerated.item[0] != VOX_ERROR_CLEARED)
+		return -EINVAL;
+
+	vox->error_info = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
+
+static int vox_ctrl_mgmt_get(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_mode);
+
+	ucontrol->value.enumerated.item[0] = vox->mgmt_mode;
+
+	return 0;
+}
+
+static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_mode);
 	int ret = 0;
 
-	if (op_flag == SNDRV_CTL_TLV_OP_WRITE) {
-		clsic_err(vox->clsic, "write");
-	} else {
-		clsic_err(vox->clsic, "read");
-	}
+	if (ucontrol->value.enumerated.item[0] == vox->mgmt_mode)
+		return 0;
 
-	printk("vox_put using pointer vox=%p\n", vox);
+	if (ucontrol->value.enumerated.item[0] >= VOX_NUM_MGMT_MODES)
+		return -EINVAL;
+
+	switch (ucontrol->value.enumerated.item[0]) {
+	default:
+		ret = -EINVAL;
+		clsic_err(vox->codec, "unrecognised vox mode %d.\n",
+			  ucontrol->value.enumerated.item[0]);
+	}
 
 	return ret;
 }
@@ -792,20 +861,43 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	init_completion(&vox->asr_stream.trigger_heard);
 
-	/* add_control from clsic-codec.c here */
-	vox->ext.max = 64;
-	vox->test_ctrl.name = "Ralph test control";
-	vox->test_ctrl.info = snd_soc_bytes_info_ext;
-	vox->test_ctrl.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->test_ctrl.tlv.c = vox_test;
-	vox->test_ctrl.private_value = (unsigned long)(&(vox->ext));
-	vox->test_ctrl.access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
-				SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
-				SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+	mutex_init(&vox->mgmt_mode_lock);
 
-	ret = snd_soc_add_codec_controls(codec, &vox->test_ctrl, 1);
-	if (ret != 0)
-		pr_err("%s() add ret: %d.\n", __func__, ret);
+	vox->kcontrol_new[0].name = "Vox Management Mode";
+	vox->kcontrol_new[0].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[0].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[0].get = vox_ctrl_mgmt_get;
+	vox->kcontrol_new[0].put = vox_ctrl_mgmt_put;
+	vox->soc_enum_mode.items = VOX_NUM_MGMT_MODES;
+	vox->soc_enum_mode.texts = vox_mgmt_mode_text;
+	vox->kcontrol_new[0].private_value =
+					(unsigned long) &vox->soc_enum_mode;
+	vox->kcontrol_new[0].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->error_info = VOX_ERROR_CLEARED;
+
+	vox->kcontrol_new[1].name = "Vox Error Info";
+	vox->kcontrol_new[1].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[1].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[1].get = vox_ctrl_error_info_get;
+	vox->kcontrol_new[1].put = vox_ctrl_error_info_put;
+	vox->soc_enum_error_info.items = VOX_NUM_ERRORS;
+	vox->soc_enum_error_info.texts = vox_error_info_text;
+	vox->kcontrol_new[1].private_value =
+				(unsigned long)(&(vox->soc_enum_error_info));
+	vox->kcontrol_new[1].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
+					 VOX_NUM_NEW_KCONTROLS);
+	if (ret != 0) {
+		pr_err("enum %s() add ret: %d.\n", __func__, ret);
+		return ret;
+	}
 
 	handler->data = (void *)vox;
 	handler->callback = &vox_notification_handler;
@@ -856,7 +948,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 
 	ret = snd_soc_register_platform(&pdev->dev, &clsic_vox_compr_platform);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register platform: %d\n", ret);
+		dev_err(&pdev->dev, "Failed to register platform: %d.\n", ret);
 		return ret;
 	}
 
@@ -875,16 +967,16 @@ static int clsic_vox_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "%s() test sending idle message.\n",
 			 __func__);
 
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox_service->service_instance,
 				   CLSIC_VOX_MSG_CR_SET_MODE);
 		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
 
 		ret = clsic_send_msg_sync(clsic,
-				  (union t_clsic_generic_message *) &msg_cmd,
-				  (union t_clsic_generic_message *) &msg_rsp,
-				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 		dev_info(&pdev->dev, "%s() idle message %d %d.\n",
 			 __func__, ret, msg_rsp.rsp_set_mode.hdr.err);
