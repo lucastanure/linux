@@ -420,7 +420,7 @@ int clsic_soft_reset(struct clsic *clsic)
 {
 	int ret = 0;
 
-	clsic_info(clsic, "%p\n", clsic);
+	clsic_dbg(clsic, "%p\n", clsic);
 
 	clsic_irq_disable(clsic);
 

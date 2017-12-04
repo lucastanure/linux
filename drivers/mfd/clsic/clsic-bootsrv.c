@@ -289,14 +289,14 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 
 	ret = request_firmware(&firmware, filename, clsic->dev);
 	if (ret != 0) {
-		clsic_info(clsic, "request_firmware %d\n", ret);
+		clsic_err(clsic, "request_firmware %d\n", ret);
 		return ret;
 	}
 
-	clsic_info(clsic, "%s len: %d\n", filename, firmware->size);
+	clsic_dbg(clsic, "%s len: %d\n", filename, firmware->size);
 
 	if (firmware->size < sizeof(struct clsic_fwheader)) {
-		clsic_info(clsic, "Firmware file too small\n");
+		clsic_err(clsic, "Firmware file too small\n");
 		release_firmware(firmware);
 		return -EINVAL;
 	}

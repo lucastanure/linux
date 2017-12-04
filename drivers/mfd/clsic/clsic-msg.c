@@ -574,8 +574,8 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 	int ret = 0;
 	struct completion a_completion;
 
-	clsic_info(clsic, "Begin state: %d (%s) : %llu\n",
-		   clsic->state, clsic_state_to_string(clsic->state), val);
+	clsic_dbg(clsic, "Begin state: %d (%s) : %llu\n",
+		  clsic->state, clsic_state_to_string(clsic->state), val);
 
 	switch (val) {
 	case CLSIC_DEBUGCONTROL_RELEASED:
@@ -656,8 +656,8 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		clsic_dbg(clsic, "defaulted 0x%llx\n", val);
 	}
 
-	clsic_info(clsic, "Final state: %d (%s)\n", clsic->state,
-		   clsic_state_to_string(clsic->state));
+	clsic_dbg(clsic, "Final state: %d (%s)\n", clsic->state,
+		  clsic_state_to_string(clsic->state));
 
 	return ret;
 }
@@ -1780,7 +1780,7 @@ static void clsic_message_worker(struct work_struct *data)
 	 */
 	if ((clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) &&
 	    (clsic->current_msg == NULL)) {
-		clsic_info(clsic, "debugcontrol granted\n");
+		clsic_dbg(clsic, "debugcontrol granted\n");
 		clsic_set_state(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED);
 
 		/*
@@ -1791,7 +1791,7 @@ static void clsic_message_worker(struct work_struct *data)
 
 		if (clsic->debugcontrol_completion != NULL) {
 			complete(clsic->debugcontrol_completion);
-			clsic_info(clsic, "debugcontrol completed\n");
+			clsic_dbg(clsic, "debugcontrol completed\n");
 		}
 		goto unlock_return;
 	}

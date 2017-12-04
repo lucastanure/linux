@@ -479,11 +479,12 @@ int clsic_send_shutdown_cmd(struct clsic *clsic)
 				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-		clsic_info(clsic,
-			   "Shutdown message returned 0x%x 0x%x: bitmap 0x%x\n",
-			   ret,
-			   msg_rsp.rsp_sp_shdn.hdr.err,
-			   msg_rsp.rsp_sp_shdn.srvs_hold_wakelock);
+		clsic_dbg(clsic,
+			  "Shutdown message returned 0x%x 0x%x: bitmap 0x%x\n",
+			  ret,
+			  msg_rsp.rsp_sp_shdn.hdr.err,
+			  msg_rsp.rsp_sp_shdn.srvs_hold_wakelock);
+
 		clsic_set_state(clsic, CLSIC_STATE_STOPPED);
 	}
 	return ret;

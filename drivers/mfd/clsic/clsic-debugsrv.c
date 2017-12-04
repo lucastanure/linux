@@ -113,7 +113,7 @@ static void clsic_debug_service_handle_bulk_notif(struct clsic *clsic,
 	if (clsic_get_bulkbit(msg)) {
 		bulk_sz = clsic_get_bulk_sz(&msg->fsm);
 
-		clsic_err(clsic,
+		clsic_dbg(clsic,
 			  "Expected bulk size: %d. FSM stated size: %d\n",
 			  BULK_SZ_EXPECTED, bulk_sz);
 
@@ -121,13 +121,13 @@ static void clsic_debug_service_handle_bulk_notif(struct clsic *clsic,
 		ret = clsic_fifo_readbulk_payload(clsic, msg,
 						  bulk_data,
 						  BULK_SZ_EXPECTED);
-		clsic_err(clsic, "clsic_fifo_readbulk_payload() returns %d\n",
+		clsic_dbg(clsic, "clsic_fifo_readbulk_payload() returns %d\n",
 			  ret);
 
 		if (ret == BULK_SZ_EXPECTED)
 			if (memcmp(bulk_data, bulk_data_expected,
 				  BULK_SZ_EXPECTED) != 0)
-				clsic_err(clsic, "Bulk data mismatch\n");
+				clsic_dbg(clsic, "Bulk data mismatch\n");
 	}
 }
 
