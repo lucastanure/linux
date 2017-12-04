@@ -56,6 +56,10 @@
 /* TODO: probably a good idea to undef any aliasing tacna defines */
 
 #define CLSIC_IRQN_PAD_CTRL				0x1044
+#define CLSIC_ASRC2_IN1L_INPUT1				0x8900
+#define CLSIC_ASRC2_IN1R_INPUT1				0x8910
+#define CLSIC_ASRC2_IN2L_INPUT1				0x8920
+#define CLSIC_ASRC2_IN2R_INPUT1				0x8930
 #define CLSIC_DSP2_XM_SRAM_IBUS_SETUP_0			0x17108
 #define CLSIC_DSP2_XM_SRAM_IBUS_PSD_1			0x1710c
 #define CLSIC_DSP2_XM_SRAM_IBUS_RET_1			0x17110
