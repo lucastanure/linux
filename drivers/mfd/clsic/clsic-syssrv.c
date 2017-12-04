@@ -70,16 +70,15 @@ static int clsic_system_service_handler(struct clsic *clsic,
 static void clsic_system_service_stop(struct clsic *clsic,
 				      struct clsic_service *handler)
 {
-	clsic_dbg(clsic, "%p %d %d", handler, clsic->clsic_msgproc_message_sent,
-		  clsic->clsic_msgproc_responded);
+	clsic_dbg(clsic, "%p %d", handler, clsic->msgproc);
 
 	/*
 	 * All the other services will have shutdown before this function is
 	 * called and the device should now be idle.
 	 *
 	 * The system service is responsible for making sure that the device
-	 * can have it's power removed, if the ARM may be on try to shut it
-	 * down.
+	 * can have it's power removed, make sure the messaging processor is
+	 * off.
 	 */
 	clsic_send_shutdown_cmd(clsic);
 
@@ -222,7 +221,11 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		return -EINVAL;
 	}
 
-	clsic_dbg(clsic, "=[ BEGINS ]===================\n");
+	/*
+	 * TODO: think about whether this clsic_pm wrapper around the send
+	 * message is still required
+	 */
+	clsic_pm_use(clsic);
 
 	/*
 	 * The "first touch" message that wakes the device may generate a
@@ -241,10 +244,15 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
+	clsic_pm_release(clsic);
 	if (ret != 0) {
-		clsic_err(clsic, "sysinfo ret %d\n", ret);
+		clsic_err(clsic, "Sysinfo ret %d\n", ret);
 		if (ret == -ETIMEDOUT) {
 			/*
+			 * TODO: there is an argument that the device should be
+			 * left in the HALTED state at this point rather than
+			 * resetting into firmware update.
+			 *
 			 * First touch message timed out - restart the device
 			 * in firmware update mode to attempt recovery
 			 */
@@ -257,6 +265,16 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		}
 		return ret;
 	}
+
+	mutex_lock(&clsic->message_lock);
+	if (clsic->msgproc == CLSIC_MSGPROC_ON)
+		clsic->msgproc = CLSIC_MSGPROC_AVAILABLE;
+	mutex_unlock(&clsic->message_lock);
+
+	if (!clsic->enumeration_required)
+		return 0;
+
+	clsic->enumeration_required = false;
 
 	clsic_dbg(clsic, "Sysinfo ret 0x%x 0x%x 0x%x\n",
 		  msg_rsp.rsp_sys_info.hdr.sbc,
@@ -404,20 +422,13 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 
 	clsic_dbg(clsic, "Enumerate found %d services (error: %d)",
 		  services_found, ret);
-	clsic_dbg(clsic, "=[ ENDS ]=====================");
-
-	clsic_set_state(clsic, CLSIC_STATE_ACTIVE);
 
 	return 0;
 }
 
 /*
- * This helper function is called when the device is being shutdown properly,
- * such as when the handset is powering off or rebooted.
- *
- * It is also used as part of the firmware update process where the service
- * enumeration decides that it has a newer firmware than is presently loaded
- * onto the device.
+ * This helper function is called when the driver desires the messaging
+ * processor to be in a shutdown state.
  */
 int clsic_send_shutdown_cmd(struct clsic *clsic)
 {
@@ -425,72 +436,24 @@ int clsic_send_shutdown_cmd(struct clsic *clsic)
 	union clsic_sys_msg msg_rsp;
 	int ret = 0;
 
-	/*
-	 * The only state when performing a shutdown is a sensible activity is
-	 * when it is running (for power management purposes) or stopping (in
-	 * preparation for driver unload).
-	 */
-	if ((clsic->state != CLSIC_STATE_ACTIVE) &&
-	    (clsic->state != CLSIC_STATE_ENUMERATING) &&
-	    (clsic->state != CLSIC_STATE_STOPPING)) {
-		/*
-		 * CLSIC_STATE_INACTIVE:
-		 * When the chip is off then it would be crazy to wake it up to
-		 * just shut it down.
-		 *
-		 * CLSIC_STATE_BOOTLOADER*:
-		 * The bootloader does not support the shutdown message
-		 *
-		 * CLSIC_STATE_PANIC or CLSIC_STATE_LOST:
-		 * If the board has failed then the shutdown message will
-		 * timeout as there is nothing to receive and handle it
-		 *
-		 * CLSIC_STATE_DEBUGCONTROL_GRANTED:
-		 * If debugcontrol is asserted then this shutdown command can
-		 * not be sent over the bus (it's locked and we don't know what
-		 * state the messaging protocol has been left in).
-		 *
-		 * CLSIC_STATE_DEBUGCONTROL_REQUESTED:
-		 * Likewise, if debug control is in the process of being
-		 * asserted then the message will not be sent either.
-		 *
-		 */
-		clsic_info(clsic,
-			   "state 0x%x (%s), skipping shutdown message\n",
-			   clsic->state, clsic_state_to_string(clsic->state));
-		return -EBUSY;
-	}
+	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
+		return 0;
 
-	/*
-	 * All the other services will have shutdown before this function is
-	 * called and the device should now be idle.
-	 *
-	 * Or, the device is being powered off or rebooted and this is a catch
-	 * saving state.
-	 *
-	 * The system service is responsible for making sure that the device
-	 * can have it's power removed, if the ARM may be on try to shut it
-	 * down.
-	 */
-	if (clsic->clsic_msgproc_message_sent
-	    || clsic->clsic_msgproc_responded) {
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   CLSIC_SRV_INST_SYS,
-				   CLSIC_SYS_MSG_CR_SP_SHDN);
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   CLSIC_SRV_INST_SYS,
+			   CLSIC_SYS_MSG_CR_SP_SHDN);
 
-		ret = clsic_send_msg_sync(clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+	ret = clsic_send_msg_sync(clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-		clsic_dbg(clsic,
-			  "Shutdown message returned 0x%x 0x%x: bitmap 0x%x\n",
-			  ret,
-			  msg_rsp.rsp_sp_shdn.hdr.err,
-			  msg_rsp.rsp_sp_shdn.srvs_hold_wakelock);
+	clsic_dbg(clsic,
+		  "Shutdown message returned 0x%x 0x%x: bitmap 0x%x\n",
+		  ret,
+		  msg_rsp.rsp_sp_shdn.hdr.err,
+		  msg_rsp.rsp_sp_shdn.srvs_hold_wakelock);
 
-		clsic_set_state(clsic, CLSIC_STATE_STOPPED);
-	}
 	return ret;
 }

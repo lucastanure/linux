@@ -14,6 +14,7 @@
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/irq.h>
 #include <linux/mfd/clsic/debugcontrol.h>
+#include <linux/mfd/clsic/syssrv.h>
 
 /*
  * When there are messages in the queues (waiting for response or waiting to
@@ -39,6 +40,10 @@
 
 #define CLSIC_WORKERTHREAD_NAME "clsic_worker"
 static void clsic_message_worker(struct work_struct *data);
+
+#define CLSIC_MSGPROC_SHUTDOWN_TIMEOUT 10
+static int clsic_msgproc_shutdown_schedule(struct clsic *clsic);
+static bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync);
 
 /*
  * Buffer size required to hold biggest msg2message string
@@ -201,6 +206,8 @@ static void clsic_unlink_message(struct clsic *clsic,
 static void clsic_complete_message_core(struct clsic *clsic,
 					struct clsic_message *msg_p)
 {
+	bool isa_shutdown_message = false;
+
 	clsic_unlink_message(clsic, msg_p);
 	list_add_tail(&msg_p->private_link, &clsic->completed_messages);
 
@@ -208,6 +215,13 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	 * Always signal completion to remove possible message conversion races
 	 */
 	complete(&msg_p->completion);
+
+	/* Test whether this is a shutdown message before it is released */
+	if ((clsic_get_servinst(msg_p) == CLSIC_SRV_INST_SYS) &&
+	    (clsic_get_messageid(msg_p) == CLSIC_SYS_MSG_CR_SP_SHDN)) {
+		isa_shutdown_message = true;
+		clsic->msgproc = CLSIC_MSGPROC_OFF;
+	}
 
 	/*
 	 * Perform any asynchronous callback - if the callback does not keep
@@ -217,6 +231,18 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	if (msg_p->cb != NULL)
 		if (msg_p->cb(clsic, msg_p) != CLSIC_MSG_RETAINED)
 			clsic_release_msg(clsic, msg_p);
+
+	/*
+	 * Messaging becomes idle when the send and response lists are empty,
+	 * schedule sending a shutdown message if the message being processed
+	 * is not a shutdown message.
+	 */
+	if (list_empty(&clsic->waiting_to_send) &&
+	    list_empty(&clsic->waiting_for_response) &&
+	    !isa_shutdown_message)
+		clsic_msgproc_shutdown_schedule(clsic);
+
+	clsic_pm_release(clsic);
 }
 
 /*
@@ -447,12 +473,6 @@ static ssize_t clsic_custom_message_write(struct file *file,
 	if (buf == NULL)
 		return -ENOMEM;
 
-	if (clsic->state != CLSIC_STATE_ACTIVE) {
-		clsic_err(clsic, "Not available in state 0x%x (%s)\n",
-			  clsic->state, clsic_state_to_string(clsic->state));
-		return -EBUSY;
-	}
-
 	/* The whole message must be written by the client in one go */
 	if (count > CLSIC_CUSTOM_MESSAGE_MAX) {
 		clsic_err(clsic, "Message too big: %zd (MAX %ld)\n",
@@ -573,6 +593,8 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 	struct clsic *clsic = data;
 	int ret = 0;
 	struct completion a_completion;
+	int i;
+	bool force_suspend = false;
 
 	clsic_dbg(clsic, "Begin state: %d (%s) : %llu\n",
 		  clsic->state, clsic_state_to_string(clsic->state), val);
@@ -589,21 +611,45 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) {
 			if (clsic->debugcontrol_completion != NULL)
 				complete(clsic->debugcontrol_completion);
-			clsic_set_state(clsic, CLSIC_STATE_ACTIVE);
+			clsic_state_set(clsic, CLSIC_STATE_ON,
+					CLSIC_STATE_CHANGE_LOCKHELD);
 		}
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
-			/*
-			 * set the device state to inactive and kick the worker
-			 * thread, this will reset the device and reenumerate
-			 */
-			clsic_set_state(clsic, CLSIC_STATE_INACTIVE);
+			/* this put matches the one on grant */
+			clsic_pm_release(clsic);
+			force_suspend = true;
 			clsic_irq_enable(clsic);
-			schedule_work(&clsic->maintenance_handler);
 		}
 		mutex_unlock(&clsic->message_lock);
 
+		if (force_suspend)
+			pm_runtime_suspend(clsic->dev);
+
 		break;
 	case CLSIC_DEBUGCONTROL_REQUESTED:
+		/*
+		 * When in a state of debug control the expectation is that the
+		 * device will be left in a usable state - in driver terms this
+		 * means that the debug control has a pm runtime get on the
+		 * device to prevent it being powered off using the autosuspend
+		 * mechanism.
+		 *
+		 * Performing the get may also cause the device to resume if it
+		 * is currenly powered OFF, if that occurs give this a chance to
+		 * complete.
+		 */
+		clsic_pm_use(clsic);
+		if ((clsic->state == CLSIC_STATE_OFF) ||
+		    (clsic->state == CLSIC_STATE_RESUMING)) {
+			for (i = 0; i < 10; i++) {
+				if ((clsic->state == CLSIC_STATE_ON) ||
+				    (clsic->state == CLSIC_STATE_HALTED))
+					break;
+				msleep(500);
+				clsic_info(clsic, "pause\n");
+			}
+		}
+
 		/*
 		 * if was state 0 and no current message -> successful lock
 		 * if was state 1, someone is already attempting to lock
@@ -611,22 +657,26 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		 * if was state 0, but there is a current message we have to
 		 * wait
 		 */
+
 		mutex_lock(&clsic->message_lock);
-		if ((clsic->state == CLSIC_STATE_ACTIVE)
-		    && (clsic->current_msg == NULL)) {
+		if ((clsic->state == CLSIC_STATE_ON) &&
+		    (clsic->current_msg == NULL)) {
 			clsic_irq_disable(clsic);
-			clsic_set_state(clsic,
-					CLSIC_STATE_DEBUGCONTROL_GRANTED);
+			clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
+					CLSIC_STATE_CHANGE_LOCKHELD);
 			ret = 0;
 		} else if (clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) {
 			ret = -EBUSY;
 		} else if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
 			ret = -EBUSY;
-		} else if (clsic->state == CLSIC_STATE_ACTIVE) {
+		} else if (clsic->state == CLSIC_STATE_OFF) {
+			ret = -EBUSY;
+		} else if (clsic->state == CLSIC_STATE_ON) {
 			init_completion(&a_completion);
 			clsic->debugcontrol_completion = &a_completion;
-			clsic_set_state(clsic,
-					CLSIC_STATE_DEBUGCONTROL_REQUESTED);
+			clsic_state_set(clsic,
+					CLSIC_STATE_DEBUGCONTROL_REQUESTED,
+					CLSIC_STATE_CHANGE_LOCKHELD);
 			mutex_unlock(&clsic->message_lock);
 			ret = wait_for_completion_interruptible(&a_completion);
 			mutex_lock(&clsic->message_lock);
@@ -651,13 +701,20 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		}
 		mutex_unlock(&clsic->message_lock);
 
+		/*
+		 * If this context failed to obtain debug control - release the
+		 * power request
+		 */
+		if (ret != 0)
+			clsic_pm_release(clsic);
+
 		break;
 	default:
 		clsic_dbg(clsic, "defaulted 0x%llx\n", val);
 	}
 
-	clsic_dbg(clsic, "Final state: %d (%s)\n", clsic->state,
-		  clsic_state_to_string(clsic->state));
+	clsic_dbg(clsic, "Final state: %d (%s) ret %d\n", clsic->state,
+		  clsic_state_to_string(clsic->state), ret);
 
 	return ret;
 }
@@ -684,6 +741,41 @@ DEFINE_SIMPLE_ATTRIBUTE(clsic_debugcontrol_fops,
 			clsic_debugcontrol_read,
 			clsic_debugcontrol_write, "%llu\n");
 #endif
+
+static void clsic_msgproc_shutdown_fn(struct work_struct *data)
+{
+	struct clsic *clsic = container_of(data, struct clsic,
+					   clsic_msgproc_shutdown_work.work);
+
+	clsic_send_shutdown_cmd(clsic);
+}
+
+static int clsic_msgproc_shutdown_schedule(struct clsic *clsic)
+{
+	int ret;
+
+	ret = schedule_delayed_work(&clsic->clsic_msgproc_shutdown_work,
+				    (HZ * CLSIC_MSGPROC_SHUTDOWN_TIMEOUT));
+
+	trace_clsic_msgproc_shutdown_schedule(ret);
+
+	return ret;
+}
+
+static bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync)
+{
+	bool ret = 0;
+
+	if (sync)
+		ret = cancel_delayed_work_sync(
+					   &clsic->clsic_msgproc_shutdown_work);
+	else
+		ret = cancel_delayed_work(&clsic->clsic_msgproc_shutdown_work);
+
+	trace_clsic_msgproc_shutdown_cancel(sync, ret ? 1 : 0);
+
+	return ret;
+}
 
 /*
  * The workerthread timer callback provides the timeout mechanism
@@ -717,6 +809,9 @@ int clsic_setup_message_interface(struct clsic *clsic)
 
 	INIT_WORK(&clsic->message_work, clsic_message_worker);
 
+	INIT_DELAYED_WORK(&clsic->clsic_msgproc_shutdown_work,
+			  clsic_msgproc_shutdown_fn);
+
 	clsic->current_msg = NULL;
 	INIT_LIST_HEAD(&clsic->waiting_to_send);
 	INIT_LIST_HEAD(&clsic->waiting_for_response);
@@ -729,9 +824,7 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	clsic->timeout_counter = 0;
 	clsic->messages_sent = 0;
 	clsic->messages_received = 0;
-
-	clsic->clsic_msgproc_message_sent = false;
-	clsic->clsic_msgproc_responded = false;
+	clsic->msgproc = CLSIC_MSGPROC_OFF;
 
 #ifdef CONFIG_DEBUG_FS
 	debugfs_create_file("messages", S_IRUSR | S_IRGRP | S_IROTH,
@@ -758,6 +851,13 @@ void clsic_shutdown_message_interface(struct clsic *clsic)
 {
 	struct clsic_message *tmp_msg;
 	struct clsic_message *next_msg;
+
+	/*
+	 * XXX check whether the put is required, which get does it match up
+	 * with?
+	 */
+	if (clsic_msgproc_shutdown_cancel(clsic, true))
+		pm_runtime_put_autosuspend(clsic->dev);
 
 	del_timer_sync(&clsic->workerthread_timer);
 
@@ -857,11 +957,12 @@ static int clsic_fifo_read(struct clsic *clsic, uint8_t *dest,
 		ret = regmap_raw_read(clsic->regmap, clsic->fifo_tx,
 				      tmp_dest, bytes_thisread);
 		if (ret != 0)
-			return ret;
+			goto err;
 		bytes_left -= bytes_thisread;
 		tmp_dest += bytes_thisread;
 	}
-
+err:
+	pm_runtime_mark_last_busy(clsic->dev);
 	return ret;
 }
 
@@ -885,11 +986,13 @@ static int clsic_fifo_write(struct clsic *clsic, uint8_t *src,
 				       CLSIC_FIFO1_RX,
 				       tmp_src, bytes_thiswrite);
 		if (ret != 0)
-			return ret;
+			goto err;
 		bytes_left -= bytes_thiswrite;
 		tmp_src += bytes_thiswrite;
 	}
 
+err:
+	pm_runtime_mark_last_busy(clsic->dev);
 	return ret;
 }
 
@@ -937,8 +1040,6 @@ static int clsic_fifo_readmessage(struct clsic *clsic,
 				  struct clsic_message *msg)
 {
 	int ret;
-
-	clsic->clsic_msgproc_responded = true;
 
 	/* Read the fixed size message from the TX FIFO */
 	ret = clsic_fifo_read(clsic, msg->fsm.raw, CLSIC_FIXED_MSG_SZ);
@@ -1149,42 +1250,45 @@ static int clsic_send_message_core(struct clsic *clsic,
 		clsic_set_bulk(&msg->fsm.cmd.hdr.sbc, 1);
 	}
 
-	/*
-	 * Check that it is possible to send the message (that the system is
-	 * ready to send messages and that if the system is interacting with
-	 * the bootloader that this message is intended for the bootloader.
-	 */
-	switch (clsic->state) {
-	case CLSIC_STATE_INACTIVE:
-	case CLSIC_STATE_PANIC:
-	case CLSIC_STATE_LOST:
-	case CLSIC_STATE_STOPPED:
-		/*
-		 * The driver hasn't started or has lost communication with the
-		 * device
-		 */
-		return -ENXIO;
-	case CLSIC_STATE_STARTING:
-		if (clsic_get_servinst(msg) != CLSIC_SRV_INST_SYS)
-			return -ENXIO;
-		break;
-	case CLSIC_STATE_BOOTLOADER_BEGIN ... CLSIC_STATE_BOOTLOADER_WFR:
-		/*
-		 * When the device is in the bootloader states only allow
-		 * bootloader messages to be enqueued.
-		 */
-		if (clsic_get_servinst(msg) != CLSIC_SRV_INST_BLD)
-			return -ENXIO;
-		break;
-	default:
-		/* In all other normal cases allow the message to be sent */
-		break;
-	}
-
 	if (clsic_get_servinst(msg) == CLSIC_SRV_INST_BLD)
 		msg->timeout = CLSIC_MSG_TIMEOUT_PERIOD_BOOTLOADER;
 	else
 		msg->timeout = CLSIC_MSG_TIMEOUT_PERIOD;
+
+	/* Check that it is possible to send the message */
+	switch (clsic->state) {
+	case CLSIC_STATE_HALTED:
+	case CLSIC_STATE_DEBUGCONTROL_GRANTED:
+		/*
+		 * The driver has lost communication with the device or is
+		 * being prevented from communicating with the device.
+		 */
+		return -EIO;
+	default:
+		/*
+		 * In all other states allow the message to pass this
+		 * checkpoint
+		 */
+		break;
+	}
+
+	clsic_pm_use(clsic);
+
+	/* Check whether messaging is limited to the core services */
+	if ((clsic->msgproc != CLSIC_MSGPROC_AVAILABLE) &&
+	    !((clsic_get_servinst(msg) == CLSIC_SRV_INST_SYS) ||
+	      (clsic_get_servinst(msg) == CLSIC_SRV_INST_BLD))) {
+		/*
+		 * XXX It's not causing any issues at the moment though I'm
+		 * wondering at this point whether the message should be
+		 * delayed or whether it should be failed with an error.
+		 */
+		clsic_info(clsic, "States: %s %d %d %d\n",
+			   clsic_state_to_string(clsic->state),
+			   clsic->blrequest, clsic->enumeration_required,
+			   clsic->msgproc);
+		clsic_dump_message(clsic, msg, "should wait?");
+	}
 
 	/*
 	 * The message will be added to the messaging layer - take the
@@ -1195,8 +1299,10 @@ static int clsic_send_message_core(struct clsic *clsic,
 	 * on the behalf of this context and this thread will block until that
 	 * is completed.
 	 */
-	if (mutex_lock_interruptible(&clsic->message_lock))
+	if (mutex_lock_interruptible(&clsic->message_lock)) {
+		clsic_pm_release(clsic);
 		return -EINTR;
+	}
 
 	/*
 	 * Check that no message exists in the system with the current service
@@ -1205,8 +1311,11 @@ static int clsic_send_message_core(struct clsic *clsic,
 	if (clsic_findmessage(clsic, clsic_get_srv_inst(msg->fsm.cmd.hdr.sbc),
 			      msg->fsm.cmd.hdr.msgid) != NULL) {
 		mutex_unlock(&clsic->message_lock);
+		clsic_pm_release(clsic);
 		return -EINVAL;
 	}
+
+	clsic_msgproc_shutdown_cancel(clsic, false);
 
 	clsic_set_msgstate(msg, CLSIC_MSG_WAITING);
 
@@ -1313,7 +1422,9 @@ static int clsic_handle_message_response(struct clsic *clsic,
 			 * could still be partially filled. Transition to the
 			 * panic'd state and begin device recovery.
 			 */
-			clsic_set_state(clsic, CLSIC_STATE_PANIC);
+			clsic_state_set(clsic,
+					CLSIC_STATE_HALTED,
+					CLSIC_STATE_CHANGE_LOCKHELD);
 			clsic_purge_message_queues(clsic);
 			schedule_work(&clsic->maintenance_handler);
 			return CLSIC_HANDLED;
@@ -1428,7 +1539,7 @@ void clsic_handle_message_rxdma_status(struct clsic *clsic,
 	return;
 
 rxdmastatus_error:
-	clsic_set_state(clsic, CLSIC_STATE_PANIC);
+	clsic_state_set(clsic, CLSIC_STATE_HALTED, CLSIC_STATE_CHANGE_LOCKHELD);
 	clsic_purge_message_queues(clsic);
 	schedule_work(&clsic->maintenance_handler);
 	mutex_unlock(&clsic->message_lock);
@@ -1540,6 +1651,17 @@ static void clsic_handle_message_inservice(struct clsic *clsic,
 static void clsic_message_handler(struct clsic *clsic,
 				  struct clsic_message *msg)
 {
+	clsic_msgproc_shutdown_cancel(clsic, false);
+
+	/*
+	 * If a message has just been received then the messaging processor is
+	 * certainly on
+	 */
+	mutex_lock(&clsic->message_lock);
+	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
+		clsic->msgproc = CLSIC_MSGPROC_ON;
+	mutex_unlock(&clsic->message_lock);
+
 	switch (clsic_get_cran_frommsg(msg)) {
 	case CLSIC_CRAN_RSP:
 		clsic_handle_message_response(clsic, msg);
@@ -1558,6 +1680,19 @@ static void clsic_message_handler(struct clsic *clsic,
 		clsic_dump_message(clsic, msg,
 				   "message_handler() Unexpected CRAN");
 	}
+
+	/*
+	 * TODO Review whether this could be moved to before the handler calls
+	 * to prevent shutdown timer churn, though when I quickly tried it it
+	 * didn't work.
+	 */
+
+	pm_runtime_mark_last_busy(clsic->dev);
+	mutex_lock(&clsic->message_lock);
+	if (list_empty(&clsic->waiting_to_send) &&
+	    list_empty(&clsic->waiting_for_response))
+		clsic_msgproc_shutdown_schedule(clsic);
+	mutex_unlock(&clsic->message_lock);
 }
 
 /*
@@ -1575,13 +1710,6 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 		clsic_dbg(clsic, "debugcontrol asserted\n");
 		return;
 	}
-
-	/*
-	 * It is inappropriate to read the FIFO when the driver state is
-	 * inactive
-	 */
-	if (clsic->state == CLSIC_STATE_INACTIVE)
-		return;
 
 	/*
 	 * Read the status register of the FIFO to see whether there are
@@ -1618,6 +1746,9 @@ static void clsic_message_worker_sending(struct clsic *clsic,
 {
 	int ret;
 
+	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
+		clsic->msgproc = CLSIC_MSGPROC_ON;
+
 	/*
 	 * Send the message - the message_lock must be held over this
 	 * process as it is possible that an IRQ based response could
@@ -1629,7 +1760,6 @@ static void clsic_message_worker_sending(struct clsic *clsic,
 		clsic_complete_message(clsic, msg, CLSIC_MSG_FAILED);
 		return;
 	}
-	clsic->clsic_msgproc_message_sent = true;
 
 	/*
 	 * If the fixed size message just sent had a bulk payload to
@@ -1716,7 +1846,8 @@ static void clsic_message_worker(struct work_struct *data)
 	if ((clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) &&
 	    (clsic->current_msg == NULL)) {
 		clsic_dbg(clsic, "debugcontrol granted\n");
-		clsic_set_state(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED);
+		clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
+				CLSIC_STATE_CHANGE_LOCKHELD);
 
 		/*
 		 * Need to disable interrupts to prevent messages sent to the
@@ -1728,6 +1859,8 @@ static void clsic_message_worker(struct work_struct *data)
 			complete(clsic->debugcontrol_completion);
 			clsic_dbg(clsic, "debugcontrol completed\n");
 		}
+		goto unlock_return;
+	} else if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
 		goto unlock_return;
 	}
 
@@ -1787,17 +1920,11 @@ static void clsic_message_worker(struct work_struct *data)
 				  clsic_state_to_string(clsic->state));
 			clsic->timeout_counter = 0;
 			clsic_complete_message(clsic, msg_p, CLSIC_MSG_TIMEOUT);
-			/*
-			 * XXX need to revisit this when the device states are
-			 * written down again to make sure that no other states
-			 * can have timeouts trigger a device reset.
-			 */
-			if (clsic->state == CLSIC_STATE_ACTIVE) {
-				clsic_set_state(clsic,
-						   CLSIC_STATE_PANIC);
-				clsic_purge_message_queues(clsic);
-				schedule_work(&clsic->maintenance_handler);
-			}
+			clsic_state_set(clsic,
+					CLSIC_STATE_HALTED,
+					CLSIC_STATE_CHANGE_LOCKHELD);
+			clsic_purge_message_queues(clsic);
+			schedule_work(&clsic->maintenance_handler);
 		} else {
 			/*
 			 * the current message has not timed out

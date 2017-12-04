@@ -69,7 +69,7 @@ struct clsic_fwheader {
 	uint32_t magic;
 	uint32_t type;
 	uint8_t padding2[SIZEOF_PADDING2_IN_BYTES];
-	uint32_t version; /* iReleaseVersion */
+	uint32_t version;
 } PACKED;
 
 #define CLSIC_FWMAGIC               0x42554c43UL
@@ -236,8 +236,8 @@ release_exit:
 }
 
 /*
- * Utility function for the system service. For a given firmware filename,
- * safely interrogate the header and return the version within.
+ * For a given firmware filename, safely interrogate the header and return the
+ * version within.
  *
  * To prevent an overlap of ranges in this function if an error is encountered
  * the version returned is 0. This should mean that if the device has valid
@@ -351,25 +351,10 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 {
 	uint8_t msgid = clsic_get_messageid(msg);
 	int ret = CLSIC_HANDLED;
-	bool purge_message_queues = false;
-
-	mutex_lock(&clsic->message_lock);
-
-	if ((clsic->state >= CLSIC_STATE_BOOTLOADER_BEGIN) &&
-	    (clsic->state <= CLSIC_STATE_BOOTLOADER_WFR)) {
-
-		/*
-		 * Entering the bootloader handler for the first time, a
-		 * bootloader notification is a messaging reset (all
-		 * outstanding commands should be interrupted
-		 */
-		purge_message_queues = true;
-	}
 
 	/*
-	 * Most of the notifications result in the driver setting state to
-	 * indicate that it should send a file to the bootloader service in the
-	 * maintenance thread context.
+	 * Most of the notifications result in the driver sending a file to the
+	 * bootloader service in the maintenance thread context.
 	 *
 	 * This function cannot send the response message directly because this
 	 * context is used to progress all notifications; as sending files uses
@@ -379,36 +364,32 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 	switch (msgid) {
 	case CLSIC_BL_MSG_N_REQ_FWU:
 		clsic_dbg(clsic, "Request FWU bundle\n");
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_FWU);
+		clsic->blrequest = CLSIC_BL_FWU;
 		break;
 	case CLSIC_BL_MSG_N_REQ_CPK:
 		clsic_dbg(clsic, "Request CPK bundle\n");
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_CPK);
+		clsic->blrequest = CLSIC_BL_CPK;
 		break;
 	case CLSIC_BL_MSG_N_REQ_MAB:
 		clsic_dbg(clsic, "Request MAB bundle\n");
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_MAB);
+		clsic->blrequest = CLSIC_BL_MAB;
 		break;
 	case CLSIC_BL_MSG_N_NO_BOOTABLE_COMP:
 	case CLSIC_BL_MSG_N_FAILED_FLASH_AUTH:
 	case CLSIC_BL_MSG_N_FLASH_CORRUPTED:
 		clsic_dbg(clsic, "CSLIC boot fail %d\n", msgid);
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_BEGIN);
-
-		purge_message_queues = true;
-
+		mutex_lock(&clsic->message_lock);
+		clsic_state_set(clsic, CLSIC_STATE_HALTED,
+				CLSIC_STATE_CHANGE_LOCKHELD);
+		clsic_purge_message_queues(clsic);
+		mutex_unlock(&clsic->message_lock);
 		break;
 	default:
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
 		ret = CLSIC_UNHANDLED;
 	}
-
-	if (purge_message_queues)
-		clsic_purge_message_queues(clsic);
-
-	mutex_unlock(&clsic->message_lock);
-
-	schedule_work(&clsic->maintenance_handler);
+	if (clsic->blrequest != CLSIC_BL_IDLE)
+		schedule_work(&clsic->maintenance_handler);
 	return ret;
 }
 
@@ -422,38 +403,26 @@ void clsic_bootsrv_state_handler(struct clsic *clsic)
 {
 	int ret = 0;
 	union clsic_bl_msg msg_rsp;
+	enum clsic_blrequests saved_request = clsic->blrequest;
 
-	switch (clsic->state) {
-	case CLSIC_STATE_BOOTLOADER_BEGIN:
-		/*
-		 * This state handles the case where the bootloader notifies
-		 * the host about a flash boot failure and the driver responds
-		 * by just resetting the device in firmware update mode, we'd
-		 * expect the bootloader to respond with a notification
-		 * requesting the FWU package which will progress the system
-		 * through the states.
-		 */
-		clsic_info(clsic, "Bootloader starting firmware update\n");
-		clsic_fwupdate_reset(clsic);
+	clsic->blrequest = CLSIC_BL_EXPECTED;
+
+	switch (saved_request) {
+	case CLSIC_BL_FWU:
+		clsic_bootsrv_sendfile(clsic,
+				       CLSIC_FWFILE_FWU,
+				       CLSIC_FWTYPE_FWU,
+				       CLSIC_BL_MSG_CR_SET_FWU,
+				       &msg_rsp);
 		break;
-	case CLSIC_STATE_BOOTLOADER_FWU:
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_WFR);
-		ret = clsic_bootsrv_sendfile(clsic,
-					     CLSIC_FWFILE_FWU,
-					     CLSIC_FWTYPE_FWU,
-					     CLSIC_BL_MSG_CR_SET_FWU,
-					     &msg_rsp);
+	case CLSIC_BL_CPK:
+		clsic_bootsrv_sendfile(clsic,
+				       CLSIC_FWFILE_CPK,
+				       CLSIC_FWTYPE_CPK,
+				       CLSIC_BL_MSG_CR_SET_CPK,
+				       &msg_rsp);
 		break;
-	case CLSIC_STATE_BOOTLOADER_CPK:
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_WFR);
-		ret = clsic_bootsrv_sendfile(clsic,
-					     CLSIC_FWFILE_CPK,
-					     CLSIC_FWTYPE_CPK,
-					     CLSIC_BL_MSG_CR_SET_CPK,
-					     &msg_rsp);
-		break;
-	case CLSIC_STATE_BOOTLOADER_MAB:
-		clsic_set_state(clsic, CLSIC_STATE_BOOTLOADER_WFR);
+	case CLSIC_BL_MAB:
 		ret = clsic_bootsrv_sendfile(clsic,
 					     CLSIC_FWFILE_MAB,
 					     CLSIC_FWTYPE_MAB,
@@ -464,42 +433,28 @@ void clsic_bootsrv_state_handler(struct clsic *clsic)
 			 * Successfully downloading the MAB is normally the end
 			 * of the bootloader exchange.
 			 */
-			if (msg_rsp.rsp_set_mab.flags &
-			    CLSIC_BL_RESET_NOT_REQUIRED)
-				clsic_set_state(clsic, CLSIC_STATE_ENUMERATING);
-			else
-				clsic_set_state(clsic, CLSIC_STATE_INACTIVE);
+			clsic->blrequest = CLSIC_BL_IDLE;
+			if (!(msg_rsp.rsp_set_mab.flags &
+			      CLSIC_BL_RESET_NOT_REQUIRED)) {
+				/* This device needs to be software reset */
+				clsic_irq_disable(clsic);
+				clsic_soft_reset(clsic);
+				clsic_irq_enable(clsic);
+			}
 			schedule_work(&clsic->maintenance_handler);
 		}
 		break;
-	case CLSIC_STATE_BOOTLOADER_WFR:
-		/*
-		 * The bootloader sets itself to the waiting for response (WFR)
-		 * state before issuing a command so that if the if the
-		 * maintenance thread reruns it'll dump out progress
-		 * information rather than attempting to resend a command
-		 * message with bulk data.
-		 */
-		clsic_err(clsic, "Bootloader waiting for response\n");
+	case CLSIC_BL_UPDATE:
+		mutex_lock(&clsic->message_lock);
+		clsic->enumeration_required = true;
+		clsic_fwupdate_reset(clsic);
+		mutex_unlock(&clsic->message_lock);
+		break;
+	case CLSIC_BL_EXPECTED:
 		break;
 	default:
-		/*
-		 * Entering this case indicates that there is a state
-		 * notification race and that between the messaging handler
-		 * identifying the state as being a bootloader state and
-		 * processing it something else has changed the state. This
-		 * could be because of a device panic.
-		 *
-		 * As there is no clear recovery path attempt to dump the
-		 * bootloader progress values and set the overall driver state
-		 * to LOST so the driver ceases driver communication.
-		 */
-		clsic_err(clsic, "Unrecognised: %d\n", clsic->state);
-		ret = -EINVAL;
+		clsic_err(clsic, "Unrecognised: %d\n", saved_request);
 	}
-
-	if (ret != 0)
-		clsic_set_state(clsic, CLSIC_STATE_LOST);
 }
 
 static ssize_t clsic_show_file_fw_version(struct device *dev,
@@ -527,9 +482,14 @@ static ssize_t clsic_store_device_fw_version(struct device *dev,
 	struct clsic *clsic = dev_get_drvdata(dev);
 
 	if (!strncmp(buf, "update", strlen("update"))) {
-		clsic_send_shutdown_cmd(clsic);
-		clsic_set_state(clsic, CLSIC_STATE_STOPPED);
-		clsic_fwupdate_reset(clsic);
+		/* Debug control prevents device state changes */
+		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
+			return -EPERM;
+
+		clsic->blrequest = CLSIC_BL_UPDATE;
+
+		pm_runtime_suspend(clsic->dev);
+		clsic_pm_wake(clsic);
 	}
 
 	return count;

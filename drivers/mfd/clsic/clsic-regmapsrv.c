@@ -433,6 +433,38 @@ static struct mfd_cell clsic_devs[] = {
 	{ .name = "clsic-gpio", },
 };
 
+static int clsic_regmap_service_pm_handler(struct clsic_service *handler,
+					   int pm_event)
+{
+	struct clsic_regmapsrv_struct *regmapsrv;
+
+	/* Will always be populated when this handler could be called */
+	regmapsrv = handler->data;
+
+	switch (pm_event) {
+	case PM_EVENT_SUSPEND:
+		clsic_dbg(regmapsrv->clsic, "Suspending (cacheon+dirty)");
+		regcache_cache_only(regmapsrv->regmap, true);
+		regcache_mark_dirty(regmapsrv->regmap);
+		break;
+
+	case PM_EVENT_RESUME:
+		clsic_dbg(regmapsrv->clsic, "Resuming (cacheoff+sync)");
+		regcache_cache_only(regmapsrv->regmap, false);
+		regcache_sync(regmapsrv->regmap);
+		break;
+
+	default:
+		clsic_err(regmapsrv->clsic, "Unknown PM event %d",
+			  pm_event);
+		break;
+	}
+
+	trace_clsic_ras_pm_handler(pm_event);
+
+	return 0;
+}
+
 /*
  * This function is called by the system service on discovery of a register
  * access service on the device.
@@ -489,6 +521,9 @@ int clsic_regmap_service_start(struct clsic *clsic,
 	 * device so it does not need to register a callback.
 	 */
 	handler->stop = &clsic_regmap_service_stop;
+
+	/* set pm handler for RAS to manage reg-cache */
+	handler->pm_handler = &clsic_regmap_service_pm_handler;
 
 	mutex_init(&regmapsrv_struct->regmap_mutex);
 	regmap_config_ras.lock_arg = regmapsrv_struct;

@@ -41,7 +41,7 @@ TRACE_EVENT(clsic_fifo_readmessage,
 			__entry->servinst = clsic_get_servinst(msg);
 			__entry->msgid = clsic_get_messageid(msg);
 			__entry->cran = clsic_cran_to_char(
-							 clsic_get_cran_frommsg(msg))
+						    clsic_get_cran_frommsg(msg))
 		),
 	TP_printk(
 			" Msg %p (%d): %02x %02x [%d %c %c %d] %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
@@ -85,7 +85,7 @@ TRACE_EVENT(clsic_fifo_writemessage,
 			__entry->servinst = clsic_get_servinst(msg);
 			__entry->msgid = clsic_get_messageid(msg);
 			__entry->cran = clsic_cran_to_char(
-							 clsic_get_cran_frommsg(msg))
+						    clsic_get_cran_frommsg(msg))
 		),
 	TP_printk(
 			"Msg %p (%d): %02x %02x [%d %c %c %d] %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
@@ -161,7 +161,7 @@ TRACE_EVENT(clsic_msg_statechange,
 			__entry->servinst = clsic_get_servinst(msg);
 			__entry->msgid = clsic_get_messageid(msg);
 			__entry->cran = clsic_cran_to_char(
-							 clsic_get_cran_frommsg(msg))
+						    clsic_get_cran_frommsg(msg))
 		),
 	TP_printk(
 			"  Msg %p (%d): [%d %c %c %d] %s",
@@ -295,7 +295,8 @@ TRACE_EVENT(clsic_vox_asr_stream_set_params,
 			__entry->frag_n = params->buffer.fragments;
 			__entry->buffer_sz = buffer_sz;
 		),
-	TP_printk("codec id: %u; channels i/o %u/%u); format: %u; sample rate: %u; fragment size/count %zu/%zu; buffer size: %zu",
+	TP_printk(
+		  "codec id: %u; channels i/o %u/%u); format: %u; sample rate: %u; fragment size/count %zu/%zu; buffer size: %zu",
 		  __entry->codec_id,
 		  __entry->ch_in,
 		  __entry->ch_out,
@@ -486,6 +487,70 @@ TRACE_EVENT(clsic_ras_bulkread,
 			"    addr: 0x%x count: %d ret: %d",
 			__entry->address,
 			__entry->count,
+			__entry->ret
+			)
+);
+
+TRACE_EVENT(clsic_ras_pm_handler,
+	TP_PROTO(int pm_event),
+	TP_ARGS(pm_event),
+	TP_STRUCT__entry(
+			__field(int, pm_event)
+			),
+	TP_fast_assign(
+			__entry->pm_event = pm_event;
+		),
+	TP_printk(
+			"    pm event: %d",
+			__entry->pm_event
+			)
+);
+
+TRACE_EVENT(clsic_pm,
+	TP_PROTO(int event),
+	TP_ARGS(event),
+	TP_STRUCT__entry(
+			__field(int, event)
+			),
+	TP_fast_assign(
+			__entry->event = event;
+		),
+	TP_printk(
+			"%s (%d)",
+			clsic_pm_rpm_to_string(__entry->event),
+			__entry->event
+			)
+);
+
+TRACE_EVENT(clsic_msgproc_shutdown_schedule,
+	TP_PROTO(int ret),
+	TP_ARGS(ret),
+	TP_STRUCT__entry(
+			__field(int, ret)
+			),
+	TP_fast_assign(
+			__entry->ret = ret;
+		),
+	TP_printk(
+			"ret = %d",
+			__entry->ret
+			)
+);
+
+TRACE_EVENT(clsic_msgproc_shutdown_cancel,
+	TP_PROTO(bool sync, int ret),
+	TP_ARGS(sync, ret),
+	TP_STRUCT__entry(
+			__field(bool, sync)
+			__field(int, ret)
+			),
+	TP_fast_assign(
+			__entry->sync = sync;
+			__entry->ret = ret;
+		),
+	TP_printk(
+			"sync: %d, ret = %d",
+			__entry->sync,
 			__entry->ret
 			)
 );

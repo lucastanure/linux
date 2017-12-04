@@ -100,6 +100,7 @@ static struct spi_driver clsic_spi_driver = {
 	.driver = {
 		.name = "clsic",
 		.owner = THIS_MODULE,
+		.pm = &clsic_pm_ops,
 		.of_match_table = of_match_ptr(clsic_of_match),
 	},
 	.probe = &clsic_spi_probe,

@@ -16,6 +16,7 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
+#include <linux/pm_runtime.h>
 
 #ifndef PACKED
 #define PACKED __packed
@@ -53,6 +54,7 @@
 	dev_err(_clsic->dev, "%s() " fmt, __func__, ##__VA_ARGS__)
 
 extern const struct of_device_id clsic_of_match[];
+extern const struct dev_pm_ops clsic_pm_ops;
 
 #define CLSIC_SUPPORTED_ID_48AB50		0x48AB50
 #define CLSIC_SUPPORTED_ID_EMULATED_CODEC	0xF48AB50
@@ -67,56 +69,32 @@ extern const struct of_device_id clsic_of_match[];
 #define CLSIC_MAX_CORE_SUPPLIES			2
 
 enum clsic_states {
-	CLSIC_STATE_INACTIVE,
-	CLSIC_STATE_STARTING,
-	CLSIC_STATE_ENUMERATING,
-	CLSIC_STATE_ACTIVE,
-	CLSIC_STATE_STOPPING,
-	CLSIC_STATE_STOPPED,
-	CLSIC_STATE_BOOTLOADER_BEGIN,
-	CLSIC_STATE_BOOTLOADER_FWU,
-	CLSIC_STATE_BOOTLOADER_CPK,
-	CLSIC_STATE_BOOTLOADER_MAB,
-	CLSIC_STATE_BOOTLOADER_WFR,
-	CLSIC_STATE_PANIC,
-	CLSIC_STATE_LOST,
+	CLSIC_STATE_OFF = 0,
+	CLSIC_STATE_RESUMING,
+	CLSIC_STATE_ON,
+	CLSIC_STATE_SUSPENDING,
 	CLSIC_STATE_DEBUGCONTROL_REQUESTED,
 	CLSIC_STATE_DEBUGCONTROL_GRANTED,
+	CLSIC_STATE_HALTED,
 };
 
 static inline const char *clsic_state_to_string(enum clsic_states state)
 {
 	switch (state) {
-	case CLSIC_STATE_INACTIVE:
-		return "INACTIVE";
-	case CLSIC_STATE_STARTING:
-		return "STARTING";
-	case CLSIC_STATE_ENUMERATING:
-		return "ENUMERATING";
-	case CLSIC_STATE_STOPPING:
-		return "STOPPING";
-	case CLSIC_STATE_STOPPED:
-		return "STOPPED";
-	case CLSIC_STATE_ACTIVE:
-		return "ACTIVE";
-	case CLSIC_STATE_BOOTLOADER_BEGIN:
-		return "BOOTLOADER_BEGIN";
-	case CLSIC_STATE_BOOTLOADER_FWU:
-		return "BOOTLOADER_FWU";
-	case CLSIC_STATE_BOOTLOADER_CPK:
-		return "BOOTLOADER_CPK";
-	case CLSIC_STATE_BOOTLOADER_MAB:
-		return "BOOTLOADER_MAB";
-	case CLSIC_STATE_BOOTLOADER_WFR:
-		return "BOOTLOADER_WFR";
-	case CLSIC_STATE_PANIC:
-		return "PANIC";
-	case CLSIC_STATE_LOST:
-		return "LOST";
+	case CLSIC_STATE_OFF:
+		return "OFF";
+	case CLSIC_STATE_RESUMING:
+		return "RESUMING";
+	case CLSIC_STATE_ON:
+		return "ON";
+	case CLSIC_STATE_SUSPENDING:
+		return "SUSPENDING";
 	case CLSIC_STATE_DEBUGCONTROL_REQUESTED:
 		return "DEBUGCONTROL_REQUESTED";
 	case CLSIC_STATE_DEBUGCONTROL_GRANTED:
 		return "DEBUGCONTROL_GRANTED";
+	case CLSIC_STATE_HALTED:
+		return "HALTED";
 	default:
 		return "UNKNOWN";
 	}
@@ -134,6 +112,26 @@ enum clsic_simirq_state {
 };
 #endif
 
+enum clsic_blrequests {
+	CLSIC_BL_IDLE = 0,
+	CLSIC_BL_UPDATE,
+	CLSIC_BL_EXPECTED,
+	CLSIC_BL_FWU,
+	CLSIC_BL_CPK,
+	CLSIC_BL_MAB,
+};
+
+/*
+ * OFF = expected off
+ * ON = expected on (message sent or received)
+ * AVAILABLE = generally available to all services
+ */
+enum clsic_msgproc_states {
+	CLSIC_MSGPROC_OFF = 0,
+	CLSIC_MSGPROC_ON,
+	CLSIC_MSGPROC_AVAILABLE,
+};
+
 struct clsic {
 	struct regmap *regmap;
 
@@ -150,6 +148,9 @@ struct clsic {
 
 	uint8_t instance; /* instance number */
 	enum clsic_states state;
+	enum clsic_msgproc_states msgproc;
+
+	enum clsic_blrequests blrequest;
 
 	struct notifier_block clsic_shutdown_notifier;
 
@@ -190,11 +191,6 @@ struct clsic {
 	uint32_t messages_sent;
 	uint32_t messages_received;
 
-	/* A message has been sent to the secure processor */
-	bool clsic_msgproc_message_sent;
-	/* The secure processor has responded and is certainly on */
-	bool clsic_msgproc_responded;
-
 	/* To be held whilst manipulating message queues */
 	struct mutex message_lock;
 
@@ -217,6 +213,12 @@ struct clsic {
 	struct list_head waiting_for_response;
 	/* List of messages completed but not released */
 	struct list_head completed_messages;
+
+	/*
+	 * Service enumeration is only required once per boot or if the
+	 * firmware changes
+	 */
+	bool enumeration_required;
 
 	/* Array of pointers to service handlers */
 	struct clsic_service *service_handlers[CLSIC_SERVICE_COUNT];
@@ -251,12 +253,14 @@ struct clsic {
 	struct regulator *vdd_d;
 	struct notifier_block vdd_d_notifier;
 	bool vdd_d_powered_off;
+
+	struct delayed_work clsic_msgproc_shutdown_work;
 };
 
 int clsic_dev_init(struct clsic *clsic);
 int clsic_dev_exit(struct clsic *clsic);
 int clsic_fwupdate_reset(struct clsic *clsic);
-int clsic_soft_reset(struct clsic *clsic);
+void clsic_soft_reset(struct clsic *clsic);
 void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg);
 void clsic_maintenance(struct work_struct *data);
 
@@ -307,6 +311,14 @@ struct clsic_service {
 
 	/* A pointer the handler can use to stash instance specific stuff */
 	void *data;
+
+	/*
+	 * service specific PM handler
+	 *
+	 * XXX rename and make this a start/stop/reenumerate/suspend/resume
+	 * callback
+	 */
+	int (*pm_handler)(struct clsic_service *handler, int pm_event);
 };
 
 int clsic_register_service_handler(struct clsic *clsic,
@@ -319,10 +331,57 @@ int clsic_register_service_handler(struct clsic *clsic,
 int clsic_deregister_service_handler(struct clsic *clsic,
 				     struct clsic_service *handler);
 
+#define CLSIC_STATE_CHANGE_CHECK true
+#define CLSIC_STATE_CHANGE_NOCHECK false
+#define CLSIC_STATE_CHANGE_LOCKHELD true
+#define CLSIC_STATE_CHANGE_LOCKNOTHELD false
+void clsic_state_set(struct clsic *clsic,
+		     const enum clsic_states new_state,
+		     bool lock_held);
+void clsic_state_change(struct clsic *clsic,
+			const enum clsic_states expected_state,
+			const enum clsic_states new_state,
+			bool check_state, bool lock_held);
+
+static inline const char *clsic_pm_rpm_to_string(int event)
+{
+	switch (event) {
+	case RPM_ACTIVE:
+		return "ACTIVE";
+	case RPM_RESUMING:
+		return "RESUMING";
+	case RPM_SUSPENDED:
+		return "SUSPENDED";
+	case RPM_SUSPENDING:
+		return "SUSPENDING";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+
+/*
+ * The clsic_pm functions make it straightforward to introduce instrumentation
+ */
+static inline void clsic_pm_use(struct clsic *clsic)
+{
+	pm_runtime_get_sync(clsic->dev);
+}
+static inline void clsic_pm_release(struct clsic *clsic)
+{
+	pm_runtime_mark_last_busy(clsic->dev);
+	pm_runtime_put_autosuspend(clsic->dev);
+}
+
+/* Cause the device to power up (until it auto suspends again) */
+static inline void clsic_pm_wake(struct clsic *clsic)
+{
+	clsic_pm_use(clsic);
+	clsic_pm_release(clsic);
+}
+
 void clsic_init_debugfs(struct clsic *clsic);
 void clsic_deinit_debugfs(struct clsic *clsic);
-
-void clsic_set_state(struct clsic *clsic, const enum clsic_states newstate);
 
 /* in Tables */
 bool clsic_readable_register(struct device *dev, unsigned int reg);

@@ -9,7 +9,6 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
@@ -25,6 +24,7 @@
 
 static void clsic_init_sysfs(struct clsic *clsic);
 static void clsic_deinit_sysfs(struct clsic *clsic);
+static int clsic_pm_service_transition(struct clsic *clsic, int pm_event);
 
 #ifdef CONFIG_OF
 const struct of_device_id clsic_of_match[] = {
@@ -45,6 +45,9 @@ MODULE_PARM_DESC(clsic_bootonload,
 		 "Whether to boot the device when the module is loaded");
 
 #define CLSIC_POST_RESET_DELAY	500
+
+/* CLSIC_PM_AUTOSUSPEND_MS is used as the idle time for runtime autosuspend */
+#define CLSIC_PM_AUTOSUSPEND_MS		(15 * 1000)
 
 static atomic_t clsic_instances_count = ATOMIC_INIT(0);
 
@@ -107,6 +110,43 @@ static bool clsic_wait_for_boot_done(struct clsic *clsic)
 	return true;
 }
 
+void clsic_soft_reset(struct clsic *clsic)
+{
+	if (clsic->volatile_memory)
+		regmap_update_bits(clsic->regmap, CLSIC_FW_UPDATE_REG,
+				   CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
+
+	regmap_write(clsic->regmap, TACNA_SFT_RESET, CLSIC_SOFTWARE_RESET_CODE);
+	msleep(CLSIC_POST_RESET_DELAY);
+	clsic_wait_for_boot_done(clsic);
+}
+
+static void clsic_hard_reset(struct clsic *clsic)
+{
+	clsic_enable_hard_reset(clsic);
+	msleep(CLSIC_POST_RESET_DELAY);
+	clsic_disable_hard_reset(clsic);
+
+	clsic_wait_for_boot_done(clsic);
+}
+
+int clsic_fwupdate_reset(struct clsic *clsic)
+{
+	int ret = 0;
+
+	clsic->blrequest = CLSIC_BL_EXPECTED;
+
+	ret = regmap_update_bits(clsic->regmap, CLSIC_FW_UPDATE_REG,
+				 CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
+	if (ret == 0) {
+		clsic_irq_disable(clsic);
+		clsic_soft_reset(clsic);
+		clsic_irq_enable(clsic);
+	}
+
+	return ret;
+}
+
 static bool clsic_supported_devid(struct clsic *clsic)
 {
 	int ret = 0;
@@ -158,11 +198,9 @@ static int clsic_shutdown_notifier_cb(struct notifier_block *this,
 	pr_devel("clsic_shutdown_notifier_cb() clsic %p code %ld\n",
 		 clsic, code);
 
-	if ((code == SYS_DOWN) || (code == SYS_HALT)) {
+	if ((code == SYS_DOWN) || (code == SYS_HALT))
 		/* signal the device is shutting down - halt the CLSIC device */
 		clsic_send_shutdown_cmd(clsic);
-
-	}
 
 	return NOTIFY_DONE;
 }
@@ -267,15 +305,51 @@ vdd_d_notifier_failed:
 }
 
 /*
- * Simple function to assign a new state and issue a matching
+ * Simple function to verify and assign a new state and issue a matching
  * trace event.
+ *
+ * Parameters:
+ * check_state - check that the state is expected_state before changing it
+ * lock_held - whether the caller already has the messaging_lock
  */
-void clsic_set_state(struct clsic *clsic, const enum clsic_states newstate)
+void clsic_state_change(struct clsic *clsic,
+			const enum clsic_states expected_state,
+			const enum clsic_states new_state,
+			bool check_state, bool lock_held)
 {
-	enum clsic_states state_from = clsic->state;
+	enum clsic_states current_state;
 
-	clsic->state = newstate;
-	trace_clsic_statechange(state_from, newstate);
+	if (!lock_held)
+		mutex_lock(&clsic->message_lock);
+
+	current_state = clsic->state;
+
+	if (check_state && (current_state != expected_state)) {
+		clsic_err(clsic, "%p no statechange %s != %s\n",
+			  clsic,
+			  clsic_state_to_string(current_state),
+			  clsic_state_to_string(expected_state));
+	} else {
+		clsic->state = new_state;
+		trace_clsic_statechange(current_state, new_state);
+	}
+
+	if (!lock_held)
+		mutex_unlock(&clsic->message_lock);
+}
+
+void clsic_state_set(struct clsic *clsic,
+		     const enum clsic_states new_state,
+		     bool lock_held)
+{
+	if (!lock_held)
+		mutex_lock(&clsic->message_lock);
+
+	trace_clsic_statechange(clsic->state, new_state);
+	clsic->state = new_state;
+
+	if (!lock_held)
+		mutex_unlock(&clsic->message_lock);
 }
 
 int clsic_dev_init(struct clsic *clsic)
@@ -285,8 +359,6 @@ int clsic_dev_init(struct clsic *clsic)
 	clsic_info(clsic, "%p (bootonload: %d)\n", clsic, clsic_bootonload);
 
 	dev_set_drvdata(clsic->dev, clsic);
-
-	clsic_set_state(clsic, CLSIC_STATE_INACTIVE);
 
 	ret = clsic_regulators_register_enable(clsic);
 	if (ret != 0) {
@@ -308,11 +380,7 @@ int clsic_dev_init(struct clsic *clsic)
 			   "Running without reset GPIO is not recommended\n");
 		clsic_soft_reset(clsic);
 	} else {
-		clsic_enable_hard_reset(clsic);
-		msleep(CLSIC_POST_RESET_DELAY);
-		clsic_disable_hard_reset(clsic);
-
-		clsic_wait_for_boot_done(clsic);
+		clsic_hard_reset(clsic);
 	}
 
 	if (!clsic_supported_devid(clsic)) {
@@ -370,10 +438,16 @@ int clsic_dev_init(struct clsic *clsic)
 	if (ret != 0)
 		goto bootloader_service_start_failed;
 
-	if (clsic_bootonload)
-		clsic_soft_reset(clsic);
+	clsic->enumeration_required = true;
 
-	clsic_irq_enable(clsic);
+	pm_runtime_set_suspended(clsic->dev);
+	pm_runtime_mark_last_busy(clsic->dev);
+	pm_runtime_set_autosuspend_delay(clsic->dev, CLSIC_PM_AUTOSUSPEND_MS);
+	pm_runtime_use_autosuspend(clsic->dev);
+	pm_runtime_enable(clsic->dev);
+
+	if (clsic_bootonload)
+		clsic_pm_wake(clsic);
 
 	/*
 	 * At this point the device is NOT fully setup - initialisation will
@@ -407,42 +481,6 @@ err_reset:
 }
 EXPORT_SYMBOL_GPL(clsic_dev_init);
 
-int clsic_fwupdate_reset(struct clsic *clsic)
-{
-	int ret = 0;
-
-	ret = regmap_update_bits(clsic->regmap, CLSIC_FW_UPDATE_REG,
-				 CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
-	if (ret == 0)
-		ret = clsic_soft_reset(clsic);
-
-	return ret;
-}
-
-int clsic_soft_reset(struct clsic *clsic)
-{
-	int ret = 0;
-
-	clsic_dbg(clsic, "%p\n", clsic);
-
-	clsic_irq_disable(clsic);
-
-	if (clsic->volatile_memory)
-		regmap_update_bits(clsic->regmap, CLSIC_FW_UPDATE_REG,
-				   CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
-
-	/* Initiate chip software reset */
-	regmap_write(clsic->regmap, TACNA_SFT_RESET, CLSIC_SOFTWARE_RESET_CODE);
-
-	msleep(CLSIC_POST_RESET_DELAY);
-
-	/* Wait for boot done */
-	clsic_wait_for_boot_done(clsic);
-
-	clsic_irq_enable(clsic);
-	return ret;
-}
-
 /*
  * Called when the device has informed the system service of a panic or other
  * fatal error.
@@ -464,9 +502,11 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
 		   clsic->last_panic.di.version,
 		   clsic->last_panic.di.encrypted);
 
-	clsic_set_state(clsic, CLSIC_STATE_PANIC);
-
 	mutex_lock(&clsic->message_lock);
+
+	clsic_state_set(clsic, CLSIC_STATE_HALTED,
+			CLSIC_STATE_CHANGE_LOCKHELD);
+
 	clsic_purge_message_queues(clsic);
 	mutex_unlock(&clsic->message_lock);
 
@@ -507,45 +547,74 @@ void clsic_maintenance(struct work_struct *data)
 	struct clsic *clsic = container_of(data, struct clsic,
 					   maintenance_handler);
 
-	switch (clsic->state) {
-	case CLSIC_STATE_INACTIVE:
-		clsic_soft_reset(clsic);
-		break;
-	case CLSIC_STATE_ENUMERATING:
-		clsic_system_service_enumerate(clsic);
-		break;
-	case CLSIC_STATE_BOOTLOADER_BEGIN ... CLSIC_STATE_BOOTLOADER_WFR:
+	clsic_info(clsic, "States: %s %d %d\n",
+		   clsic_state_to_string(clsic->state),
+		   clsic->blrequest, clsic->enumeration_required);
+
+	if ((clsic->state != CLSIC_STATE_RESUMING) &&
+	    (clsic->state != CLSIC_STATE_DEBUGCONTROL_REQUESTED))
+		return;
+
+	if (clsic->blrequest != CLSIC_BL_IDLE)
 		clsic_bootsrv_state_handler(clsic);
-		break;
-	case CLSIC_STATE_STARTING:
-	case CLSIC_STATE_STOPPING:
-	case CLSIC_STATE_STOPPED:
-	case CLSIC_STATE_ACTIVE:
-		break;
-	case CLSIC_STATE_PANIC:
-		clsic_info(clsic, "Device has sent a panic notification\n");
-		break;
-	case CLSIC_STATE_LOST:
-		clsic_info(clsic, "Device failed to start\n");
-		break;
-	default:
-		clsic_info(clsic, "Defaulted: %d\n", clsic->state);
+	else {
+		if (clsic_system_service_enumerate(clsic) == 0) {
+			clsic_state_set(clsic,
+					CLSIC_STATE_ON,
+					CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+			clsic_pm_service_transition(clsic, PM_EVENT_RESUME);
+		}
 	}
+
+	/*
+	 * If a debugcontrol request triggered a device resume, check whether
+	 * there are any outstanding messages that would prevent granting it
+	 * here.
+	 */
+	mutex_lock(&clsic->message_lock);
+	if ((clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) &&
+	    (clsic->current_msg == NULL)) {
+		clsic_info(clsic, "debugcontrol granted\n");
+		clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
+				CLSIC_STATE_CHANGE_LOCKHELD);
+
+		clsic_irq_disable(clsic);
+
+		if (clsic->debugcontrol_completion != NULL) {
+			complete(clsic->debugcontrol_completion);
+			clsic_dbg(clsic, "debugcontrol completed\n");
+		}
+	}
+	mutex_unlock(&clsic->message_lock);
+
 }
 
 int clsic_dev_exit(struct clsic *clsic)
 {
 	int i;
 
-	clsic_info(clsic, "%p\n", clsic);
+	if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
+		/* this put matches the one on grant so the module can exit */
+		clsic_pm_release(clsic);
+		clsic_irq_enable(clsic);
+	}
 
-	if (clsic->state == CLSIC_STATE_ACTIVE)
-		clsic_set_state(clsic, CLSIC_STATE_STOPPING);
+	/*
+	 * Volatile devices may need to be resumed at this point in time, place
+	 * a pm get on the device so the power is applied and then wait for the
+	 * state to become ON or HALTED.
+	 */
+	clsic_pm_use(clsic);
+	for (i = 0; i < 10; i++) {
+		if ((clsic->state == CLSIC_STATE_ON) ||
+		    (clsic->state == CLSIC_STATE_HALTED))
+			break;
+		msleep(CLSIC_POST_RESET_DELAY);
+		clsic_info(clsic, "pause to on/halted\n");
+	}
+	clsic_pm_release(clsic);
 
-	/* If it's still booting, cancel that work */
-	mutex_lock(&clsic->message_lock);
-	clsic_purge_message_queues(clsic);
-	mutex_unlock(&clsic->message_lock);
 	cancel_work_sync(&clsic->maintenance_handler);
 
 	/*
@@ -590,6 +659,21 @@ int clsic_dev_exit(struct clsic *clsic)
 			kfree(clsic->service_handlers[i]);
 		}
 	}
+
+	/*
+	 * Place the driver into suspend and pause briefly to give it a chance
+	 * to get there
+	 */
+	pm_runtime_suspend(clsic->dev);
+	for (i = 0; i < 10; i++) {
+		if (clsic->state == CLSIC_STATE_OFF)
+			break;
+		msleep(CLSIC_POST_RESET_DELAY);
+		clsic_info(clsic, "pause to off\n");
+	}
+
+	pm_runtime_set_suspended(clsic->dev);
+	pm_runtime_disable(clsic->dev);
 
 	clsic_irq_exit(clsic);
 
@@ -820,6 +904,119 @@ int clsic_deregister_codec_controls(struct clsic *clsic,
 					    &cbdata);
 }
 
+#ifdef CONFIG_PM
+static int clsic_pm_service_transition(struct clsic *clsic, int pm_event)
+{
+	int idx, ret = 0;
+	struct clsic_service *tmp_srv;
+
+	for (idx = 0; idx < CLSIC_SERVICE_COUNT; idx++) {
+		tmp_srv = clsic->service_handlers[idx];
+		if (tmp_srv && tmp_srv->pm_handler) {
+			ret = tmp_srv->pm_handler(tmp_srv, pm_event);
+			if (ret) {
+				/* We fail PM call if any service fails */
+				clsic_err(clsic,
+					  "service %d, type 0x%x, event %d fail\n",
+					  idx, tmp_srv->service_type, pm_event);
+				break;
+			}
+		}
+	}
+
+	return ret;
+}
+
+static int clsic_runtime_resume(struct device *dev)
+{
+	struct clsic *clsic = dev_get_drvdata(dev);
+	bool force_reset = false;
+	int ret;
+
+	trace_clsic_pm(RPM_RESUMING);
+
+	clsic_state_set(clsic, CLSIC_STATE_RESUMING,
+			CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+	/*
+	 * If VDD_D didn't power off we must force a reset so that the
+	 * cache syncs correctly. If we have a hardware reset this must
+	 * be done before powering up VDD_D. If not, we'll use a software
+	 * reset after powering-up VDD_D
+	 */
+	if (!clsic->vdd_d_powered_off) {
+		clsic_dbg(clsic, "VDD_D did not power off, forcing reset\n");
+		force_reset = true;
+	}
+
+	ret = regulator_enable(clsic->vdd_d);
+	if (ret) {
+		clsic_err(clsic, "Failed to enable VDD_D: %d\n", ret);
+
+		clsic_state_set(clsic, CLSIC_STATE_HALTED,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+		return ret;
+	}
+
+	if (force_reset) {
+		if (clsic->reset_gpio)
+			clsic_hard_reset(clsic);
+		else
+			clsic_soft_reset(clsic);
+	}
+	clsic_irq_enable(clsic);
+
+	if (clsic->volatile_memory) {
+		clsic_info(clsic, "Volatile resume\n");
+		clsic_fwupdate_reset(clsic);
+	} else
+		schedule_work(&clsic->maintenance_handler);
+
+	trace_clsic_pm(RPM_ACTIVE);
+
+	return ret;
+}
+
+static int clsic_runtime_suspend(struct device *dev)
+{
+	int ret = 0;
+	struct clsic *clsic = dev_get_drvdata(dev);
+
+	trace_clsic_pm(RPM_SUSPENDING);
+
+	clsic_state_set(clsic, CLSIC_STATE_SUSPENDING,
+			CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+	/* suspend services */
+	ret = clsic_pm_service_transition(clsic, PM_EVENT_SUSPEND);
+	if (ret)
+		return ret;
+
+	/*
+	 * disable IRQ before removing VDD_D, balances with an enable in resume
+	 */
+	clsic_irq_disable(clsic);
+
+	clsic->vdd_d_powered_off = false;
+	regulator_disable(clsic->vdd_d);
+
+	trace_clsic_pm(RPM_SUSPENDED);
+
+	clsic_state_set(clsic, CLSIC_STATE_OFF, CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+	return 0;
+}
+
+const struct dev_pm_ops clsic_pm_ops = {
+	SET_RUNTIME_PM_OPS(clsic_runtime_suspend,
+			   clsic_runtime_resume,
+			   NULL)
+};
+EXPORT_SYMBOL_GPL(clsic_pm_ops);
+
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 
 /*
@@ -830,7 +1027,8 @@ static int clsic_bootdone_write(void *data, u64 val)
 {
 	struct clsic *clsic = data;
 
-	schedule_work(&clsic->maintenance_handler);
+	clsic_pm_wake(clsic);
+
 	return 0;
 }
 
@@ -969,9 +1167,18 @@ static ssize_t clsic_store_state(struct device *dev,
 	struct clsic *clsic = dev_get_drvdata(dev);
 
 	if (!strncmp(buf, "reset", strlen("reset"))) {
-		clsic_info(clsic, "software reset\n");
-		clsic_set_state(clsic, CLSIC_STATE_INACTIVE);
-		clsic_soft_reset(clsic);
+		/* Debug control prevents device state changes */
+		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
+			return -EPERM;
+
+		pm_runtime_suspend(clsic->dev);
+
+		mutex_lock(&clsic->message_lock);
+		clsic->enumeration_required = true;
+		clsic_purge_message_queues(clsic);
+		mutex_unlock(&clsic->message_lock);
+
+		clsic_pm_wake(clsic);
 	}
 	return count;
 }
@@ -980,6 +1187,31 @@ static ssize_t clsic_show_state(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct clsic *clsic = dev_get_drvdata(dev);
+	enum clsic_states saved_state;
+	enum clsic_blrequests saved_blrequest;
+
+	mutex_lock(&clsic->message_lock);
+	saved_state = clsic->state;
+	saved_blrequest = clsic->blrequest;
+	mutex_unlock(&clsic->message_lock);
+
+	if ((saved_state == CLSIC_STATE_RESUMING) &&
+	    (saved_blrequest != CLSIC_BL_IDLE)) {
+		switch (saved_blrequest) {
+		case CLSIC_BL_EXPECTED:
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_EXPECTED");
+		case CLSIC_BL_UPDATE:
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_UPDATE");
+		case CLSIC_BL_FWU:
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_FWU");
+		case CLSIC_BL_CPK:
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_CPK");
+		case CLSIC_BL_MAB:
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_MAB");
+		case CLSIC_BL_IDLE: /* required for a switch werror */
+			return snprintf(buf, PAGE_SIZE, "BOOTLOADER_IDLE");
+		}
+	}
 
 	return snprintf(buf, PAGE_SIZE, "%s\n",
 			clsic_state_to_string(clsic->state));
