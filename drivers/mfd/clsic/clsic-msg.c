@@ -1285,9 +1285,9 @@ static int clsic_send_message_core(struct clsic *clsic,
 }
 
 /*
- * The notification system has received a message with a CRAN type of response,
- * the purpose of this function is to match it with the originating message,
- * handle the response payload and release the caller.
+ * The driver has received a message with a CRAN type of response, the purpose
+ * of this function is to match it with the originating message, handle the
+ * response payload and pass it to the caller.
  *
  * If this response was for the current_msg then the handling code will trigger
  * any messages waiting to send, they are not signalled here as we'd get device
