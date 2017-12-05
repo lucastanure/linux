@@ -184,9 +184,9 @@ struct clsic {
 	uint32_t messages_received;
 
 	/* A message has been sent to the secure processor */
-	bool clsic_secproc_message_sent;
+	bool clsic_msgproc_message_sent;
 	/* The secure processor has responded and is certainly on */
-	bool clsic_secproc_responded;
+	bool clsic_msgproc_responded;
 
 	/* To be held whilst manipulating message queues */
 	struct mutex message_lock;

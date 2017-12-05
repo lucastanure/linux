@@ -70,8 +70,8 @@ static int clsic_system_service_handler(struct clsic *clsic,
 static void clsic_system_service_stop(struct clsic *clsic,
 				      struct clsic_service *handler)
 {
-	clsic_dbg(clsic, "%p %d %d", handler, clsic->clsic_secproc_message_sent,
-		  clsic->clsic_secproc_responded);
+	clsic_dbg(clsic, "%p %d %d", handler, clsic->clsic_msgproc_message_sent,
+		  clsic->clsic_msgproc_responded);
 
 	/*
 	 * All the other services will have shutdown before this function is
@@ -467,8 +467,8 @@ int clsic_send_shutdown_cmd(struct clsic *clsic)
 	 * can have it's power removed, if the ARM may be on try to shut it
 	 * down.
 	 */
-	if (clsic->clsic_secproc_message_sent
-	    || clsic->clsic_secproc_responded) {
+	if (clsic->clsic_msgproc_message_sent
+	    || clsic->clsic_msgproc_responded) {
 		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
 				   CLSIC_SRV_INST_SYS,
 				   CLSIC_SYS_MSG_CR_SP_SHDN);

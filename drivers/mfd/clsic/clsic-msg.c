@@ -730,8 +730,8 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	clsic->messages_sent = 0;
 	clsic->messages_received = 0;
 
-	clsic->clsic_secproc_message_sent = false;
-	clsic->clsic_secproc_responded = false;
+	clsic->clsic_msgproc_message_sent = false;
+	clsic->clsic_msgproc_responded = false;
 
 #ifdef CONFIG_DEBUG_FS
 	debugfs_create_file("messages", S_IRUSR | S_IRGRP | S_IROTH,
@@ -938,7 +938,7 @@ static int clsic_fifo_readmessage(struct clsic *clsic,
 {
 	int ret;
 
-	clsic->clsic_secproc_responded = true;
+	clsic->clsic_msgproc_responded = true;
 
 	/* Read the fixed size message from the TX FIFO */
 	ret = clsic_fifo_read(clsic, msg->fsm.raw, CLSIC_FIXED_MSG_SZ);
@@ -1694,7 +1694,7 @@ static void clsic_message_worker_sending(struct clsic *clsic,
 		clsic_complete_message(clsic, msg, CLSIC_MSG_FAILED);
 		return;
 	}
-	clsic->clsic_secproc_message_sent = true;
+	clsic->clsic_msgproc_message_sent = true;
 
 	/*
 	 * If the fixed size message just sent had a bulk payload to
