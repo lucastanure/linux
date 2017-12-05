@@ -42,7 +42,7 @@
 
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	2
+#define VOX_NUM_NEW_KCONTROLS	3
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -86,8 +86,13 @@ struct clsic_vox {
 	int mgmt_mode;
 	int error_info;
 
+	uint8_t phrase_id;
+
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
+	struct soc_mixer_control phrase_id_mixer_ctrl;
+
+	bool phrase_installed[VOX_MAX_PHRASES];
 };
 
 static const struct {
@@ -802,6 +807,59 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	}
 }
 
+static int vox_update_phrase_status(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret, phr;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret) {
+		clsic_err(vox->clsic, "%s: %d.\n", __func__, ret);
+		return ret;
+	}
+
+	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
+		msg_cmd.cmd_is_phrase_installed.phraseid = phr;
+
+		ret = clsic_send_msg_sync(
+				     vox->clsic,
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+		if (ret) {
+			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+			return -EIO;
+		}
+
+		switch (msg_rsp.rsp_is_phrase_installed.hdr.err) {
+		case CLSIC_ERR_NONE:
+			vox->phrase_installed[phr] = true;
+			break;
+		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+			vox->phrase_installed[phr] = false;
+			break;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVAL_PHRASEID:
+			clsic_err(vox->clsic, "failure %s.\n",
+				  clsic_error_string(
+				     msg_rsp.rsp_is_phrase_installed.hdr.err));
+			return -EIO;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d.\n",
+				  msg_rsp.rsp_is_phrase_installed.hdr.err);
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
 static int vox_ctrl_error_info_get(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
@@ -825,6 +883,35 @@ static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 
 	vox->error_info = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
+
+static int vox_ctrl_phrase_id_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
+
+	ucontrol->value.integer.value[0] = vox->phrase_id;
+
+	return 0;
+}
+
+static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
+
+	if (vox->phrase_id > (VOX_MAX_PHRASES - 1))
+		return -EINVAL;
+
+	vox->phrase_id = ucontrol->value.integer.value[0];
 
 	return 0;
 }
@@ -926,6 +1013,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	init_completion(&vox->asr_stream.trigger_heard);
 
 	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+
 	mutex_init(&vox->mgmt_mode_lock);
 
 	vox->kcontrol_new[0].name = "Vox Management Mode";
@@ -956,12 +1044,37 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
+	vox->phrase_id = CLSIC_VOX_PHRASE_VDT1;
+
+	memset(&vox->phrase_id_mixer_ctrl, 0,
+	       sizeof(vox->phrase_id_mixer_ctrl));
+	vox->phrase_id_mixer_ctrl.max = VOX_MAX_PHRASES - 1;
+	vox->phrase_id_mixer_ctrl.platform_max = VOX_MAX_PHRASES - 1;
+	vox->kcontrol_new[2].name = "Vox Phrase ID";
+	vox->kcontrol_new[2].info = snd_soc_info_volsw;
+	vox->kcontrol_new[2].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[2].get = vox_ctrl_phrase_id_get;
+	vox->kcontrol_new[2].put = vox_ctrl_phrase_id_put;
+	vox->kcontrol_new[2].private_value =
+		(unsigned long)(&(vox->phrase_id_mixer_ctrl));
+	vox->kcontrol_new[2].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
 	if (ret != 0) {
 		pr_err("enum %s() add ret: %d.\n", __func__, ret);
 		return ret;
 	}
+
+	ret = vox_update_phrase_status(vox);
+	if (ret != 0)
+		return ret;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	if (ret != 0)
+		return ret;
 
 	handler->data = (void *)vox;
 	handler->callback = &vox_notification_handler;
