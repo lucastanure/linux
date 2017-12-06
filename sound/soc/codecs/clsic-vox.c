@@ -15,6 +15,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/kthread.h>
+#include <linux/firmware.h>
 
 #include <sound/core.h>
 #include <sound/compress_driver.h>
@@ -41,8 +42,9 @@
 #define VOX_ASR_MAX_FRAGMENTS	256
 
 #define VOX_MAX_PHRASES		5
+#define VOX_NUM_NEW_KCONTROLS	4
 
-#define VOX_NUM_NEW_KCONTROLS	3
+#define CLSIC_BPB_SIZE_ALIGNMENT	4
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -85,6 +87,7 @@ struct clsic_vox {
 	struct mutex mgmt_mode_lock;
 	int mgmt_mode;
 	int error_info;
+	/* Used for showing result of a top level control mode change. */
 
 	uint8_t phrase_id;
 
@@ -93,6 +96,9 @@ struct clsic_vox {
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
+
+	struct work_struct mgmt_mode_work;
+	struct snd_kcontrol *mgmt_mode_kctrl;
 };
 
 static const struct {
@@ -796,7 +802,7 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 		return 0;
 	case CLSIC_ERR_INVAL_MODE_TRANSITION:
 	case CLSIC_ERR_INVAL_MODE:
-		clsic_err(vox->clsic, "%s\n",
+		clsic_err(vox->clsic, "%s.\n",
 			  clsic_error_string(msg_rsp.rsp_set_mode.hdr.err));
 		return -EIO;
 	default:
@@ -807,17 +813,216 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	}
 }
 
+void vox_set_idle_and_neutral(struct clsic_vox *vox)
+{
+	vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+
+	mutex_lock(&vox->mgmt_mode_lock);
+
+	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+
+	mutex_unlock(&vox->mgmt_mode_lock);
+
+	snd_ctl_notify(vox->codec->component.card->snd_card,
+		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
+}
+
+static int vox_install_phrase(struct clsic_vox *vox)
+{
+	const struct firmware *fw;
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret) {
+		clsic_err(vox->clsic, "%d.\n", ret);
+		vox->error_info = VOX_ERROR_FAILURE;
+		goto exit;
+	}
+
+	clsic_info(vox->clsic, "start installing phrase %d.\n", vox->phrase_id);
+
+	ret = request_firmware(&fw, phrase_files[vox->phrase_id].file,
+			       vox->clsic->dev);
+	if (ret) {
+		clsic_err(vox->clsic, "request_firmware failed for %s.\n",
+			  phrase_files[vox->phrase_id].file);
+		vox->error_info = VOX_ERROR_FAILURE;
+		goto exit;
+	}
+
+	if (fw->size % CLSIC_BPB_SIZE_ALIGNMENT) {
+		clsic_err(vox->clsic,
+			  "firmware file %s size %d is not a multiple of %d.\n",
+			  CLSIC_BPB_SIZE_ALIGNMENT,
+			  phrase_files[vox->phrase_id].file, fw->size);
+		release_firmware(fw);
+		vox->error_info = VOX_ERROR_FAILURE;
+		goto exit;
+	}
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_INSTALL_PHRASE);
+	msg_cmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
+	msg_cmd.cmd_install_phrase.phraseid = vox->phrase_id;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  fw->data, fw->size,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
+
+	release_firmware(fw);
+
+	if (ret)
+		goto exit;
+
+	switch (msg_rsp.rsp_install_phrase.hdr.err) {
+	case CLSIC_ERR_NONE:
+		vox->phrase_installed[vox->phrase_id] = true;
+		clsic_info(vox->clsic, "successfully installed phrase %d.\n",
+			   vox->phrase_id);
+		vox->error_info = VOX_ERROR_NONE;
+		break;
+	case CLSIC_ERR_BPB_SZ_TOO_SMALL:
+	case CLSIC_ERR_BPB_SZ_UNALIGNED:
+	case CLSIC_ERR_BPB_BAD_HDR:
+	case CLSIC_ERR_BPB_BAD_IMGMAP:
+	case CLSIC_ERR_BPB_SZ_INCONSISTENT:
+	case CLSIC_ERR_BPB_AUTH_FAILED:
+	case CLSIC_ERR_BPB_ASSET_INVAL_VER:
+	case CLSIC_ERR_BPB_ASSET_INVAL_SZ:
+	case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TYPE:
+	case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TABLE_SZ:
+	case CLSIC_ERR_BPB_ASSET_INVAL_FLAGS:
+		clsic_err(vox->clsic, "phrase installation error %s.\n",
+			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
+		vox->error_info = VOX_ERROR_BAD_BPB;
+		break;
+	case CLSIC_ERR_NO_MEM:
+	case CLSIC_ERR_FLASH:
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_INVAL_PHRASEID:
+	case CLSIC_ERR_VOICEID:
+		clsic_err(vox->clsic, "phrase installation error %s.\n",
+			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
+		vox->error_info = VOX_ERROR_FAILURE;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			 msg_rsp.rsp_install_phrase.hdr.err,
+			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
+		vox->error_info = VOX_ERROR_FAILURE;
+	}
+
+exit:
+	vox_set_idle_and_neutral(vox);
+
+	return ret;
+}
+
+static int vox_uninstall_phrase(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret) {
+		clsic_err(vox->clsic, "%d.\n", ret);
+		vox->error_info = VOX_ERROR_FAILURE;
+		goto exit;
+	}
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_REMOVE_PHRASE);
+	msg_cmd.cmd_remove_phrase.phraseid = vox->phrase_id;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_FAILURE;
+		ret = -EIO;
+		goto exit;
+	}
+
+	switch (msg_rsp.rsp_remove_phrase.hdr.err) {
+	case CLSIC_ERR_NONE:
+	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+		clsic_info(vox->clsic, "successfully uninstalled phrase %d.\n",
+			   vox->phrase_id);
+		vox->phrase_installed[vox->phrase_id] = false;
+		vox->error_info = VOX_ERROR_NONE;
+		break;
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_INVAL_PHRASEID:
+	case CLSIC_ERR_VOICEID:
+		clsic_err(vox->clsic, "%s.\n",
+			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
+		vox->error_info = VOX_ERROR_FAILURE;
+		ret = -EIO;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_remove_phrase.hdr.err,
+			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
+		vox->error_info = VOX_ERROR_FAILURE;
+		ret = -EIO;
+		break;
+	}
+
+exit:
+	vox_set_idle_and_neutral(vox);
+
+	return ret;
+}
+
+/*
+ * Work function allows ALSA "get" control to return immediately while sending
+ * multiple messages.
+ */
+static void vox_mgmt_mode_handler(struct work_struct *data)
+{
+	struct clsic_vox *vox = container_of(data, struct clsic_vox,
+					     mgmt_mode_work);
+	int ret;
+
+	switch (vox->mgmt_mode) {
+	case VOX_MGMT_MODE_INSTALLING_PHRASE:
+		ret = vox_install_phrase(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_install_phrase ret %d.\n",
+				  ret);
+		break;
+	case VOX_MGMT_MODE_UNINSTALLING_PHRASE:
+		ret = vox_uninstall_phrase(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_uninstall_phrase ret %d.\n",
+				  ret);
+		break;
+	default:
+		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
+			  vox->mgmt_mode);
+	}
+}
+
 static int vox_update_phrase_status(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret, phr;
-
-	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
-	if (ret) {
-		clsic_err(vox->clsic, "%s: %d.\n", __func__, ret);
-		return ret;
-	}
 
 	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -916,6 +1121,17 @@ static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
+
+	ucontrol->value.integer.value[0] =
+					  vox->phrase_installed[vox->phrase_id];
+
+	return 0;
+}
+
 static int vox_ctrl_mgmt_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -943,17 +1159,45 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 
 	switch (ucontrol->value.enumerated.item[0]) {
+	case VOX_MGMT_MODE_INSTALL_PHRASE:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_INSTALLING_PHRASE;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_MGMT_MODE_UNINSTALL_PHRASE:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_UNINSTALLING_PHRASE;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
 	case VOX_MGMT_MODE_NEUTRAL:
 		mutex_lock(&vox->mgmt_mode_lock);
-		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-		if (ret) {
+		if ((vox->mgmt_mode != VOX_MGMT_MODE_INSTALLING_PHRASE) &&
+		    (vox->mgmt_mode != VOX_MGMT_MODE_UNINSTALLING_PHRASE)) {
+			ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+			if (ret) {
+				mutex_unlock(&vox->mgmt_mode_lock);
+				clsic_err(vox->clsic, "%d.\n", ret);
+				return ret;
+			}
+			vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
 			mutex_unlock(&vox->mgmt_mode_lock);
-			clsic_err(vox->clsic, "%s: %d.\n", __func__, ret);
-			return ret;
+			clsic_info(vox->clsic, "vox mode set to neutral.\n");
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
 		}
-		vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
-		mutex_unlock(&vox->mgmt_mode_lock);
-		clsic_info(vox->clsic, "vox mode set to neutral.\n");
 		break;
 	default:
 		ret = -EINVAL;
@@ -1014,7 +1258,13 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
 
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	if (ret != 0)
+		return ret;
+
 	mutex_init(&vox->mgmt_mode_lock);
+
+	INIT_WORK(&vox->mgmt_mode_work, vox_mgmt_mode_handler);
 
 	vox->kcontrol_new[0].name = "Vox Management Mode";
 	vox->kcontrol_new[0].info = snd_soc_info_enum_double;
@@ -1061,6 +1311,22 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret != 0)
+		return ret;
+
+	ret = vox_update_phrase_status(vox);
+	if (ret != 0)
+		return ret;
+
+	kcontrol_new[3].name = "Vox Phrase Installed";
+	kcontrol_new[3].info = snd_soc_info_bool_ext;
+	kcontrol_new[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	kcontrol_new[3].get = vox_ctrl_phrase_installed_get;
+	kcontrol_new[3].private_value = (unsigned long)vox;
+	kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				 SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
 	if (ret != 0) {
@@ -1068,13 +1334,13 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 		return ret;
 	}
 
-	ret = vox_update_phrase_status(vox);
-	if (ret != 0)
-		return ret;
-
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 	if (ret != 0)
 		return ret;
+
+	vox->mgmt_mode_kctrl = snd_soc_card_get_kcontrol(
+						vox->codec->component.card,
+						"Vox Management Mode");
 
 	handler->data = (void *)vox;
 	handler->callback = &vox_notification_handler;
@@ -1087,6 +1353,8 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
 
 	dev_info(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
+
+	cancel_work_sync(&vox->mgmt_mode_work);
 
 	return 0;
 }
