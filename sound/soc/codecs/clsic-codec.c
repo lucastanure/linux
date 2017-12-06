@@ -1907,7 +1907,7 @@ static int clsic_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to initialise DSP2.\n");
 
 	for (i = 0 ; i < CLSIC_N_FLL ; ++i)
-		tacna_init_fll(clsic_codec->core.tacna,
+		tacna_init_fll(&clsic_codec->core,
 			       i + 1,
 			       TACNA_FLL1_CONTROL1 + i * 0x100,
 			       CLSIC_IRQ2_STS6,
