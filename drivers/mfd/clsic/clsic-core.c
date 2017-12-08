@@ -645,7 +645,8 @@ int clsic_register_service_handler(struct clsic *clsic,
 				  tmp_handler->service_instance,
 				  service_type, tmp_handler->service_type);
 
-			tmp_handler->stop(clsic, tmp_handler);
+			if (tmp_handler->stop != NULL)
+				tmp_handler->stop(clsic, tmp_handler);
 
 			tmp_handler->service_instance = service_instance;
 			tmp_handler->service_type = service_type;
