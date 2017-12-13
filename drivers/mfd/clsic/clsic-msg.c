@@ -1875,15 +1875,32 @@ int clsic_send_msg_sync(struct clsic *clsic,
 		ret = -ETIMEDOUT;
 	} else if (CLSIC_GET_MSGSTATE(msg) != CLSIC_MSG_SUCCESS) {
 		/*
-		 * Not a success - this indicates that there was an issue with
-		 * sending the message through the messaging layer to the
-		 * device.
-		 *
-		 * There is a case to be made that this should return -EIO
+		 * General catch of failures - this indicates that there was an
+		 * issue with sending the message through the messaging layer
+		 * to the device.
 		 */
+		clsic_err(clsic,
+			  "%p message not success ret %d, state %d (%s)\n",
+			  msg, ret, msg->state,
+			  clsic_message_state_to_string(msg->state));
+
 		clsic_dump_message(clsic, msg,
 				   "clsic_send_message_core() failed");
-		ret = -EINTR;
+
+		/*
+		 * check whether this message was rejected as invalid or failed
+		 * for a different reason
+		 */
+		if (clsic_is_inval(&msg->response,
+				   clsic_get_srv_inst(msg->fsm.cmd.hdr.sbc),
+				   msg->fsm.cmd.hdr.msgid))
+			/* Device indicated invalid message */
+			ret = -EINVAL;
+		else if (CLSIC_GET_MSGSTATE(msg) == CLSIC_MSG_INTERRUPTED)
+			/* Message cancelled by a device event */
+			ret = -EINTR;
+		else
+			ret = -EIO;
 	} else {
 		/*
 		 * Succeeded - this means that the message passed through the

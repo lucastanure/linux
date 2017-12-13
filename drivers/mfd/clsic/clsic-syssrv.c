@@ -249,8 +249,13 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 			 * in firmware update mode to attempt recovery
 			 */
 			clsic_fwupdate_reset(clsic);
+		} else if (ret == -EINVAL) {
+			/*
+			 *  An invalid command response would occur if the
+			 *  device was in the bootloader
+			 */
 		}
-		return -EIO;
+		return ret;
 	}
 
 	clsic_dbg(clsic, "Sysinfo ret 0x%x 0x%x 0x%x\n",
