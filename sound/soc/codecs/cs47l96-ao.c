@@ -396,6 +396,8 @@ static const struct snd_soc_dapm_widget cs47l96_ao_dapm_widgets[] = {
 SND_SOC_DAPM_SUPPLY("SYSCLKAO", TACNA_SYSTEM_CLOCK1AO, TACNA_SYSCLKAO_EN_SHIFT,
 		    0, NULL, 0),
 
+TACNA_DSP_FREQ_WIDGET("DSP1AO", 0),
+
 SND_SOC_DAPM_INPUT("IN5AO_PDMCLK"),
 SND_SOC_DAPM_INPUT("IN5AO_PDMDATA"),
 
@@ -454,7 +456,7 @@ SND_SOC_DAPM_AIF_IN("ASP1AORX3", NULL, 0, TACNA_ASP1AO_ENABLES1,
 SND_SOC_DAPM_AIF_IN("ASP1AORX4", NULL, 0, TACNA_ASP1AO_ENABLES1,
 		    TACNA_ASP1AO_RX4_EN_SHIFT, 0),
 
-WM_HALO("DSP1AO", 0, tacna_dsp_power_ev),
+WM_HALO("DSP1AO", 0, wm_halo_early_event),
 
 /* end of ordered widget list */
 
@@ -516,6 +518,7 @@ SND_SOC_DAPM_SWITCH("DSP1AO Trigger Output", SND_SOC_NOPM, 0, 0,
 static const struct snd_soc_dapm_route cs47l96_ao_dapm_routes[] = {
 	/* Internal clock domains */
 	{ "DSP1AO", NULL, "SYSCLKAO" },
+	{ "DSP1AO", NULL, "DSP1AOFREQ" },
 
 	{ "IN5AO_PDMCLK", NULL, "SYSCLKAO" },
 	{ "IN5AO_PDMDATA", NULL, "SYSCLKAO" },
