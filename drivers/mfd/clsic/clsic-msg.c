@@ -1351,6 +1351,11 @@ static void clsic_handle_message_acknowledgment(struct clsic *clsic,
 		 * the messaging layer so it may send another command message.
 		 */
 		clsic_set_msgstate(clsic->current_msg, CLSIC_MSG_ACK);
+
+		/* if this is an async message then wake it */
+		if (clsic->current_msg->cb != NULL)
+			complete(&clsic->current_msg->completion);
+
 		clsic->current_msg = NULL;
 	} else if (clsic->current_msg != NULL) {
 		/*
@@ -1924,15 +1929,36 @@ int clsic_send_msg_async(struct clsic *clsic,
 	msg->bulk_rxbuf_maxsize = rxsize;
 
 	ret = clsic_send_message_core(clsic, msg);
-
 	/*
 	 * If the message sending encountered an error it may need to be
 	 * released in this function - if the message state is INITIAL then the
 	 * callback will not have been made, if it isn't then the callback
 	 * function is responsible releasing it
 	 */
-	if ((ret != 0) && (msg->state == CLSIC_MSG_INITIAL))
+	if ((ret != 0) && (msg->state == CLSIC_MSG_INITIAL)) {
 		clsic_release_msg(clsic, msg);
+		return ret;
+	}
+
+	/*
+	 * Async messages now wait for the message to either receive an ACK or
+	 * a response.
+	 *
+	 * This is a potentially interruptible operation, if this context is
+	 * signalled then we attempt to remove the message from the system if
+	 * possible or wait until it is dealt with.
+	 *
+	 * If it successfully interrupted the message then release it,
+	 * otherwise it will be handled in the callback function.
+	 */
+	ret = wait_for_completion_interruptible(&msg->completion);
+	if (ret == -ERESTARTSYS) {
+		clsic_err(clsic, "%p interrupted %d\n", msg, msg->state);
+		ret = clsic_send_message_interrupted(clsic, msg);
+		if ((ret == -EINTR) && (msg->state == CLSIC_MSG_INTERRUPTED))
+			clsic_release_msg(clsic, msg);
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clsic_send_msg_async);
