@@ -41,8 +41,10 @@
 #define VOX_ASR_MIN_FRAGMENTS	4
 #define VOX_ASR_MAX_FRAGMENTS	256
 
+#define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
-#define VOX_NUM_NEW_KCONTROLS	4
+
+#define VOX_NUM_NEW_KCONTROLS	6
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -90,12 +92,15 @@ struct clsic_vox {
 	/* Used for showing result of a top level control mode change. */
 
 	uint8_t phrase_id;
+	uint8_t user_id;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
 	struct soc_mixer_control phrase_id_mixer_ctrl;
+	struct soc_mixer_control user_id_mixer_ctrl;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
+	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
 
 	struct work_struct mgmt_mode_work;
 	struct snd_kcontrol *mgmt_mode_kctrl;
@@ -827,6 +832,110 @@ void vox_set_idle_and_neutral(struct clsic_vox *vox)
 		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
 }
 
+static int vox_update_phrase_status(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret, phr;
+
+	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
+		msg_cmd.cmd_is_phrase_installed.phraseid = phr;
+
+		ret = clsic_send_msg_sync(
+				     vox->clsic,
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+		if (ret) {
+			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+			return -EIO;
+		}
+
+		switch (msg_rsp.rsp_is_phrase_installed.hdr.err) {
+		case CLSIC_ERR_NONE:
+			vox->phrase_installed[phr] = true;
+			return 0;
+		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+			vox->phrase_installed[phr] = false;
+			return 0;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVAL_PHRASEID:
+			clsic_err(vox->clsic, "failure %s.\n",
+				  clsic_error_string(
+				     msg_rsp.rsp_is_phrase_installed.hdr.err));
+			return -EIO;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d.\n",
+				  msg_rsp.rsp_is_phrase_installed.hdr.err);
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
+				  uint8_t end_phr)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+	int phr, usr;
+
+	for (phr = start_phr; phr <= end_phr; phr++) {
+		for (usr = CLSIC_VOX_USER1; usr <= CLSIC_VOX_USER3; usr++) {
+			clsic_init_message(
+				      (union t_clsic_generic_message *)&msg_cmd,
+				      vox->service->service_instance,
+				      CLSIC_VOX_MSG_CR_IS_USER_INSTALLED);
+			msg_cmd.cmd_is_user_installed.userid = usr;
+			msg_cmd.cmd_is_user_installed.phraseid = phr;
+
+			ret = clsic_send_msg_sync(
+				      vox->clsic,
+				      (union t_clsic_generic_message *)&msg_cmd,
+				      (union t_clsic_generic_message *)&msg_rsp,
+				      CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				      CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+			if (ret) {
+				clsic_err(vox->clsic,
+					  "clsic_send_msg_sync %d.\n", ret);
+				return -EIO;
+			}
+
+			switch (msg_rsp.rsp_is_user_installed.hdr.err) {
+			case CLSIC_ERR_NONE:
+			    vox->user_installed[(phr * VOX_MAX_USERS) + usr] =
+									true;
+				break;
+			case CLSIC_ERR_USER_NOT_INSTALLED:
+			    vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
+						+ vox->user_id] = false;
+				break;
+			case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+			case CLSIC_ERR_INVAL_USERID:
+			case CLSIC_ERR_INVAL_PHRASEID:
+				clsic_err(vox->clsic, "failure %s.\n",
+					  clsic_error_string(
+				      msg_rsp.rsp_is_user_installed.hdr.err));
+				return -EIO;
+			default:
+				clsic_err(vox->clsic,
+					  "unexpected CLSIC error code %d.\n",
+					 msg_rsp.rsp_is_user_installed.hdr.err);
+				return -EIO;
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int vox_install_phrase(struct clsic_vox *vox)
 {
 	const struct firmware *fw;
@@ -837,7 +946,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
 		clsic_err(vox->clsic, "%d.\n", ret);
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
 
@@ -848,7 +957,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "request_firmware failed for %s.\n",
 			  phrase_files[vox->phrase_id].file);
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
 
@@ -858,7 +967,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 			  CLSIC_BPB_SIZE_ALIGNMENT,
 			  phrase_files[vox->phrase_id].file, fw->size);
 		release_firmware(fw);
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
 
@@ -883,10 +992,15 @@ static int vox_install_phrase(struct clsic_vox *vox)
 
 	switch (msg_rsp.rsp_install_phrase.hdr.err) {
 	case CLSIC_ERR_NONE:
+		/* Get updated information on enrolled users. */
+		ret = vox_update_user_status(vox, vox->phrase_id,
+					     vox->phrase_id);
+		if (ret)
+			goto exit;
 		vox->phrase_installed[vox->phrase_id] = true;
 		clsic_info(vox->clsic, "successfully installed phrase %d.\n",
 			   vox->phrase_id);
-		vox->error_info = VOX_ERROR_NONE;
+		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case CLSIC_ERR_BPB_SZ_TOO_SMALL:
 	case CLSIC_ERR_BPB_SZ_UNALIGNED:
@@ -910,13 +1024,13 @@ static int vox_install_phrase(struct clsic_vox *vox)
 	case CLSIC_ERR_VOICEID:
 		clsic_err(vox->clsic, "phrase installation error %s.\n",
 			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		break;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			 msg_rsp.rsp_install_phrase.hdr.err,
 			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 	}
 
 exit:
@@ -929,12 +1043,12 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
-	int ret;
+	int ret, usr;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
 		clsic_err(vox->clsic, "%d.\n", ret);
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
 
@@ -953,7 +1067,7 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		goto exit;
 	}
@@ -963,22 +1077,29 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 		clsic_info(vox->clsic, "successfully uninstalled phrase %d.\n",
 			   vox->phrase_id);
+		/*
+		 * Present no enrolled users for this phrase to reflect what
+		 * CLSIC reports when there is no phrase installed.
+		 */
+		for (usr = CLSIC_VOX_USER1; usr <= CLSIC_VOX_USER3; usr++)
+			vox->user_installed[
+				(vox->phrase_id * VOX_MAX_USERS) + usr] = false;
 		vox->phrase_installed[vox->phrase_id] = false;
-		vox->error_info = VOX_ERROR_NONE;
+		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 	case CLSIC_ERR_INVAL_PHRASEID:
 	case CLSIC_ERR_VOICEID:
 		clsic_err(vox->clsic, "%s.\n",
 			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_remove_phrase.hdr.err,
 			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_FAILURE;
+		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
 	}
@@ -1016,53 +1137,6 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
 			  vox->mgmt_mode);
 	}
-}
-
-static int vox_update_phrase_status(struct clsic_vox *vox)
-{
-	union clsic_vox_msg msg_cmd;
-	union clsic_vox_msg msg_rsp;
-	int ret, phr;
-
-	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
-		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
-		msg_cmd.cmd_is_phrase_installed.phraseid = phr;
-
-		ret = clsic_send_msg_sync(
-				     vox->clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-		if (ret) {
-			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-			return -EIO;
-		}
-
-		switch (msg_rsp.rsp_is_phrase_installed.hdr.err) {
-		case CLSIC_ERR_NONE:
-			vox->phrase_installed[phr] = true;
-			break;
-		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-			vox->phrase_installed[phr] = false;
-			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVAL_PHRASEID:
-			clsic_err(vox->clsic, "failure %s.\n",
-				  clsic_error_string(
-				     msg_rsp.rsp_is_phrase_installed.hdr.err));
-			return -EIO;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_is_phrase_installed.hdr.err);
-			return -EIO;
-		}
-	}
-
-	return 0;
 }
 
 static int vox_ctrl_error_info_get(struct snd_kcontrol *kcontrol,
@@ -1121,6 +1195,36 @@ static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_user_id_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, user_id_mixer_ctrl);
+
+	ucontrol->value.integer.value[0] = vox->user_id;
+
+	return 0;
+}
+
+static int vox_ctrl_user_id_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, user_id_mixer_ctrl);
+
+	if ((ucontrol->value.integer.value[0] < CLSIC_VOX_USER1) ||
+	    (ucontrol->value.integer.value[0] > CLSIC_VOX_USER3))
+		return -EINVAL;
+
+	vox->user_id = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
 static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -1128,6 +1232,17 @@ static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.integer.value[0] =
 					  vox->phrase_installed[vox->phrase_id];
+
+	return 0;
+}
+
+static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
+
+	ucontrol->value.integer.value[0] =
+	   vox->user_installed[(vox->phrase_id * VOX_MAX_USERS) + vox->user_id];
 
 	return 0;
 }
@@ -1319,13 +1434,44 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	if (ret != 0)
 		return ret;
 
-	kcontrol_new[3].name = "Vox Phrase Installed";
-	kcontrol_new[3].info = snd_soc_info_bool_ext;
-	kcontrol_new[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	kcontrol_new[3].get = vox_ctrl_phrase_installed_get;
-	kcontrol_new[3].private_value = (unsigned long)vox;
-	kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				 SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+	vox->kcontrol_new[3].name = "Vox Phrase Installed";
+	vox->kcontrol_new[3].info = snd_soc_info_bool_ext;
+	vox->kcontrol_new[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[3].get = vox_ctrl_phrase_installed_get;
+	vox->kcontrol_new[3].private_value = (unsigned long)vox;
+	vox->kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->user_id = CLSIC_VOX_USER1;
+
+	memset(&vox->user_id_mixer_ctrl, 0, sizeof(vox->user_id_mixer_ctrl));
+	vox->user_id_mixer_ctrl.min = CLSIC_VOX_USER1;
+	vox->user_id_mixer_ctrl.max = CLSIC_VOX_USER3;
+	vox->user_id_mixer_ctrl.platform_max = CLSIC_VOX_USER3;
+	vox->kcontrol_new[4].name = "Vox User ID";
+	vox->kcontrol_new[4].info = snd_soc_info_volsw;
+	vox->kcontrol_new[4].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[4].get = vox_ctrl_user_id_get;
+	vox->kcontrol_new[4].put = vox_ctrl_user_id_put;
+	vox->kcontrol_new[4].private_value =
+		(unsigned long)(&(vox->user_id_mixer_ctrl));
+	vox->kcontrol_new[4].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	ret = vox_update_user_status(vox, CLSIC_VOX_PHRASE_VDT1,
+				     CLSIC_VOX_PHRASE_TI);
+	if (ret != 0)
+		return ret;
+
+	vox->kcontrol_new[5].name = "Vox User Installed";
+	vox->kcontrol_new[5].info = snd_soc_info_bool_ext;
+	vox->kcontrol_new[5].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[5].get = vox_ctrl_user_installed_get;
+	vox->kcontrol_new[5].private_value = (unsigned long)vox;
+	vox->kcontrol_new[5].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
