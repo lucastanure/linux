@@ -1110,6 +1110,72 @@ exit:
 	return ret;
 }
 
+static int vox_remove_user(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret) {
+		clsic_err(vox->clsic, "%d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		goto exit;
+	}
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_REMOVE_USER);
+	msg_cmd.cmd_remove_user.phraseid = vox->phrase_id;
+	msg_cmd.cmd_remove_user.userid = vox->user_id;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d user %d phrase %d.\n", ret, vox->user_id,
+		   vox->phrase_id);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
+	switch (msg_rsp.rsp_remove_user.hdr.err) {
+	case CLSIC_ERR_NONE:
+	case CLSIC_ERR_USER_NOT_INSTALLED:
+		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
+				    + vox->user_id] = false;
+		vox->error_info = VOX_ERROR_SUCCESS;
+		break;
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_INVAL_USERID:
+	case CLSIC_ERR_INVAL_PHRASEID:
+	case CLSIC_ERR_VOICEID:
+		clsic_err(vox->clsic, "%s.\n",
+			  clsic_error_string(msg_rsp.rsp_remove_user.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_remove_user.hdr.err,
+			  clsic_error_string(msg_rsp.rsp_remove_user.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	}
+
+exit:
+	vox_set_idle_and_neutral(vox);
+
+	return ret;
+}
+
 /*
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
@@ -1132,6 +1198,11 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		if (ret)
 			clsic_err(vox->clsic, "vox_uninstall_phrase ret %d.\n",
 				  ret);
+		break;
+	case VOX_MGMT_MODE_REMOVING_USER:
+		ret = vox_remove_user(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_remove_user ret %d.\n", ret);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
@@ -1296,10 +1367,22 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			ret = -EBUSY;
 		}
 		break;
+	case VOX_MGMT_MODE_REMOVE_USER:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_REMOVING_USER;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
 	case VOX_MGMT_MODE_NEUTRAL:
 		mutex_lock(&vox->mgmt_mode_lock);
 		if ((vox->mgmt_mode != VOX_MGMT_MODE_INSTALLING_PHRASE) &&
-		    (vox->mgmt_mode != VOX_MGMT_MODE_UNINSTALLING_PHRASE)) {
+		    (vox->mgmt_mode != VOX_MGMT_MODE_UNINSTALLING_PHRASE) &&
+		    (vox->mgmt_mode != VOX_MGMT_MODE_REMOVING_USER)) {
 			ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 			if (ret) {
 				mutex_unlock(&vox->mgmt_mode_lock);
