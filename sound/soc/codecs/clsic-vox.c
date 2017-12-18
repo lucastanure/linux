@@ -44,9 +44,14 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	6
+#define VOX_NUM_NEW_KCONTROLS	8
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
+
+#define VOX_DEFAULT_REP_DURATION_TIMEOUT	10000
+#define VOX_MAX_REP_DURATION_TIMEOUT		0xFFFF
+#define VOX_DEFAULT_NUM_REPS		3
+#define VOX_MAX_NUM_REPS		5
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -93,11 +98,15 @@ struct clsic_vox {
 
 	uint8_t phrase_id;
 	uint8_t user_id;
+	uint16_t duration_or_timeout;
+	uint8_t number_of_reps;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
+	struct soc_mixer_control duration_or_timeout_mixer_ctrl;
+	struct soc_mixer_control reps_mixer_ctrl;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
@@ -128,9 +137,9 @@ static const struct {
 #define VOX_MGMT_MODE_UNINSTALLING_PHRASE	4
 #define VOX_MGMT_MODE_REMOVE_USER		5
 #define VOX_MGMT_MODE_REMOVING_USER		6
-#define VOX_MGMT_MODE_START_USER_ENROLMENT	7
-#define VOX_MGMT_MODE_STARTING_USER_ENROLMENT	8
-#define VOX_MGMT_MODE_ENROL_STARTED		9
+#define VOX_MGMT_MODE_START_ENROL		7
+#define VOX_MGMT_MODE_STARTING_ENROL		8
+#define VOX_MGMT_MODE_STARTED_ENROL		9
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -140,9 +149,9 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_UNINSTALLING_PHRASE]	= "Uninstalling Phrase",
 	[VOX_MGMT_MODE_REMOVE_USER]		= "Remove User",
 	[VOX_MGMT_MODE_REMOVING_USER]		= "Removing User",
-	[VOX_MGMT_MODE_START_USER_ENROLMENT]	= "Start User Enrolment",
-	[VOX_MGMT_MODE_STARTING_USER_ENROLMENT]	= "Starting User Enrolment",
-	[VOX_MGMT_MODE_ENROL_STARTED]		= "Started User Enrolment",
+	[VOX_MGMT_MODE_START_ENROL]		= "Start User Enrolment",
+	[VOX_MGMT_MODE_STARTING_ENROL]		= "Starting User Enrolment",
+	[VOX_MGMT_MODE_STARTED_ENROL]		= "Started User Enrolment",
 };
 
 #define VOX_NUM_ERRORS			10
@@ -162,7 +171,7 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
 	[VOX_ERROR_LIBRARY]		= "Library",
 	[VOX_ERROR_PROTOCOL]		= "Protocol",
-	[VOX_ERROR_TIMEOUT]		= "Timeout",
+	[VOX_ERROR_TIMEOUT]		= "Timed Out",
 	[VOX_ERROR_BAD_BPB]		= "Bad BPB File",
 	[VOX_ERROR_DISABLE_BARGE_IN]	= "Barge-in Must Be Disabled",
 	[VOX_ERROR_MORE_SPEECH_NEEDED]	= "More Speech Needed",
@@ -818,13 +827,15 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	}
 }
 
-void vox_set_idle_and_neutral(struct clsic_vox *vox)
+void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
+			   int mgmt_mode)
 {
-	vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	if (set_clsic_to_idle)
+		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 
 	mutex_lock(&vox->mgmt_mode_lock);
 
-	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+	vox->mgmt_mode = mgmt_mode;
 
 	mutex_unlock(&vox->mgmt_mode_lock);
 
@@ -858,10 +869,10 @@ static int vox_update_phrase_status(struct clsic_vox *vox)
 		switch (msg_rsp.rsp_is_phrase_installed.hdr.err) {
 		case CLSIC_ERR_NONE:
 			vox->phrase_installed[phr] = true;
-			return 0;
+			break;
 		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 			vox->phrase_installed[phr] = false;
-			return 0;
+			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVAL_PHRASEID:
 			clsic_err(vox->clsic, "failure %s.\n",
@@ -964,8 +975,8 @@ static int vox_install_phrase(struct clsic_vox *vox)
 	if (fw->size % CLSIC_BPB_SIZE_ALIGNMENT) {
 		clsic_err(vox->clsic,
 			  "firmware file %s size %d is not a multiple of %d.\n",
-			  CLSIC_BPB_SIZE_ALIGNMENT,
-			  phrase_files[vox->phrase_id].file, fw->size);
+			  phrase_files[vox->phrase_id].file, fw->size,
+			  CLSIC_BPB_SIZE_ALIGNMENT);
 		release_firmware(fw);
 		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
@@ -1034,7 +1045,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_neutral(vox);
+	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
 
 	return ret;
 }
@@ -1105,7 +1116,7 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_neutral(vox);
+	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
 
 	return ret;
 }
@@ -1171,7 +1182,85 @@ static int vox_remove_user(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_neutral(vox);
+	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+
+	return ret;
+}
+
+static int vox_start_enrol_user(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_ENROL);
+	if (ret) {
+		clsic_err(vox->clsic, "%d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		goto exit;
+	}
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN);
+
+	msg_cmd.cmd_install_user_begin.phrase[0].phraseid = vox->phrase_id;
+	msg_cmd.cmd_install_user_begin.userid = vox->user_id;
+	/* timeout is in a union with duration in cmd_install_user_begin */
+	msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
+						vox->duration_or_timeout_in_ms;
+	msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
+							vox->number_of_reps;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic,
+		   "ret %d user %d phrase %d duration/timeout %dms number_of_reps %d.\n",
+		   ret, vox->user_id, vox->phrase_id, vox->duration_or_timeout,
+		   vox->number_of_reps);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
+	switch (msg_rsp.rsp_install_user_begin.hdr.err) {
+	case CLSIC_ERR_NONE:
+		vox->error_info = VOX_ERROR_SUCCESS;
+		break;
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_ALREADY_INSTALLING_USER:
+	case CLSIC_ERR_INVAL_USERID:
+	case CLSIC_ERR_INVAL_PHRASEID:
+	case CLSIC_ERR_INVAL_REP_COUNT:
+	case CLSIC_ERR_VOICEID:
+	case CLSIC_ERR_INVALID_ENROL_DURATION:
+	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+		/* Could install the requisite phrase and try again? */
+	case CLSIC_ERR_USER_ALREADY_INSTALLED:
+		/* Could remove the user and try again? */
+		clsic_err(vox->clsic, "%s.\n",
+		    clsic_error_string(msg_rsp.rsp_install_user_begin.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_install_user_begin.hdr.err,
+		    clsic_error_string(msg_rsp.rsp_install_user_begin.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	}
+
+exit:
+	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
 
 	return ret;
 }
@@ -1203,6 +1292,12 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		ret = vox_remove_user(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_remove_user ret %d.\n", ret);
+		break;
+	case VOX_MGMT_MODE_STARTING_ENROL:
+		ret = vox_start_enrol_user(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_start_enrol_user ret %d.\n",
+				  ret);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
@@ -1296,6 +1391,68 @@ static int vox_ctrl_user_id_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_duration_or_timeout_get(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox,
+			     duration_or_timeout_mixer_ctrl);
+
+	ucontrol->value.integer.value[0] = vox->duration_or_timeout;
+
+	return 0;
+}
+
+static int vox_ctrl_duration_or_timeout_put(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox,
+			     duration_or_timeout_mixer_ctrl);
+
+	if ((ucontrol->value.integer.value[0] < 0) ||
+	    (ucontrol->value.integer.value[0] > VOX_MAX_REP_DURATION_TIMEOUT))
+		return -EINVAL;
+
+	vox->duration_or_timeout = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int vox_ctrl_reps_get(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
+
+	ucontrol->value.integer.value[0] = vox->number_of_reps;
+
+	return 0;
+}
+
+static int vox_ctrl_reps_put(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
+
+	if ((ucontrol->value.integer.value[0] < 0) ||
+	    (ucontrol->value.integer.value[0] > VOX_MAX_REP_DURATION_TIMEOUT))
+		return -EINVAL;
+
+	vox->number_of_reps = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
 static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -1371,6 +1528,17 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		mutex_lock(&vox->mgmt_mode_lock);
 		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
 			vox->mgmt_mode = VOX_MGMT_MODE_REMOVING_USER;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_MGMT_MODE_START_ENROL:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_STARTING_ENROL;
 			mutex_unlock(&vox->mgmt_mode_lock);
 			schedule_work(&vox->mgmt_mode_work);
 		} else {
@@ -1553,6 +1721,42 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[5].get = vox_ctrl_user_installed_get;
 	vox->kcontrol_new[5].private_value = (unsigned long)vox;
 	vox->kcontrol_new[5].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->duration_or_timeout = VOX_DEFAULT_REP_DURATION_TIMEOUT;
+
+	memset(&vox->duration_or_timeout_mixer_ctrl, 0,
+	       sizeof(vox->duration_or_timeout_mixer_ctrl));
+	vox->duration_or_timeout_mixer_ctrl.min = 0;
+	vox->duration_or_timeout_mixer_ctrl.max = VOX_MAX_REP_DURATION_TIMEOUT;
+	vox->duration_or_timeout_mixer_ctrl.platform_max =
+						VOX_MAX_REP_DURATION_TIMEOUT;
+	vox->kcontrol_new[6].name = "Vox Duration or Timeout in ms";
+	vox->kcontrol_new[6].info = snd_soc_info_volsw;
+	vox->kcontrol_new[6].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[6].get = vox_ctrl_duration_or_timeout_get;
+	vox->kcontrol_new[6].put = vox_ctrl_duration_or_timeout_put;
+	vox->kcontrol_new[6].private_value =
+		(unsigned long)(&(vox->duration_or_timeout_mixer_ctrl));
+	vox->kcontrol_new[6].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->number_of_reps = VOX_DEFAULT_NUM_REPS;
+
+	memset(&vox->reps_mixer_ctrl, 0, sizeof(vox->reps_mixer_ctrl));
+	vox->reps_mixer_ctrl.min = 1;
+	vox->reps_mixer_ctrl.max = VOX_MAX_NUM_REPS;
+	vox->reps_mixer_ctrl.platform_max = VOX_MAX_NUM_REPS;
+	vox->kcontrol_new[7].name = "Vox Number of Enrolment Repetitions";
+	vox->kcontrol_new[7].info = snd_soc_info_volsw;
+	vox->kcontrol_new[7].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[7].get = vox_ctrl_reps_get;
+	vox->kcontrol_new[7].put = vox_ctrl_reps_put;
+	vox->kcontrol_new[7].private_value =
+		(unsigned long)(&(vox->reps_mixer_ctrl));
+	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
