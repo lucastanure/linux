@@ -1715,7 +1715,7 @@ int tacna_dsp_rate_put(struct snd_kcontrol *kcontrol,
 }
 EXPORT_SYMBOL_GPL(tacna_dsp_rate_put);
 
-static const struct soc_enum tacna_dsp_rate_enum[] = {
+static const struct soc_enum tacna_dsp1_rx_rate_enum[] = {
 	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
 			      (0 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
 			      TACNA_DSP_RATE_CTL_DIR_RX,
@@ -1757,6 +1757,29 @@ static const struct soc_enum tacna_dsp_rate_enum[] = {
 			      TACNA_RATE_ENUM_SIZE,
 			      tacna_rate_text, tacna_rate_val),
 	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
+			      (8 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
+			      TACNA_DSP_RATE_CTL_DIR_RX,
+			      TACNA_RATE_ENUM_SIZE,
+			      tacna_rate_text, tacna_rate_val),
+	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
+			      (9 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
+			      TACNA_DSP_RATE_CTL_DIR_RX,
+			      TACNA_RATE_ENUM_SIZE,
+			      tacna_rate_text, tacna_rate_val),
+	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
+			      (10 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
+			      TACNA_DSP_RATE_CTL_DIR_RX,
+			      TACNA_RATE_ENUM_SIZE,
+			      tacna_rate_text, tacna_rate_val),
+	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
+			      (11 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
+			      TACNA_DSP_RATE_CTL_DIR_RX,
+			      TACNA_RATE_ENUM_SIZE,
+			      tacna_rate_text, tacna_rate_val),
+};
+
+static const struct soc_enum tacna_dsp1_tx_rate_enum[] = {
+	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 0,
 			      (0 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
 			      TACNA_DSP_RATE_CTL_DIR_TX,
 			      TACNA_RATE_ENUM_SIZE,
@@ -1796,6 +1819,9 @@ static const struct soc_enum tacna_dsp_rate_enum[] = {
 			      TACNA_DSP_RATE_CTL_DIR_TX,
 			      TACNA_RATE_ENUM_SIZE,
 			      tacna_rate_text, tacna_rate_val),
+};
+
+static const struct soc_enum tacna_dsp2_rx_rate_enum[] = {
 	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 1,
 			      (0 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
 			      TACNA_DSP_RATE_CTL_DIR_RX,
@@ -1836,6 +1862,9 @@ static const struct soc_enum tacna_dsp_rate_enum[] = {
 			      TACNA_DSP_RATE_CTL_DIR_RX,
 			      TACNA_RATE_ENUM_SIZE,
 			      tacna_rate_text, tacna_rate_val),
+};
+
+static const struct soc_enum tacna_dsp2_tx_rate_enum[] = {
 	SOC_VALUE_ENUM_SINGLE(SND_SOC_NOPM, 1,
 			      (0 << TACNA_DSP_RATE_CTL_NUM_SHIFT) |
 			      TACNA_DSP_RATE_CTL_DIR_TX,
@@ -1878,73 +1907,123 @@ static const struct soc_enum tacna_dsp_rate_enum[] = {
 			      tacna_rate_text, tacna_rate_val),
 };
 
-const struct snd_kcontrol_new tacna_dsp_rate_controls[] = {
-	SOC_ENUM_EXT("DSP1RX1 Rate", tacna_dsp_rate_enum[0],
+static const struct snd_kcontrol_new tacna_dsp1_rx_rate_controls[] = {
+	SOC_ENUM_EXT("DSP1RX1 Rate", tacna_dsp1_rx_rate_enum[0],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX2 Rate", tacna_dsp_rate_enum[1],
+	SOC_ENUM_EXT("DSP1RX2 Rate", tacna_dsp1_rx_rate_enum[1],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX3 Rate", tacna_dsp_rate_enum[2],
+	SOC_ENUM_EXT("DSP1RX3 Rate", tacna_dsp1_rx_rate_enum[2],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX4 Rate", tacna_dsp_rate_enum[3],
+	SOC_ENUM_EXT("DSP1RX4 Rate", tacna_dsp1_rx_rate_enum[3],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX5 Rate", tacna_dsp_rate_enum[4],
+	SOC_ENUM_EXT("DSP1RX5 Rate", tacna_dsp1_rx_rate_enum[4],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX6 Rate", tacna_dsp_rate_enum[5],
+	SOC_ENUM_EXT("DSP1RX6 Rate", tacna_dsp1_rx_rate_enum[5],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX7 Rate", tacna_dsp_rate_enum[6],
+	SOC_ENUM_EXT("DSP1RX7 Rate", tacna_dsp1_rx_rate_enum[6],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1RX8 Rate", tacna_dsp_rate_enum[7],
+	SOC_ENUM_EXT("DSP1RX8 Rate", tacna_dsp1_rx_rate_enum[7],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX1 Rate", tacna_dsp_rate_enum[8],
+	SOC_ENUM_EXT("DSP1RX9 Rate", tacna_dsp1_rx_rate_enum[8],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX2 Rate", tacna_dsp_rate_enum[9],
+	SOC_ENUM_EXT("DSP1RX10 Rate", tacna_dsp1_rx_rate_enum[9],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX3 Rate", tacna_dsp_rate_enum[10],
+	SOC_ENUM_EXT("DSP1RX11 Rate", tacna_dsp1_rx_rate_enum[10],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX4 Rate", tacna_dsp_rate_enum[11],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX5 Rate", tacna_dsp_rate_enum[12],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX6 Rate", tacna_dsp_rate_enum[13],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX7 Rate", tacna_dsp_rate_enum[14],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP1TX8 Rate", tacna_dsp_rate_enum[15],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX1 Rate", tacna_dsp_rate_enum[16],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX2 Rate", tacna_dsp_rate_enum[17],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX3 Rate", tacna_dsp_rate_enum[18],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX4 Rate", tacna_dsp_rate_enum[19],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX5 Rate", tacna_dsp_rate_enum[20],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX6 Rate", tacna_dsp_rate_enum[21],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX7 Rate", tacna_dsp_rate_enum[22],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2RX8 Rate", tacna_dsp_rate_enum[23],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX1 Rate", tacna_dsp_rate_enum[24],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX2 Rate", tacna_dsp_rate_enum[25],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX3 Rate", tacna_dsp_rate_enum[26],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX4 Rate", tacna_dsp_rate_enum[27],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX5 Rate", tacna_dsp_rate_enum[28],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX6 Rate", tacna_dsp_rate_enum[29],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX7 Rate", tacna_dsp_rate_enum[30],
-		     tacna_dsp_rate_get, tacna_dsp_rate_put),
-	SOC_ENUM_EXT("DSP2TX8 Rate", tacna_dsp_rate_enum[31],
+	SOC_ENUM_EXT("DSP1RX12 Rate", tacna_dsp1_rx_rate_enum[11],
 		     tacna_dsp_rate_get, tacna_dsp_rate_put),
 };
-EXPORT_SYMBOL_GPL(tacna_dsp_rate_controls);
+
+static const struct snd_kcontrol_new tacna_dsp1_tx_rate_controls[] = {
+	SOC_ENUM_EXT("DSP1TX1 Rate", tacna_dsp1_tx_rate_enum[0],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX2 Rate", tacna_dsp1_tx_rate_enum[1],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX3 Rate", tacna_dsp1_tx_rate_enum[2],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX4 Rate", tacna_dsp1_tx_rate_enum[3],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX5 Rate", tacna_dsp1_tx_rate_enum[4],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX6 Rate", tacna_dsp1_tx_rate_enum[5],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX7 Rate", tacna_dsp1_tx_rate_enum[6],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP1TX8 Rate", tacna_dsp1_tx_rate_enum[7],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+};
+
+static const struct snd_kcontrol_new tacna_dsp2_rx_rate_controls[] = {
+	SOC_ENUM_EXT("DSP2RX1 Rate", tacna_dsp2_rx_rate_enum[0],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX2 Rate", tacna_dsp2_rx_rate_enum[1],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX3 Rate", tacna_dsp2_rx_rate_enum[2],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX4 Rate", tacna_dsp2_rx_rate_enum[3],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX5 Rate", tacna_dsp2_rx_rate_enum[4],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX6 Rate", tacna_dsp2_rx_rate_enum[5],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX7 Rate", tacna_dsp2_rx_rate_enum[6],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2RX8 Rate", tacna_dsp2_rx_rate_enum[7],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+};
+
+static const struct snd_kcontrol_new tacna_dsp2_tx_rate_controls[] = {
+	SOC_ENUM_EXT("DSP2TX1 Rate", tacna_dsp2_tx_rate_enum[0],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX2 Rate", tacna_dsp2_tx_rate_enum[1],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX3 Rate", tacna_dsp2_tx_rate_enum[2],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX4 Rate", tacna_dsp2_tx_rate_enum[3],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX5 Rate", tacna_dsp2_tx_rate_enum[4],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX6 Rate", tacna_dsp2_tx_rate_enum[5],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX7 Rate", tacna_dsp2_tx_rate_enum[6],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+	SOC_ENUM_EXT("DSP2TX8 Rate", tacna_dsp2_tx_rate_enum[7],
+		     tacna_dsp_rate_get, tacna_dsp_rate_put),
+};
+
+static const struct snd_kcontrol_new *tacna_rx_rate_controls[] = {
+	tacna_dsp1_rx_rate_controls,
+	tacna_dsp2_rx_rate_controls
+};
+
+static const struct snd_kcontrol_new *tacna_tx_rate_controls[] = {
+	tacna_dsp1_tx_rate_controls,
+	tacna_dsp2_tx_rate_controls
+};
+
+int tacna_dsp_add_component_controls(struct snd_soc_component *comp,
+				     unsigned int dsp_n)
+{
+	struct tacna_priv *priv = snd_soc_component_get_drvdata(comp);
+	int i, ret;
+
+	for (i = 0; i < dsp_n; i++) {
+		ret = snd_soc_add_component_controls(comp,
+						   tacna_rx_rate_controls[i],
+						   priv->dsp[i].n_rx_channels);
+		if (ret)
+			return ret;
+
+		ret = snd_soc_add_component_controls(comp,
+						   tacna_tx_rate_controls[i],
+						   priv->dsp[i].n_tx_channels);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+};
+EXPORT_SYMBOL_GPL(tacna_dsp_add_component_controls);
 
 int tacna_dsp_memory_enable(struct tacna_priv *priv, unsigned int dsp_num)
 {
