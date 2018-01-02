@@ -128,7 +128,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_MGMT_MODES			12
+#define VOX_NUM_MGMT_MODES			14
 
 #define VOX_MGMT_MODE_NEUTRAL			0
 #define VOX_MGMT_MODE_INSTALL_PHRASE		1
@@ -142,6 +142,8 @@ static const struct {
 #define VOX_MGMT_MODE_STARTED_ENROL		9
 #define VOX_MGMT_MODE_PERFORM_ENROL_REP		10
 #define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
+#define VOX_MGMT_MODE_COMPLETE_ENROL		12
+#define VOX_MGMT_MODE_COMPLETING_ENROL		13
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -157,6 +159,8 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_PERFORM_ENROL_REP] = "Perform Enrolment Repetition",
 	[VOX_MGMT_MODE_PERFORMING_ENROL_REP] =
 					    "Performing Enrolment Repetition",
+	[VOX_MGMT_MODE_COMPLETE_ENROL]		= "Complete User Enrolment",
+	[VOX_MGMT_MODE_COMPLETING_ENROL]	= "Completing User Enrolment",
 };
 
 #define VOX_NUM_ERRORS			10
@@ -1332,6 +1336,62 @@ exit:
 	return ret;
 }
 
+static int vox_complete_enrolment(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_INSTALL_USER_COMPLETE);
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d", ret);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
+	switch (msg_rsp.rsp_install_user_complete.hdr.err) {
+	case CLSIC_ERR_NONE:
+		vox->error_info = VOX_ERROR_SUCCESS;
+		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
+				    + vox->user_id] = true;
+		break;
+	case CLSIC_ERR_REPS_NOT_ENOUGH_VALID:
+	case CLSIC_ERR_VOICEID:
+	case CLSIC_ERR_FLASH:
+		clsic_err(vox->clsic, "%s.\n",
+		    clsic_error_string(
+				msg_rsp.rsp_install_user_complete.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_install_user_complete.hdr.err,
+			  clsic_error_string(
+				msg_rsp.rsp_install_user_complete.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	}
+
+exit:
+	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+
+	return ret;
+}
+
 /*
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
@@ -1371,6 +1431,12 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		if (ret)
 			clsic_err(vox->clsic, "vox_perform_enrol_rep ret %d.\n",
 				  ret);
+		break;
+	case VOX_MGMT_MODE_COMPLETING_ENROL:
+		ret = vox_complete_enrolment(vox);
+		if (ret)
+			clsic_err(vox->clsic,
+				  "vox_complete_enrolment ret %d.\n", ret);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
@@ -1623,6 +1689,17 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		mutex_lock(&vox->mgmt_mode_lock);
 		if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
 			vox->mgmt_mode = VOX_MGMT_MODE_PERFORMING_ENROL_REP;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_MGMT_MODE_COMPLETE_ENROL:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_COMPLETING_ENROL;
 			mutex_unlock(&vox->mgmt_mode_lock);
 			schedule_work(&vox->mgmt_mode_work);
 		} else {
