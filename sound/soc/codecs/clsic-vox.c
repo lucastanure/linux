@@ -50,8 +50,8 @@
 
 #define VOX_DEFAULT_REP_DURATION_TIMEOUT	10000
 #define VOX_MAX_REP_DURATION_TIMEOUT		0xFFFF
-#define VOX_DEFAULT_NUM_REPS		3
-#define VOX_MAX_NUM_REPS		5
+#define VOX_DEFAULT_NUM_REPS			3
+#define VOX_MAX_NUM_REPS			5
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -128,7 +128,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_MGMT_MODES			10
+#define VOX_NUM_MGMT_MODES			12
 
 #define VOX_MGMT_MODE_NEUTRAL			0
 #define VOX_MGMT_MODE_INSTALL_PHRASE		1
@@ -140,6 +140,8 @@ static const struct {
 #define VOX_MGMT_MODE_START_ENROL		7
 #define VOX_MGMT_MODE_STARTING_ENROL		8
 #define VOX_MGMT_MODE_STARTED_ENROL		9
+#define VOX_MGMT_MODE_PERFORM_ENROL_REP		10
+#define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -152,6 +154,9 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_START_ENROL]		= "Start User Enrolment",
 	[VOX_MGMT_MODE_STARTING_ENROL]		= "Starting User Enrolment",
 	[VOX_MGMT_MODE_STARTED_ENROL]		= "Started User Enrolment",
+	[VOX_MGMT_MODE_PERFORM_ENROL_REP] = "Perform Enrolment Repetition",
+	[VOX_MGMT_MODE_PERFORMING_ENROL_REP] =
+					    "Performing Enrolment Repetition",
 };
 
 #define VOX_NUM_ERRORS			10
@@ -1208,7 +1213,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 	msg_cmd.cmd_install_user_begin.userid = vox->user_id;
 	/* timeout is in a union with duration in cmd_install_user_begin */
 	msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
-						vox->duration_or_timeout_in_ms;
+						vox->duration_or_timeout;
 	msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
 							vox->number_of_reps;
 
@@ -1265,6 +1270,68 @@ exit:
 	return ret;
 }
 
+static int vox_perform_enrol_rep(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	/* Start the rep. */
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_REP_START);
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d perform rep.\n", ret);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
+	switch (msg_rsp.rsp_rep_start.hdr.err) {
+	case CLSIC_ERR_NONE:
+	case CLSIC_ERR_ONGOING_REP:
+		vox->error_info = VOX_ERROR_SUCCESS;
+		break;
+	case CLSIC_ERR_REPS_COMPLETE:
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_NOT_INSTALLING_USER:
+	case CLSIC_ERR_INPUT_PATH:
+	case CLSIC_ERR_VOICEID:
+		clsic_err(vox->clsic, "%s.\n",
+			  clsic_error_string(msg_rsp.rsp_rep_start.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
+		clsic_err(vox->clsic, "barge in must be disabled.\n");
+		vox->error_info = VOX_ERROR_DISABLE_BARGE_IN;
+		ret = -EIO;
+		break;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_rep_start.hdr.err,
+			  clsic_error_string(msg_rsp.rsp_rep_start.hdr.err));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		break;
+	}
+
+	/* Wait for the notification. */
+
+exit:
+
+	return ret;
+}
+
 /*
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
@@ -1297,6 +1364,12 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		ret = vox_start_enrol_user(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_start_enrol_user ret %d.\n",
+				  ret);
+		break;
+	case VOX_MGMT_MODE_PERFORMING_ENROL_REP:
+		ret = vox_perform_enrol_rep(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_perform_enrol_rep ret %d.\n",
 				  ret);
 		break;
 	default:
@@ -1546,6 +1619,17 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			ret = -EBUSY;
 		}
 		break;
+	case VOX_MGMT_MODE_PERFORM_ENROL_REP:
+		mutex_lock(&vox->mgmt_mode_lock);
+		if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_PERFORMING_ENROL_REP;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
 	case VOX_MGMT_MODE_NEUTRAL:
 		mutex_lock(&vox->mgmt_mode_lock);
 		if ((vox->mgmt_mode != VOX_MGMT_MODE_INSTALLING_PHRASE) &&
@@ -1599,6 +1683,47 @@ static int vox_notification_handler(struct clsic *clsic,
 			vox->trig_det_cb(vox->clsic,
 				clsic_find_first_service(vox->clsic,
 							 CLSIC_SRV_TYPE_VOX));
+		ret = CLSIC_HANDLED;
+		break;
+	case CLSIC_VOX_MSG_N_REP_COMPLETE:
+		switch (msg_rsp->nty_rep_complete.err) {
+		case CLSIC_ERR_NONE:
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_REP_TRGR_TIMEOUT:
+			vox->error_info = VOX_ERROR_TIMEOUT;
+			break;
+		case CLSIC_ERR_REP_TOO_NOISY:
+			vox->error_info = VOX_ERROR_TOO_NOISY;
+			break;
+		case CLSIC_ERR_REP_NOT_ENOUGH_SPEECH:
+		case CLSIC_ERR_REP_NO_SPEECH:
+			vox->error_info = VOX_ERROR_MORE_SPEECH_NEEDED;
+			break;
+		case CLSIC_ERR_REP_SAT_TOO_HIGH:
+			vox->error_info = VOX_ERROR_TOO_LOUD;
+			break;
+		case CLSIC_ERR_INPUT_PATH:
+		case CLSIC_ERR_VOICEID:
+		case CLSIC_ERR_REP_UNEXPECTED_TRGR:
+		case CLSIC_ERR_SECURITY_FAIL:
+		case CLSIC_ERR_REP_FEATURE_OVERFLOW:
+			clsic_err(vox->clsic, "%s.\n",
+				  clsic_error_string(
+					msg_rsp->nty_rep_complete.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			break;
+		default:
+			clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp->nty_rep_complete.err,
+				  clsic_error_string(
+					msg_rsp->nty_rep_complete.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			break;
+		}
+
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+
 		ret = CLSIC_HANDLED;
 		break;
 	default:
