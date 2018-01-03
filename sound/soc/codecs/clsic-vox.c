@@ -44,14 +44,15 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	8
+#define VOX_NUM_NEW_KCONTROLS	9
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
-#define VOX_DEFAULT_REP_DURATION_TIMEOUT	10000
-#define VOX_MAX_REP_DURATION_TIMEOUT		0xFFFF
-#define VOX_DEFAULT_NUM_REPS			3
-#define VOX_MAX_NUM_REPS			5
+#define VOX_DEFAULT_DURATION		0
+#define VOX_DEFAULT_TIMEOUT		4000
+#define VOX_MAX_DURATION_TIMEOUT	0xFFFF
+#define VOX_DEFAULT_NUM_REPS		3
+#define VOX_MAX_NUM_REPS		5
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -98,14 +99,16 @@ struct clsic_vox {
 
 	uint8_t phrase_id;
 	uint8_t user_id;
-	uint16_t duration_or_timeout;
+	uint16_t duration;
+	uint16_t timeout;
 	uint8_t number_of_reps;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
-	struct soc_mixer_control duration_or_timeout_mixer_ctrl;
+	struct soc_mixer_control duration_mixer_ctrl;
+	struct soc_mixer_control timeout_mixer_ctrl;
 	struct soc_mixer_control reps_mixer_ctrl;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
@@ -1212,14 +1215,57 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN);
-
-	msg_cmd.cmd_install_user_begin.phrase[0].phraseid = vox->phrase_id;
 	msg_cmd.cmd_install_user_begin.userid = vox->user_id;
-	/* timeout is in a union with duration in cmd_install_user_begin */
-	msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
-						vox->duration_or_timeout;
-	msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
+
+	if ((vox->timeout > 0) && (vox->duration > 0)) {
+		/* Implied combined enrolment.
+		 *
+		 *	phrase[0] must be a trigger phrase.
+		 *	phrase[1] must be free speech (TI).
+		 *	Number of reps must be same for both.
+		 *	Trigger phrase will have a rep timeout.
+		 *	Free speech will have a rep duration (6 second maximum).
+		 */
+		msg_cmd.cmd_install_user_begin.userid |=
+						CLSIC_VOX_USER_FLAG_COMBINED;
+
+		msg_cmd.cmd_install_user_begin.phrase[0].phraseid =
+								vox->phrase_id;
+		msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
+								vox->timeout;
+		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
 							vox->number_of_reps;
+
+		msg_cmd.cmd_install_user_begin.phrase[1].phraseid =
+							CLSIC_VOX_PHRASE_TI;
+		msg_cmd.cmd_install_user_begin.phrase[1].duration_ms =
+								vox->duration;
+		msg_cmd.cmd_install_user_begin.phrase[1].rep_count =
+							vox->number_of_reps;
+	} else {
+		if (vox->phrase_id == CLSIC_VOX_PHRASE_VDT1)
+			msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
+								vox->timeout;
+		else if (vox->phrase_id == CLSIC_VOX_PHRASE_TI)
+			msg_cmd.cmd_install_user_begin.phrase[0].duration_ms =
+								vox->duration;
+		else {
+			clsic_err(vox->clsic, "unsupported phrase ID %d.\n",
+				  vox->phrase_id);
+			vox->error_info = VOX_ERROR_LIBRARY;
+			goto exit;
+		}
+
+		msg_cmd.cmd_install_user_begin.phrase[0].phraseid =
+								vox->phrase_id;
+		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
+							vox->number_of_reps;
+	}
+
+	/*
+	 * TODO: more complicated scenario using the
+	 * CLSIC_VOX_PHRASE_FLAG_DISCARD flag.
+	 */
 
 	ret = clsic_send_msg_sync(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
@@ -1228,9 +1274,9 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	clsic_info(vox->clsic,
-		   "ret %d user %d phrase %d duration/timeout %dms number_of_reps %d.\n",
-		   ret, vox->user_id, vox->phrase_id, vox->duration_or_timeout,
-		   vox->number_of_reps);
+		   "ret %d user %d phrase %d duration %dms timeout %dms number_of_reps %d.\n",
+		   ret, vox->user_id, vox->phrase_id, vox->duration,
+		   vox->timeout, vox->number_of_reps);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1366,6 +1412,11 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 		vox->error_info = VOX_ERROR_SUCCESS;
 		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
 				    + vox->user_id] = true;
+		if ((vox->timeout > 0) && (vox->duration > 0))
+			/* Implied combined enrolment. */
+			vox->user_installed[
+					(CLSIC_VOX_PHRASE_TI * VOX_MAX_USERS)
+					+ vox->user_id] = true;
 		break;
 	case CLSIC_ERR_REPS_NOT_ENOUGH_VALID:
 	case CLSIC_ERR_VOICEID:
@@ -1530,34 +1581,62 @@ static int vox_ctrl_user_id_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int vox_ctrl_duration_or_timeout_get(struct snd_kcontrol *kcontrol,
-					    struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_duration_get(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox,
-			     duration_or_timeout_mixer_ctrl);
+		container_of(mc, struct clsic_vox, duration_mixer_ctrl);
 
-	ucontrol->value.integer.value[0] = vox->duration_or_timeout;
+	ucontrol->value.integer.value[0] = vox->duration;
 
 	return 0;
 }
 
-static int vox_ctrl_duration_or_timeout_put(struct snd_kcontrol *kcontrol,
-					    struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_duration_put(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox,
-			     duration_or_timeout_mixer_ctrl);
+		container_of(mc, struct clsic_vox, duration_mixer_ctrl);
 
 	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] > VOX_MAX_REP_DURATION_TIMEOUT))
+	    (ucontrol->value.integer.value[0] > VOX_MAX_DURATION_TIMEOUT))
 		return -EINVAL;
 
-	vox->duration_or_timeout = ucontrol->value.integer.value[0];
+	vox->duration = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int vox_ctrl_timeout_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, timeout_mixer_ctrl);
+
+	ucontrol->value.integer.value[0] = vox->timeout;
+
+	return 0;
+}
+
+static int vox_ctrl_timeout_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(mc, struct clsic_vox, timeout_mixer_ctrl);
+
+	if ((ucontrol->value.integer.value[0] < 0) ||
+	    (ucontrol->value.integer.value[0] > VOX_MAX_DURATION_TIMEOUT))
+		return -EINVAL;
+
+	vox->timeout = ucontrol->value.integer.value[0];
 
 	return 0;
 }
@@ -1584,7 +1663,7 @@ static int vox_ctrl_reps_put(struct snd_kcontrol *kcontrol,
 		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
 
 	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] > VOX_MAX_REP_DURATION_TIMEOUT))
+	    (ucontrol->value.integer.value[0] > VOX_MAX_NUM_REPS))
 		return -EINVAL;
 
 	vox->number_of_reps = ucontrol->value.integer.value[0];
@@ -1926,22 +2005,37 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
-	vox->duration_or_timeout = VOX_DEFAULT_REP_DURATION_TIMEOUT;
+	vox->duration = VOX_DEFAULT_DURATION;
 
-	memset(&vox->duration_or_timeout_mixer_ctrl, 0,
-	       sizeof(vox->duration_or_timeout_mixer_ctrl));
-	vox->duration_or_timeout_mixer_ctrl.min = 0;
-	vox->duration_or_timeout_mixer_ctrl.max = VOX_MAX_REP_DURATION_TIMEOUT;
-	vox->duration_or_timeout_mixer_ctrl.platform_max =
-						VOX_MAX_REP_DURATION_TIMEOUT;
-	vox->kcontrol_new[6].name = "Vox Duration or Timeout in ms";
+	memset(&vox->duration_mixer_ctrl, 0, sizeof(vox->duration_mixer_ctrl));
+	vox->duration_mixer_ctrl.min = 0;
+	vox->duration_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
+	vox->duration_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
+	vox->kcontrol_new[6].name = "Vox Duration in ms";
 	vox->kcontrol_new[6].info = snd_soc_info_volsw;
 	vox->kcontrol_new[6].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[6].get = vox_ctrl_duration_or_timeout_get;
-	vox->kcontrol_new[6].put = vox_ctrl_duration_or_timeout_put;
+	vox->kcontrol_new[6].get = vox_ctrl_duration_get;
+	vox->kcontrol_new[6].put = vox_ctrl_duration_put;
 	vox->kcontrol_new[6].private_value =
-		(unsigned long)(&(vox->duration_or_timeout_mixer_ctrl));
+		(unsigned long)(&(vox->duration_mixer_ctrl));
 	vox->kcontrol_new[6].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->timeout = VOX_DEFAULT_TIMEOUT;
+
+	memset(&vox->timeout_mixer_ctrl, 0, sizeof(vox->timeout_mixer_ctrl));
+	vox->timeout_mixer_ctrl.min = 0;
+	vox->timeout_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
+	vox->timeout_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
+	vox->kcontrol_new[7].name = "Vox Timeout in ms";
+	vox->kcontrol_new[7].info = snd_soc_info_volsw;
+	vox->kcontrol_new[7].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[7].get = vox_ctrl_timeout_get;
+	vox->kcontrol_new[7].put = vox_ctrl_timeout_put;
+	vox->kcontrol_new[7].private_value =
+		(unsigned long)(&(vox->timeout_mixer_ctrl));
+	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
@@ -1951,14 +2045,14 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->reps_mixer_ctrl.min = 1;
 	vox->reps_mixer_ctrl.max = VOX_MAX_NUM_REPS;
 	vox->reps_mixer_ctrl.platform_max = VOX_MAX_NUM_REPS;
-	vox->kcontrol_new[7].name = "Vox Number of Enrolment Repetitions";
-	vox->kcontrol_new[7].info = snd_soc_info_volsw;
-	vox->kcontrol_new[7].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[7].get = vox_ctrl_reps_get;
-	vox->kcontrol_new[7].put = vox_ctrl_reps_put;
-	vox->kcontrol_new[7].private_value =
+	vox->kcontrol_new[8].name = "Vox Number of Enrolment Repetitions";
+	vox->kcontrol_new[8].info = snd_soc_info_volsw;
+	vox->kcontrol_new[8].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[8].get = vox_ctrl_reps_get;
+	vox->kcontrol_new[8].put = vox_ctrl_reps_put;
+	vox->kcontrol_new[8].private_value =
 		(unsigned long)(&(vox->reps_mixer_ctrl));
-	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READ |
+	vox->kcontrol_new[8].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
