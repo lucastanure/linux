@@ -44,7 +44,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	11
+#define VOX_NUM_NEW_KCONTROLS	12
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -104,6 +104,7 @@ struct clsic_vox {
 	uint8_t number_of_reps;
 	uint8_t security_level;
 	uint8_t bio_results_format;
+	struct clsic_vox_auth_challenge challenge;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
@@ -114,6 +115,7 @@ struct clsic_vox {
 	struct soc_mixer_control duration_mixer_ctrl;
 	struct soc_mixer_control timeout_mixer_ctrl;
 	struct soc_mixer_control reps_mixer_ctrl;
+	struct soc_bytes_ext s_bytes_ext;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
@@ -1755,6 +1757,31 @@ static int vox_ctrl_bio_res_type_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
+			      int op_flag,
+			      unsigned int size,
+			      unsigned int __user *tlv)
+{
+	struct soc_bytes_ext *be =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(be, struct clsic_vox, s_bytes_ext);
+
+	if (op_flag == SNDRV_CTL_TLV_OP_WRITE) {
+		if (size != sizeof(struct clsic_vox_auth_challenge))
+			return -EINVAL;
+		if (copy_from_user(&vox->challenge, tlv,
+				   sizeof(struct clsic_vox_auth_challenge)))
+			return -EFAULT;
+	} else {
+		if (copy_to_user(tlv, &vox->challenge,
+				 sizeof(struct clsic_vox_auth_challenge)))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
 static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2168,6 +2195,19 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 				(unsigned long)(&(vox->soc_enum_bio_res_type));
 	vox->kcontrol_new[10].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				       SNDRV_CTL_ELEM_ACCESS_WRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	memset(&vox->challenge, 0, sizeof(struct clsic_vox_auth_challenge));
+
+	vox->s_bytes_ext.max = sizeof(struct clsic_vox_auth_challenge);
+	vox->kcontrol_new[11].name = "Vox Challenge";
+	vox->kcontrol_new[11].info = snd_soc_bytes_info_ext;
+	vox->kcontrol_new[11].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[11].tlv.c = vox_ctrl_challenge;
+	vox->kcontrol_new[11].private_value =
+					(unsigned long)(&(vox->s_bytes_ext));
+	vox->kcontrol_new[11].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
