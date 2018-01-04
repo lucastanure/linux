@@ -112,6 +112,7 @@ struct clsic_vox {
 	uint8_t bio_results_format;
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
+	bool get_bio_results_early_exit;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
@@ -130,6 +131,8 @@ struct clsic_vox {
 
 	struct work_struct mgmt_mode_work;
 	struct snd_kcontrol *mgmt_mode_kctrl;
+
+	struct completion new_bio_results_completion;
 };
 
 static const struct {
@@ -145,7 +148,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_MGMT_MODES			14
+#define VOX_NUM_MGMT_MODES			18
 
 #define VOX_MGMT_MODE_NEUTRAL			0
 #define VOX_MGMT_MODE_INSTALL_PHRASE		1
@@ -161,6 +164,10 @@ static const struct {
 #define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
 #define VOX_MGMT_MODE_COMPLETE_ENROL		12
 #define VOX_MGMT_MODE_COMPLETING_ENROL		13
+#define VOX_MGMT_MODE_GET_BIO_RESULTS		14
+#define VOX_MGMT_MODE_GETTING_BIO_RESULTS	15
+#define VOX_MGMT_MODE_STOP_BIO_RESULTS		16
+#define VOX_MGMT_MODE_STOPPING_BIO_RESULTS	17
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -178,6 +185,10 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 					    "Performing Enrolment Repetition",
 	[VOX_MGMT_MODE_COMPLETE_ENROL]		= "Complete User Enrolment",
 	[VOX_MGMT_MODE_COMPLETING_ENROL]	= "Completing User Enrolment",
+	[VOX_MGMT_MODE_GET_BIO_RESULTS]		= "Get Biometric Results",
+	[VOX_MGMT_MODE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
+	[VOX_MGMT_MODE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
+	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
 };
 
 #define VOX_NUM_ERRORS			10
@@ -661,6 +672,8 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 					  msg_cmd.cmd_listen_start.trgr_domain);
 
 		reinit_completion(&asr_stream->trigger_heard);
+
+		reinit_completion(&vox->new_bio_results_completion);
 
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
@@ -1495,6 +1508,111 @@ exit:
 	return ret;
 }
 
+static int vox_get_bio_results(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	vox->get_bio_results_early_exit = false;
+	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
+
+	/* Firstly wait for CLSIC to notify us of new results. */
+	wait_for_completion(&vox->new_bio_results_completion);
+	reinit_completion(&vox->new_bio_results_completion);
+
+	if (vox->get_bio_results_early_exit)
+		/*
+		 * We are here if the biometric results available notification
+		 * never came (e.g. no detected users) and we decide to stop
+		 * getting any more results.
+		 */
+		return -EBUSY;
+
+	/* Now get the results. */
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_AUTH_USER);
+	msg_cmd.blkcmd_auth_user.hdr.bulk_sz =
+					sizeof(struct clsic_vox_auth_challenge);
+	msg_cmd.blkcmd_auth_user.security_lvl = vox->security_level;
+	msg_cmd.blkcmd_auth_user.result_format = vox->bio_results_format;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  (uint8_t *) &vox->challenge,
+				  sizeof(struct clsic_vox_auth_challenge),
+				  (uint8_t *) &vox->biometric_results,
+				  size_of_bio_results(vox->bio_results_format));
+
+	clsic_info(vox->clsic, "ret %d", ret);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
+	/* Response is either bulk in case of success, or not. */
+	if (clsic_get_bulk_bit(msg_rsp.rsp_auth_user.hdr.sbc)) {
+		vox->error_info = VOX_ERROR_SUCCESS;
+	} else {
+		switch (msg_rsp.rsp_auth_user.hdr.err) {
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_CANCELLED:
+		case CLSIC_ERR_TOO_SMALL:
+		case CLSIC_ERR_INVAL_SECURITY_LVL:
+		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+		case CLSIC_ERR_VOICEID:
+		case CLSIC_ERR_INPUT_PATH:
+		case CLSIC_ERR_SECURITY_FAIL:
+		case CLSIC_ERR_NO_USER_IDENTIFIED:
+		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
+			clsic_err(vox->clsic, "%s.\n",
+				clsic_error_string(
+				    msg_rsp.rsp_auth_user.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_auth_user.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_auth_user.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		}
+	}
+
+exit:
+	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
+
+	return ret;
+}
+
+static int vox_stop_bio_results(struct clsic_vox *vox)
+{
+	/*
+	 * This is necessary as CLSIC effectively crashes if its mode is not set
+	 * to IDLE *before* the end of audio streaming.
+	 */
+	int ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	if (ret)
+		vox->error_info = VOX_ERROR_LIBRARY;
+	else
+		vox->error_info = VOX_ERROR_SUCCESS;
+
+	clsic_info(vox->clsic, "ret %d", ret);
+
+	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
+
+	return ret;
+}
+
 /*
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
@@ -1540,6 +1658,18 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 		if (ret)
 			clsic_err(vox->clsic,
 				  "vox_complete_enrolment ret %d.\n", ret);
+		break;
+	case VOX_MGMT_MODE_GETTING_BIO_RESULTS:
+		ret = vox_get_bio_results(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_get_bio_results ret %d.\n",
+				  ret);
+		break;
+	case VOX_MGMT_MODE_STOPPING_BIO_RESULTS:
+		ret = vox_stop_bio_results(vox);
+		if (ret)
+			clsic_err(vox->clsic, "vox_stop_bio_results ret %d.\n",
+				  ret);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
@@ -1792,6 +1922,7 @@ static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
 	if (op_flag == SNDRV_CTL_TLV_OP_WRITE) {
 		if (size != sizeof(struct clsic_vox_auth_challenge))
 			return -EINVAL;
+
 		if (copy_from_user(&vox->challenge, tlv,
 				   sizeof(struct clsic_vox_auth_challenge)))
 			return -EFAULT;
@@ -1816,7 +1947,6 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 
 	if (op_flag == SNDRV_CTL_TLV_OP_WRITE)
 		return -EACCES;
-
 	if (copy_to_user(tlv, &vox->biometric_results,
 			 size_of_bio_results(vox->bio_results_format)))
 		return -EFAULT;
@@ -1939,20 +2069,36 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			ret = -EBUSY;
 		}
 		break;
-	case VOX_MGMT_MODE_NEUTRAL:
+	case VOX_MGMT_MODE_GET_BIO_RESULTS:
 		mutex_lock(&vox->mgmt_mode_lock);
-		if ((vox->mgmt_mode != VOX_MGMT_MODE_INSTALLING_PHRASE) &&
-		    (vox->mgmt_mode != VOX_MGMT_MODE_UNINSTALLING_PHRASE) &&
-		    (vox->mgmt_mode != VOX_MGMT_MODE_REMOVING_USER)) {
-			ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-			if (ret) {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				clsic_err(vox->clsic, "%d.\n", ret);
-				return ret;
-			}
-			vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_GETTING_BIO_RESULTS;
 			mutex_unlock(&vox->mgmt_mode_lock);
-			clsic_info(vox->clsic, "vox mode set to neutral.\n");
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_MGMT_MODE_STOP_BIO_RESULTS:
+		mutex_lock(&vox->mgmt_mode_lock);
+		/*
+		 * Set CLSIC to IDLE mode in order to prevent CLSIC crashing
+		 * due to bringing down the audio path while in CLSIC STREAM
+		 * mode.
+		 */
+		if ((vox->mgmt_mode == VOX_MGMT_MODE_GETTING_BIO_RESULTS) ||
+		    (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL)) {
+			vox->mgmt_mode = VOX_MGMT_MODE_STOPPING_BIO_RESULTS;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			/*
+			 * Complete get_bio_results in case CLSIC is hung doing
+			 * scheduled work while getting results from a previous
+			 * action (waiting for CLSIC_VOX_MSG_N_NEW_AUTH_RESULT).
+			 */
+			vox->get_bio_results_early_exit = true;
+			complete(&vox->new_bio_results_completion);
+			schedule_work(&vox->mgmt_mode_work);
 		} else {
 			mutex_unlock(&vox->mgmt_mode_lock);
 			ret = -EBUSY;
@@ -2034,6 +2180,10 @@ static int vox_notification_handler(struct clsic *clsic,
 		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
 
 		ret = CLSIC_HANDLED;
+		break;
+	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
+		clsic_info(clsic, "new biometric results available");
+		complete(&vox->new_bio_results_completion);
 		break;
 	default:
 		clsic_err(clsic, "unrecognised message with message ID %d\n",
@@ -2271,6 +2421,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 		pr_err("enum %s() add ret: %d.\n", __func__, ret);
 		return ret;
 	}
+
+	vox->get_bio_results_early_exit = false;
+	init_completion(&vox->new_bio_results_completion);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 	if (ret != 0)
