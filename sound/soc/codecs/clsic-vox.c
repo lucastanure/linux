@@ -44,7 +44,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	9
+#define VOX_NUM_NEW_KCONTROLS	11
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -102,9 +102,13 @@ struct clsic_vox {
 	uint16_t duration;
 	uint16_t timeout;
 	uint8_t number_of_reps;
+	uint8_t security_level;
+	uint8_t bio_results_format;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
+	struct soc_enum soc_enum_sec_level;
+	struct soc_enum soc_enum_bio_res_type;
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
 	struct soc_mixer_control duration_mixer_ctrl;
@@ -190,6 +194,30 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_TOO_LOUD]		= "Too Loud",
 	[VOX_ERROR_TOO_NOISY]		= "Too Noisy",
 	[VOX_ERROR_CLEARED]		= "Cleared",
+};
+
+#define VOX_NUM_BIO_RESULTS_TYPES	3
+
+#define VOX_BIO_RESULTS_CLASSIC		0
+#define VOX_BIO_RESULTS_EXT_V1		1
+#define VOX_BIO_RESULTS_EXT_V2		2
+
+static const char *vox_bio_results_type_text[VOX_NUM_BIO_RESULTS_TYPES] = {
+	[VOX_BIO_RESULTS_CLASSIC]	= "Classic",
+	[VOX_BIO_RESULTS_EXT_V1]	= "Extended Version 1",
+	[VOX_BIO_RESULTS_EXT_V2]	= "Extended Version 2",
+};
+
+#define VOX_NUM_SEC_LEVEL_TYPES		3
+
+#define VOX_SEC_LEVEL_LOW		0
+#define VOX_SEC_LEVEL_MEDIUM		1
+#define VOX_SEC_LEVEL_HIGH		2
+
+static const char *vox_sec_level_type_text[VOX_NUM_SEC_LEVEL_TYPES] = {
+	[VOX_SEC_LEVEL_LOW]		= "Low",
+	[VOX_SEC_LEVEL_MEDIUM]		= "Medium",
+	[VOX_SEC_LEVEL_HIGH]		= "High",
 };
 
 /* Present method of phrase installation uses a fixed list of files. */
@@ -1671,6 +1699,62 @@ static int vox_ctrl_reps_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_sec_level_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	ucontrol->value.enumerated.item[0] = vox->security_level;
+
+	return 0;
+}
+
+static int vox_ctrl_sec_level_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	if ((ucontrol->value.integer.value[0] < 0) ||
+	    (ucontrol->value.integer.value[0] >= VOX_NUM_SEC_LEVEL_TYPES))
+		return -EINVAL;
+
+	vox->security_level = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
+
+static int vox_ctrl_bio_res_type_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	ucontrol->value.enumerated.item[0] = vox->bio_results_format;
+
+	return 0;
+}
+
+static int vox_ctrl_bio_res_type_put(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_error_info);
+
+	if ((ucontrol->value.integer.value[0] < 0) ||
+	    (ucontrol->value.integer.value[0] >= VOX_NUM_BIO_RESULTS_TYPES))
+		return -EINVAL;
+
+	vox->bio_results_format = ucontrol->value.enumerated.item[0];
+
+	return 0;
+}
+
 static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2055,6 +2139,36 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[8].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				      SNDRV_CTL_ELEM_ACCESS_WRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->security_level = VOX_SEC_LEVEL_LOW;
+
+	vox->kcontrol_new[9].name = "Vox Security Level";
+	vox->kcontrol_new[9].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[9].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[9].get = vox_ctrl_sec_level_get;
+	vox->kcontrol_new[9].put = vox_ctrl_sec_level_put;
+	vox->soc_enum_sec_level.items = VOX_NUM_SEC_LEVEL_TYPES;
+	vox->soc_enum_sec_level.texts = vox_sec_level_type_text;
+	vox->kcontrol_new[9].private_value =
+				(unsigned long)(&(vox->soc_enum_sec_level));
+	vox->kcontrol_new[9].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->bio_results_format = VOX_BIO_RESULTS_CLASSIC;
+
+	vox->kcontrol_new[10].name = "Vox Biometric Results Format";
+	vox->kcontrol_new[10].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[10].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[10].get = vox_ctrl_bio_res_type_get;
+	vox->kcontrol_new[10].put = vox_ctrl_bio_res_type_put;
+	vox->soc_enum_bio_res_type.items = VOX_NUM_BIO_RESULTS_TYPES;
+	vox->soc_enum_bio_res_type.texts = vox_bio_results_type_text;
+	vox->kcontrol_new[10].private_value =
+				(unsigned long)(&(vox->soc_enum_bio_res_type));
+	vox->kcontrol_new[10].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				       SNDRV_CTL_ELEM_ACCESS_WRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
