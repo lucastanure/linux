@@ -44,7 +44,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	12
+#define VOX_NUM_NEW_KCONTROLS	13
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -80,6 +80,12 @@ struct clsic_asr_stream {
 	struct completion trigger_heard;
 };
 
+union bio_results_u {
+	struct clsic_vox_auth_result result;
+	struct clsic_vox_auth_result_ex result_ex;
+	struct clsic_vox_auth_result_ex2 result_ex2;
+};
+
 struct clsic_vox {
 	struct clsic *clsic;
 	struct clsic_service *service;
@@ -105,6 +111,7 @@ struct clsic_vox {
 	uint8_t security_level;
 	uint8_t bio_results_format;
 	struct clsic_vox_auth_challenge challenge;
+	union bio_results_u biometric_results;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
@@ -115,7 +122,8 @@ struct clsic_vox {
 	struct soc_mixer_control duration_mixer_ctrl;
 	struct soc_mixer_control timeout_mixer_ctrl;
 	struct soc_mixer_control reps_mixer_ctrl;
-	struct soc_bytes_ext s_bytes_ext;
+	struct soc_bytes_ext s_bytes_challenge;
+	struct soc_bytes_ext s_bytes_bio_res;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
@@ -229,6 +237,20 @@ static struct {
 	[CLSIC_VOX_PHRASE_VDT1]	= { .file = "bpb.p00" },
 	[CLSIC_VOX_PHRASE_TI]	= { .file = "bpb.p04" },
 };
+
+static inline int size_of_bio_results(uint8_t bio_results_format)
+{
+	switch (bio_results_format) {
+	case VOX_BIO_RESULTS_CLASSIC:
+		return sizeof(struct clsic_vox_auth_result);
+	case VOX_BIO_RESULTS_EXT_V1:
+		return sizeof(struct clsic_vox_auth_result_ex);
+	case VOX_BIO_RESULTS_EXT_V2:
+		return sizeof(struct clsic_vox_auth_result_ex2);
+	default:
+		return 0;
+	}
+}
 
 /*
  * This lookup function is necessary because the CLSIC error codes are not
@@ -1765,7 +1787,7 @@ static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
 	struct soc_bytes_ext *be =
 		(struct soc_bytes_ext *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(be, struct clsic_vox, s_bytes_ext);
+		container_of(be, struct clsic_vox, s_bytes_challenge);
 
 	if (op_flag == SNDRV_CTL_TLV_OP_WRITE) {
 		if (size != sizeof(struct clsic_vox_auth_challenge))
@@ -1778,6 +1800,26 @@ static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
 				 sizeof(struct clsic_vox_auth_challenge)))
 			return -EFAULT;
 	}
+
+	return 0;
+}
+
+static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
+				 int op_flag,
+				 unsigned int size,
+				 unsigned int __user *tlv)
+{
+	struct soc_bytes_ext *be =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(be, struct clsic_vox, s_bytes_bio_res);
+
+	if (op_flag == SNDRV_CTL_TLV_OP_WRITE)
+		return -EACCES;
+
+	if (copy_to_user(tlv, &vox->biometric_results,
+			 size_of_bio_results(vox->bio_results_format)))
+		return -EFAULT;
 
 	return 0;
 }
@@ -2199,14 +2241,27 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	memset(&vox->challenge, 0, sizeof(struct clsic_vox_auth_challenge));
 
-	vox->s_bytes_ext.max = sizeof(struct clsic_vox_auth_challenge);
+	vox->s_bytes_challenge.max = sizeof(struct clsic_vox_auth_challenge);
 	vox->kcontrol_new[11].name = "Vox Challenge";
 	vox->kcontrol_new[11].info = snd_soc_bytes_info_ext;
 	vox->kcontrol_new[11].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	vox->kcontrol_new[11].tlv.c = vox_ctrl_challenge;
 	vox->kcontrol_new[11].private_value =
-					(unsigned long)(&(vox->s_bytes_ext));
+				(unsigned long)(&(vox->s_bytes_challenge));
 	vox->kcontrol_new[11].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
+
+	vox->s_bytes_bio_res.max = sizeof(union bio_results_u);
+	vox->kcontrol_new[12].name = "Vox Signed Biometric Results Blob";
+	vox->kcontrol_new[12].info = snd_soc_bytes_info_ext;
+	vox->kcontrol_new[12].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[12].tlv.c = vox_ctrl_bio_res_blob;
+	vox->kcontrol_new[12].private_value =
+				(unsigned long)(&(vox->s_bytes_bio_res));
+	vox->kcontrol_new[12].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
 				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
