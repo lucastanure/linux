@@ -369,15 +369,17 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	if (!clsic_get_bulk_bit(msg_rsp->rsp_get_asr_block.hdr.sbc) &&
 	    msg_rsp->rsp_get_asr_block.hdr.err != 0) {
 		clsic_err(clsic,
-			  "Device responded with error code: %d\n",
-			  msg_rsp->rsp_get_asr_block.hdr.err);
+			  "Device responded with error code: %s\n",
+			  clsic_error_string(
+				msg_rsp->rsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
 		return CLSIC_MSG_RELEASED;
 	} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
 		clsic_err(clsic,
-			  "Device responded with error code: %d\n",
-			  msg_rsp->blkrsp_get_asr_block.hdr.err);
+			  "Device responded with error code: %s\n",
+			  clsic_error_string(
+				msg_rsp->blkrsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
 		return CLSIC_MSG_RELEASED;
@@ -560,8 +562,9 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		}
 		if (msg_rsp.rsp_listen_start.hdr.err) {
 			clsic_err(clsic,
-				  "Failed to start listening: %d\n",
-				  msg_rsp.rsp_listen_start.hdr.err);
+				  "Failed to start listening: %s\n",
+				  clsic_error_string(
+					msg_rsp.rsp_listen_start.hdr.err));
 			return -EIO;
 		}
 
