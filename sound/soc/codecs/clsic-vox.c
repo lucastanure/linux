@@ -263,6 +263,8 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 	}
 }
 
+static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
+
 /*
  * This lookup function is necessary because the CLSIC error codes are not
  * sequential. i.e. the error code is not necessarily equal to the array offset.
@@ -598,49 +600,13 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		/* instruct the service to enter listen mode */
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   vox->service->service_instance,
-				   CLSIC_VOX_MSG_CR_SET_MODE);
-		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+		if (ret)
+			return -EIO;
 
-		ret = clsic_send_msg_sync(
-				     clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-		if (ret) {
-			clsic_err(clsic, "Error sending msg: %d\n", ret);
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_LISTEN);
+		if (ret)
 			return -EIO;
-		}
-		if (msg_rsp.rsp_set_mode.hdr.err) {
-			clsic_err(clsic,
-				  "Failed to enter idle mode: %d\n",
-				  msg_rsp.rsp_set_mode.hdr.err);
-			return -EIO;
-		}
-
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   vox->service->service_instance,
-				   CLSIC_VOX_MSG_CR_SET_MODE);
-		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_LISTEN;
-
-		ret = clsic_send_msg_sync(
-				     clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-		if (ret) {
-			clsic_err(clsic, "Error sending msg: %d\n", ret);
-			return -EIO;
-		}
-		if (msg_rsp.rsp_set_mode.hdr.err) {
-			clsic_err(clsic,
-				  "Failed to enter listen mode: %d\n",
-				  msg_rsp.rsp_set_mode.hdr.err);
-			return -EIO;
-		}
 
 		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
 				   vox->service->service_instance,
@@ -686,27 +652,9 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   vox->service->service_instance,
-				   CLSIC_VOX_MSG_CR_SET_MODE);
-		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
-
-		ret = clsic_send_msg_sync(
-				     clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-		if (ret) {
-			clsic_err(clsic, "Error sending msg: %d\n", ret);
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+		if (ret)
 			return -EIO;
-		}
-		if (msg_rsp.rsp_set_mode.hdr.err) {
-			clsic_err(clsic,
-				  "Failed to enter idle mode: %d\n",
-				  msg_rsp.rsp_set_mode.hdr.err);
-			return -EIO;
-		}
 		break;
 	default:
 		ret = -EINVAL;
@@ -2461,8 +2409,6 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	struct clsic_service *vox_service = dev_get_platdata(&pdev->dev);
 	struct clsic_vox *vox;
 	int ret;
-	union clsic_vox_msg msg_cmd;
-	union clsic_vox_msg msg_rsp;
 
 	dev_info(&pdev->dev, "%s() service %p.\n", __func__, vox_service);
 
@@ -2503,28 +2449,9 @@ static int clsic_vox_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "%s() test sending idle message.\n",
 			 __func__);
 
-		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-				   vox_service->service_instance,
-				   CLSIC_VOX_MSG_CR_SET_MODE);
-		msg_cmd.cmd_set_mode.mode = CLSIC_VOX_MODE_IDLE;
-
-		ret = clsic_send_msg_sync(clsic,
-				     (union t_clsic_generic_message *) &msg_cmd,
-				     (union t_clsic_generic_message *) &msg_rsp,
-				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
-		dev_info(&pdev->dev, "%s() idle message %d %d.\n",
-			 __func__, ret, msg_rsp.rsp_set_mode.hdr.err);
-
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 		if (ret) {
 			clsic_err(clsic, "Error sending msg: %d.\n", ret);
-			return -EIO;
-		}
-		if (msg_rsp.rsp_set_mode.hdr.err) {
-			clsic_err(clsic,
-				  "Failed to enter idle mode: %d.\n",
-				  msg_rsp.rsp_set_mode.hdr.err);
 			return -EIO;
 		}
 	}
