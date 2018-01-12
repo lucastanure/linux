@@ -750,6 +750,55 @@ static struct snd_soc_platform_driver clsic_vox_compr_platform = {
 	.compr_ops = &clsic_vox_compr_ops,
 };
 
+static const char *vox_clsic_mode_strings[6] = {
+	[CLSIC_VOX_MODE_IDLE]	= "IDLE",
+	[CLSIC_VOX_MODE_MANAGE]	= "MANAGE",
+	[CLSIC_VOX_MODE_ENROL]	= "ENROL",
+	[CLSIC_VOX_MODE_LISTEN] = "LISTEN",
+	[CLSIC_VOX_MODE_STREAM] = "STREAM",
+};
+
+static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_SET_MODE);
+	msg_cmd.cmd_set_mode.mode = new_mode;
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	clsic_info(vox->clsic, "ret %d new mode %s.\n", ret,
+		   vox_clsic_mode_strings[new_mode]);
+
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		return -EIO;
+	}
+
+	switch (msg_rsp.rsp_set_mode.hdr.err) {
+	case CLSIC_ERR_NONE:
+		return 0;
+	case CLSIC_ERR_INVAL_MODE_TRANSITION:
+	case CLSIC_ERR_INVAL_MODE:
+		clsic_err(vox->clsic, "%s\n",
+			  clsic_error_string(msg_rsp.rsp_set_mode.hdr.err));
+		return -EIO;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_set_mode.hdr.err,
+			  clsic_error_string(msg_rsp.rsp_set_mode.hdr.err));
+		return -EIO;
+	}
+}
+
 static int vox_ctrl_error_info_get(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
@@ -804,6 +853,18 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 
 	switch (ucontrol->value.enumerated.item[0]) {
+	case VOX_MGMT_MODE_NEUTRAL:
+		mutex_lock(&vox->mgmt_mode_lock);
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+		if (ret) {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			clsic_err(vox->clsic, "%s: %d.\n", __func__, ret);
+			return ret;
+		}
+		vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
+		mutex_unlock(&vox->mgmt_mode_lock);
+		clsic_info(vox->clsic, "vox mode set to neutral.\n");
+		break;
 	default:
 		ret = -EINVAL;
 		clsic_err(vox->codec, "unrecognised vox mode %d.\n",
