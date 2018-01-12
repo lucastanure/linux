@@ -31,6 +31,7 @@
 #include <linux/mfd/clsic/core.h>
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/voxsrv.h>
+#include <linux/mfd/clsic/irq.h>
 
 /* TODO: may require tuning */
 #define VOX_ASR_MIN_FRAGMENT_SZ	0
@@ -743,9 +744,46 @@ static int vox_test(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static int vox_notification_handler(struct clsic *clsic,
+				    struct clsic_service *handler,
+				    struct clsic_message *msg)
+{
+	struct clsic_vox *vox = (struct clsic_vox *) handler->data;
+	enum clsic_vox_msg_id msgid;
+	union clsic_vox_msg *msg_rsp = (union clsic_vox_msg *) &msg->response;
+	int ret = CLSIC_UNHANDLED;
+
+	/* Make sure it is a notification message. */
+	if (clsic_get_cran_frommsg(msg) != CLSIC_CRAN_NTY)
+		return ret;
+
+	msgid = clsic_get_messageid(msg);
+	switch (msgid) {
+	case CLSIC_VOX_MSG_N_LISTEN_ERR:
+		/* TODO: should we be doing something more than this here? */
+		clsic_err(vox->clsic, "trigger detection error on CLSIC.\n");
+		ret = CLSIC_HANDLED;
+		break;
+	case CLSIC_VOX_MSG_N_TRGR_DETECT:
+		if (vox->trig_det_cb)
+			vox->trig_det_cb(vox->clsic,
+				clsic_find_first_service(vox->clsic,
+							 CLSIC_SRV_TYPE_VOX));
+		ret = CLSIC_HANDLED;
+		break;
+	default:
+		clsic_err(clsic, "unrecognised message with message ID %d\n",
+			  msgid);
+	}
+
+	return ret;
+}
+
 static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
+	struct clsic_service *handler =
+		clsic_find_first_service(vox->clsic, CLSIC_SRV_TYPE_VOX);
 	int ret;
 
 	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
@@ -768,6 +806,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ret = snd_soc_add_codec_controls(codec, &vox->test_ctrl, 1);
 	if (ret != 0)
 		pr_err("%s() add ret: %d.\n", __func__, ret);
+
+	handler->data = (void *)vox;
+	handler->callback = &vox_notification_handler;
 
 	return ret;
 }
