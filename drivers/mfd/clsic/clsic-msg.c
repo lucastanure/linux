@@ -1840,6 +1840,10 @@ int clsic_send_msg_sync(struct clsic *clsic,
 	msg->bulk_rxbuf_maxsize = rxsize;
 
 	ret = clsic_send_message_core(clsic, msg);
+	if (ret != 0) {
+		clsic_release_msg(clsic, msg);
+		return ret;
+	}
 
 	/*
 	 * Synchronous messages now wait for the message to finish it's
