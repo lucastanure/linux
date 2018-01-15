@@ -124,14 +124,14 @@ enum clsic_blrequests {
 };
 
 /*
- * OFF = expected off
- * ON = expected on (message sent or received)
- * AVAILABLE = generally available to all services
+ * These states represent the power state and general availability of the
+ * messaging processor in the device, if a message has been sent or received
+ * the processor is presumed ON (and is a candidate for being shutdown based on
+ * idle time).
  */
 enum clsic_msgproc_states {
 	CLSIC_MSGPROC_OFF = 0,
 	CLSIC_MSGPROC_ON,
-	CLSIC_MSGPROC_AVAILABLE,
 };
 
 struct clsic {
@@ -150,7 +150,7 @@ struct clsic {
 
 	uint8_t instance; /* instance number */
 	enum clsic_states state;
-	enum clsic_msgproc_states msgproc;
+	enum clsic_msgproc_states msgproc_state;
 
 	enum clsic_blrequests blrequest;
 
@@ -315,12 +315,7 @@ struct clsic_service {
 	/* A pointer the handler can use to stash instance specific stuff */
 	void *data;
 
-	/*
-	 * service specific PM handler
-	 *
-	 * XXX rename and make this a start/stop/reenumerate/suspend/resume
-	 * callback
-	 */
+	/* service specific PM handler */
 	int (*pm_handler)(struct clsic_service *handler, int pm_event);
 };
 
@@ -341,10 +336,6 @@ int clsic_deregister_service_handler(struct clsic *clsic,
 void clsic_state_set(struct clsic *clsic,
 		     const enum clsic_states new_state,
 		     bool lock_held);
-void clsic_state_change(struct clsic *clsic,
-			const enum clsic_states expected_state,
-			const enum clsic_states new_state,
-			bool check_state, bool lock_held);
 
 static inline const char *clsic_pm_rpm_to_string(int event)
 {
@@ -410,4 +401,36 @@ static inline struct clsic_service *clsic_find_first_service(
 
 	return NULL;
 }
+
+
+
+/*
+ * Simple utility function that pauses until the clsic->state becomes state, if
+ * it doesn't become that state it returns true else it returns false.
+ *
+ * The delay_ms is how long to pause (in milliseconds) when the state doesn't
+ * match and the max_cycles is how many times the state should be examined.
+ *
+ * e.g. max_cycles=10, delay_ms=100 will wait between 0 and 1 seconds, added
+ * these figures as constants for now
+ */
+#define CLSIC_WAIT_FOR_STATE_MAX_CYCLES	10
+#define CLSIC_WAIT_FOR_STATE_DELAY_MS	100
+static inline bool clsic_wait_for_state(struct clsic *clsic,
+					enum clsic_states state,
+					int max_cycles, int delay_ms)
+{
+	int i;
+	enum clsic_states saved_state;
+
+	for (i = 0; i < max_cycles; i++) {
+		saved_state = clsic->state;
+		if (saved_state == state)
+			return false;
+		clsic_info(clsic, "Pausing (%d != %d)\n", saved_state, state);
+		msleep(delay_ms);
+	}
+	return true;
+}
+
 #endif

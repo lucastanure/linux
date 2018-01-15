@@ -70,7 +70,7 @@ static int clsic_system_service_handler(struct clsic *clsic,
 static void clsic_system_service_stop(struct clsic *clsic,
 				      struct clsic_service *handler)
 {
-	clsic_dbg(clsic, "%p %d", handler, clsic->msgproc);
+	clsic_dbg(clsic, "%p %d", handler, clsic->msgproc_state);
 
 	/*
 	 * All the other services will have shutdown before this function is
@@ -266,11 +266,6 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		return ret;
 	}
 
-	mutex_lock(&clsic->message_lock);
-	if (clsic->msgproc == CLSIC_MSGPROC_ON)
-		clsic->msgproc = CLSIC_MSGPROC_AVAILABLE;
-	mutex_unlock(&clsic->message_lock);
-
 	if (!clsic->enumeration_required)
 		return 0;
 
@@ -436,7 +431,7 @@ int clsic_send_shutdown_cmd(struct clsic *clsic)
 	union clsic_sys_msg msg_rsp;
 	int ret = 0;
 
-	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
+	if (clsic->msgproc_state == CLSIC_MSGPROC_OFF)
 		return 0;
 
 	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,

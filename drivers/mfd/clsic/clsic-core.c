@@ -304,40 +304,6 @@ vdd_d_notifier_failed:
 	return ret;
 }
 
-/*
- * Simple function to verify and assign a new state and issue a matching
- * trace event.
- *
- * Parameters:
- * check_state - check that the state is expected_state before changing it
- * lock_held - whether the caller already has the messaging_lock
- */
-void clsic_state_change(struct clsic *clsic,
-			const enum clsic_states expected_state,
-			const enum clsic_states new_state,
-			bool check_state, bool lock_held)
-{
-	enum clsic_states current_state;
-
-	if (!lock_held)
-		mutex_lock(&clsic->message_lock);
-
-	current_state = clsic->state;
-
-	if (check_state && (current_state != expected_state)) {
-		clsic_err(clsic, "%p no statechange %s != %s\n",
-			  clsic,
-			  clsic_state_to_string(current_state),
-			  clsic_state_to_string(expected_state));
-	} else {
-		clsic->state = new_state;
-		trace_clsic_statechange(current_state, new_state);
-	}
-
-	if (!lock_held)
-		mutex_unlock(&clsic->message_lock);
-}
-
 void clsic_state_set(struct clsic *clsic,
 		     const enum clsic_states new_state,
 		     bool lock_held)
@@ -606,13 +572,11 @@ int clsic_dev_exit(struct clsic *clsic)
 	 * state to become ON or HALTED.
 	 */
 	clsic_pm_use(clsic);
-	for (i = 0; i < 10; i++) {
-		if ((clsic->state == CLSIC_STATE_ON) ||
-		    (clsic->state == CLSIC_STATE_HALTED))
-			break;
-		msleep(CLSIC_POST_RESET_DELAY);
-		clsic_info(clsic, "pause to on/halted\n");
-	}
+	if (clsic_wait_for_state(clsic, CLSIC_STATE_ON,
+				 CLSIC_WAIT_FOR_STATE_MAX_CYCLES,
+				 CLSIC_WAIT_FOR_STATE_DELAY_MS))
+		clsic_info(clsic, "Warning: state is %s\n",
+			   clsic_state_to_string(clsic->state));
 	clsic_pm_release(clsic);
 
 	cancel_work_sync(&clsic->maintenance_handler);
@@ -660,18 +624,13 @@ int clsic_dev_exit(struct clsic *clsic)
 		}
 	}
 
-	/*
-	 * Place the driver into suspend and pause briefly to give it a chance
-	 * to get there
-	 */
+	/* Place the driver into suspend and give it a chance to get there */
 	pm_runtime_suspend(clsic->dev);
-	for (i = 0; i < 10; i++) {
-		if (clsic->state == CLSIC_STATE_OFF)
-			break;
-		msleep(CLSIC_POST_RESET_DELAY);
-		clsic_info(clsic, "pause to off\n");
-	}
-
+	if (clsic_wait_for_state(clsic, CLSIC_STATE_OFF,
+				 CLSIC_WAIT_FOR_STATE_MAX_CYCLES,
+				 CLSIC_WAIT_FOR_STATE_DELAY_MS))
+		clsic_info(clsic, "Warning: state is %s\n",
+			   clsic_state_to_string(clsic->state));
 	pm_runtime_set_suspended(clsic->dev);
 	pm_runtime_disable(clsic->dev);
 

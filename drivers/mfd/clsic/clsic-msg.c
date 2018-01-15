@@ -218,7 +218,7 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	if ((clsic_get_servinst(msg_p) == CLSIC_SRV_INST_SYS) &&
 	    (clsic_get_messageid(msg_p) == CLSIC_SYS_MSG_CR_SP_SHDN)) {
 		isa_shutdown_message = true;
-		clsic->msgproc = CLSIC_MSGPROC_OFF;
+		clsic->msgproc_state = CLSIC_MSGPROC_OFF;
 	}
 
 	/*
@@ -287,7 +287,7 @@ static ssize_t clsic_messages_read_file(struct file *file,
 		       "Sent: %d Received: %d (msgproc: %d)\nWaiting to send:\n",
 		       clsic->messages_sent,
 		       clsic->messages_received,
-		       clsic->msgproc);
+		       clsic->msgproc_state);
 	if (len >= 0)
 		ret += len;
 
@@ -592,7 +592,6 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 	struct clsic *clsic = data;
 	int ret = 0;
 	struct completion a_completion;
-	int i;
 	bool force_suspend = false;
 
 	clsic_dbg(clsic, "Begin state: %d (%s) : %llu\n",
@@ -638,16 +637,11 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		 * complete.
 		 */
 		clsic_pm_use(clsic);
-		if ((clsic->state == CLSIC_STATE_OFF) ||
-		    (clsic->state == CLSIC_STATE_RESUMING)) {
-			for (i = 0; i < 10; i++) {
-				if ((clsic->state == CLSIC_STATE_ON) ||
-				    (clsic->state == CLSIC_STATE_HALTED))
-					break;
-				msleep(500);
-				clsic_info(clsic, "pause\n");
-			}
-		}
+		if (clsic_wait_for_state(clsic, CLSIC_STATE_ON,
+					 CLSIC_WAIT_FOR_STATE_MAX_CYCLES,
+					 CLSIC_WAIT_FOR_STATE_DELAY_MS))
+			clsic_info(clsic, "Warning: state is %s\n",
+				   clsic_state_to_string(clsic->state));
 
 		/*
 		 * if was state 0 and no current message -> successful lock
@@ -749,23 +743,21 @@ static void clsic_msgproc_shutdown_fn(struct work_struct *data)
 	clsic_send_shutdown_cmd(clsic);
 }
 
-int clsic_msgproc_shutdown_schedule(struct clsic *clsic)
+/*
+ * Called at points where the messaging layer is idle, if no services are using
+ * the messaging processor then start the timer to shut it down
+ */
+void clsic_msgproc_shutdown_schedule(struct clsic *clsic)
 {
 	int ret;
 
-	/*
-	 * If services are using the messaging processor then don't start the
-	 * timer
-	 */
 	if (clsic_pm_services_active(clsic))
-		return -EBUSY;
+		return;
 
 	ret = schedule_delayed_work(&clsic->clsic_msgproc_shutdown_work,
 				    (HZ * CLSIC_MSGPROC_SHUTDOWN_TIMEOUT));
 
 	trace_clsic_msgproc_shutdown_schedule(ret);
-
-	return ret;
 }
 
 bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync)
@@ -830,7 +822,7 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	clsic->timeout_counter = 0;
 	clsic->messages_sent = 0;
 	clsic->messages_received = 0;
-	clsic->msgproc = CLSIC_MSGPROC_OFF;
+	clsic->msgproc_state = CLSIC_MSGPROC_OFF;
 
 #ifdef CONFIG_DEBUG_FS
 	debugfs_create_file("messages", S_IRUSR | S_IRGRP | S_IROTH,
@@ -1281,7 +1273,7 @@ static int clsic_send_message_core(struct clsic *clsic,
 	clsic_pm_use(clsic);
 
 	/* Check whether messaging is limited to the core services */
-	if ((clsic->msgproc != CLSIC_MSGPROC_AVAILABLE) &&
+	if ((clsic->blrequest != CLSIC_BL_IDLE) &&
 	    !((clsic_get_servinst(msg) == CLSIC_SRV_INST_SYS) ||
 	      (clsic_get_servinst(msg) == CLSIC_SRV_INST_BLD))) {
 		/*
@@ -1292,7 +1284,7 @@ static int clsic_send_message_core(struct clsic *clsic,
 		clsic_info(clsic, "States: %s %d %d %d\n",
 			   clsic_state_to_string(clsic->state),
 			   clsic->blrequest, clsic->enumeration_required,
-			   clsic->msgproc);
+			   clsic->msgproc_state);
 		clsic_dump_message(clsic, msg, "should wait?");
 	}
 
@@ -1664,8 +1656,8 @@ static void clsic_message_handler(struct clsic *clsic,
 	 * certainly on
 	 */
 	mutex_lock(&clsic->message_lock);
-	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
-		clsic->msgproc = CLSIC_MSGPROC_ON;
+	if (clsic->msgproc_state == CLSIC_MSGPROC_OFF)
+		clsic->msgproc_state = CLSIC_MSGPROC_ON;
 	mutex_unlock(&clsic->message_lock);
 
 	switch (clsic_get_cran_frommsg(msg)) {
@@ -1752,8 +1744,8 @@ static void clsic_message_worker_sending(struct clsic *clsic,
 {
 	int ret;
 
-	if (clsic->msgproc == CLSIC_MSGPROC_OFF)
-		clsic->msgproc = CLSIC_MSGPROC_ON;
+	if (clsic->msgproc_state == CLSIC_MSGPROC_OFF)
+		clsic->msgproc_state = CLSIC_MSGPROC_ON;
 
 	/*
 	 * Send the message - the message_lock must be held over this
