@@ -44,7 +44,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	13
+#define VOX_NUM_NEW_KCONTROLS	14
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -112,6 +112,7 @@ struct clsic_vox {
 	uint8_t bio_results_format;
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
+	struct clsic_vox_auth_key bio_pub_key;
 	bool get_bio_results_early_exit;
 
 	struct soc_enum soc_enum_mode;
@@ -125,6 +126,7 @@ struct clsic_vox {
 	struct soc_mixer_control reps_mixer_ctrl;
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
+	struct soc_bytes_ext s_bytes_bio_pub_key;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
@@ -970,6 +972,44 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 	}
 
 	return 0;
+}
+
+static int vox_update_bio_pub_key(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_GET_AUTH_KEY);
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  (uint8_t *) &vox->bio_pub_key,
+				  sizeof(struct clsic_vox_auth_key));
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		return -EIO;
+	}
+
+	/* Response is either bulk in case of success, or not. */
+	if (clsic_get_bulk_bit(msg_rsp.rsp_get_auth_key.hdr.sbc))
+		return 0;
+
+	switch (msg_rsp.rsp_get_auth_key.hdr.err) {
+	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+	case CLSIC_ERR_KEY_NOT_FOUND:
+		clsic_err(vox->clsic, "failure %s.\n",
+			  clsic_error_string(msg_rsp.rsp_get_auth_key.hdr.err));
+		return -EIO;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
+			  msg_rsp.rsp_get_auth_key.hdr.err);
+		return -EIO;
+	}
 }
 
 static int vox_install_phrase(struct clsic_vox *vox)
@@ -1902,6 +1942,25 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int vox_ctrl_bio_pub_key(struct snd_kcontrol *kcontrol,
+				int op_flag,
+				unsigned int size,
+				unsigned int __user *tlv)
+{
+	struct soc_bytes_ext *be =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(be, struct clsic_vox, s_bytes_bio_pub_key);
+
+	if (op_flag == SNDRV_CTL_TLV_OP_WRITE)
+		return -EACCES;
+	if (copy_to_user(tlv, &vox->bio_pub_key,
+			 sizeof(struct clsic_vox_auth_key)))
+		return -EFAULT;
+
+	return 0;
+}
+
 static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2360,6 +2419,22 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[12].private_value =
 				(unsigned long)(&(vox->s_bytes_bio_res));
 	vox->kcontrol_new[12].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	memset(&vox->bio_pub_key, 0, sizeof(struct clsic_vox_auth_key));
+	ret = vox_update_bio_pub_key(vox);
+	if (ret != 0)
+		return ret;
+
+	vox->s_bytes_bio_pub_key.max = sizeof(struct clsic_vox_auth_key);
+	vox->kcontrol_new[13].name = "Vox Biometric Result Public Key";
+	vox->kcontrol_new[13].info = snd_soc_bytes_info_ext;
+	vox->kcontrol_new[13].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[13].tlv.c = vox_ctrl_bio_pub_key;
+	vox->kcontrol_new[13].private_value =
+				(unsigned long)(&(vox->s_bytes_bio_pub_key));
+	vox->kcontrol_new[13].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
 				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
