@@ -193,23 +193,21 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
 };
 
-#define VOX_NUM_ERRORS			10
+#define VOX_NUM_ERRORS			9
 
 #define VOX_ERROR_SUCCESS		0
 #define VOX_ERROR_LIBRARY		1
-#define VOX_ERROR_PROTOCOL		2
-#define VOX_ERROR_TIMEOUT		3
-#define VOX_ERROR_BAD_BPB		4
-#define VOX_ERROR_DISABLE_BARGE_IN	5
-#define VOX_ERROR_MORE_SPEECH_NEEDED	6
-#define VOX_ERROR_TOO_LOUD		7
-#define VOX_ERROR_TOO_NOISY		8
-#define VOX_ERROR_CLEARED		9
+#define VOX_ERROR_TIMEOUT		2
+#define VOX_ERROR_BAD_BPB		3
+#define VOX_ERROR_DISABLE_BARGE_IN	4
+#define VOX_ERROR_MORE_SPEECH_NEEDED	5
+#define VOX_ERROR_TOO_LOUD		6
+#define VOX_ERROR_TOO_NOISY		7
+#define VOX_ERROR_CLEARED		8
 
 static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
 	[VOX_ERROR_LIBRARY]		= "Library",
-	[VOX_ERROR_PROTOCOL]		= "Protocol",
 	[VOX_ERROR_TIMEOUT]		= "Timed Out",
 	[VOX_ERROR_BAD_BPB]		= "Bad BPB File",
 	[VOX_ERROR_DISABLE_BARGE_IN]	= "Barge-in Must Be Disabled",
