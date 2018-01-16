@@ -433,4 +433,27 @@ static inline bool clsic_wait_for_state(struct clsic *clsic,
 	return true;
 }
 
+/*
+ * if the device misbehaves then this function is called to bring the device to
+ * an inert state
+ */
+#define CLSIC_DEVICE_ERROR_LOCKHELD true
+#define CLSIC_DEVICE_ERROR_LOCKNOTHELD false
+void clsic_purge_message_queues(struct clsic *clsic);
+static inline void clsic_device_error(struct clsic *clsic,
+				      bool lock_held)
+{
+	pm_runtime_set_suspended(clsic->dev);
+
+	if (!lock_held)
+		mutex_lock(&clsic->message_lock);
+
+	clsic_state_set(clsic, CLSIC_STATE_HALTED,
+			CLSIC_STATE_CHANGE_LOCKHELD);
+
+	clsic_purge_message_queues(clsic);
+	if (!lock_held)
+		mutex_unlock(&clsic->message_lock);
+}
+
 #endif

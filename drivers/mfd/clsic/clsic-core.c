@@ -468,19 +468,8 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
 		   clsic->last_panic.di.version,
 		   clsic->last_panic.di.encrypted);
 
-	mutex_lock(&clsic->message_lock);
-
-	clsic_state_set(clsic, CLSIC_STATE_HALTED,
-			CLSIC_STATE_CHANGE_LOCKHELD);
-
-	clsic_purge_message_queues(clsic);
-	mutex_unlock(&clsic->message_lock);
-
-	/*
-	 * If the device panics don't attempt to recover it automatically,
-	 * the user will need to reboot or trigger a device reset
-	 * schedule_work(&clsic->maintenance_handler);
-	 */
+	/* If the device panics don't attempt to recover it automatically */
+	clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
 }
 
 /*
@@ -951,8 +940,15 @@ static int clsic_runtime_resume(struct device *dev)
 	if (ret) {
 		clsic_err(clsic, "Failed to enable VDD_D: %d\n", ret);
 
+		/*
+		 * not using the clsic_device_error() helper function here as
+		 * it makes pm_runtime calls and will get cyclic
+		 */
+		mutex_lock(&clsic->message_lock);
 		clsic_state_set(clsic, CLSIC_STATE_HALTED,
-				CLSIC_STATE_CHANGE_LOCKNOTHELD);
+				CLSIC_STATE_CHANGE_LOCKHELD);
+		clsic_purge_message_queues(clsic);
+		mutex_unlock(&clsic->message_lock);
 
 		return ret;
 	}

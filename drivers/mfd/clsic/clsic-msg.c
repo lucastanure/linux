@@ -1417,13 +1417,9 @@ static int clsic_handle_message_response(struct clsic *clsic,
 			/*
 			 * A read error from the device is bad news, the FIFO
 			 * could still be partially filled. Transition to the
-			 * panic'd state and begin device recovery.
+			 * halted state
 			 */
-			clsic_state_set(clsic,
-					CLSIC_STATE_HALTED,
-					CLSIC_STATE_CHANGE_LOCKHELD);
-			clsic_purge_message_queues(clsic);
-			schedule_work(&clsic->maintenance_handler);
+			clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKHELD);
 			return CLSIC_HANDLED;
 		}
 		clsic_set_msgstate(found_msg, CLSIC_MSG_SUCCESS);
@@ -1536,9 +1532,7 @@ void clsic_handle_message_rxdma_status(struct clsic *clsic,
 	return;
 
 rxdmastatus_error:
-	clsic_state_set(clsic, CLSIC_STATE_HALTED, CLSIC_STATE_CHANGE_LOCKHELD);
-	clsic_purge_message_queues(clsic);
-	schedule_work(&clsic->maintenance_handler);
+	clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKHELD);
 	mutex_unlock(&clsic->message_lock);
 }
 
@@ -1917,11 +1911,8 @@ static void clsic_message_worker(struct work_struct *data)
 				  clsic_state_to_string(clsic->state));
 			clsic->timeout_counter = 0;
 			clsic_complete_message(clsic, msg_p, CLSIC_MSG_TIMEOUT);
-			clsic_state_set(clsic,
-					CLSIC_STATE_HALTED,
-					CLSIC_STATE_CHANGE_LOCKHELD);
-			clsic_purge_message_queues(clsic);
-			schedule_work(&clsic->maintenance_handler);
+
+			clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKHELD);
 		} else {
 			/*
 			 * the current message has not timed out

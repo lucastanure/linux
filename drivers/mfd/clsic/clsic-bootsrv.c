@@ -289,28 +289,36 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 
 	ret = request_firmware(&firmware, filename, clsic->dev);
 	if (ret != 0) {
-		clsic_err(clsic, "request_firmware %d\n", ret);
+		clsic_err(clsic,
+			  "request_firmware failed '%s' = %d (check files)\n",
+			  filename, ret);
+		clsic->blrequest = CLSIC_BL_IDLE;
+		clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
 		return ret;
 	}
 
 	clsic_dbg(clsic, "%s len: %d\n", filename, firmware->size);
 
 	if (firmware->size < sizeof(struct clsic_fwheader)) {
-		clsic_err(clsic, "Firmware file too small\n");
-		release_firmware(firmware);
-		return -EINVAL;
+		clsic_err(clsic, "Firmware file '%s' too small %d\n",
+			  filename, firmware->size);
+		ret = -EINVAL;
+		goto release_exit;
 	}
 
 	hdr = (struct clsic_fwheader *)firmware->data;
 
 	/* Sanity check the file's magic numbers */
-	if (clsic_bootsrv_fwheader_check(clsic, filename, hdr) != 0)
+	if (clsic_bootsrv_fwheader_check(clsic, filename, hdr) != 0) {
+		ret = -EINVAL;
 		goto release_exit;
+	}
 
 	if (hdr->type != type) {
 		clsic_err(clsic,
-			  "Wrong file type: expected 0x%x, file 0x%x\n",
-			  type, hdr->type);
+			  "Wrong file type in '%s': expected 0x%x, file 0x%x\n",
+			  filename, type, hdr->type);
+		ret = -EINVAL;
 		goto release_exit;
 	}
 
@@ -337,6 +345,14 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 	}
 
 release_exit:
+	/*
+	 * Any failures to send files to the bootloader are considered fatal.
+	 */
+	if (ret != 0) {
+		clsic->blrequest = CLSIC_BL_IDLE;
+		clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
+	}
+
 	release_firmware(firmware);
 	return ret;
 }
@@ -378,11 +394,9 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 	case CLSIC_BL_MSG_N_FAILED_FLASH_AUTH:
 	case CLSIC_BL_MSG_N_FLASH_CORRUPTED:
 		clsic_dbg(clsic, "CSLIC boot fail %d\n", msgid);
-		mutex_lock(&clsic->message_lock);
-		clsic_state_set(clsic, CLSIC_STATE_HALTED,
-				CLSIC_STATE_CHANGE_LOCKHELD);
-		clsic_purge_message_queues(clsic);
-		mutex_unlock(&clsic->message_lock);
+
+		clsic->blrequest = CLSIC_BL_IDLE;
+		clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
 		break;
 	default:
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
