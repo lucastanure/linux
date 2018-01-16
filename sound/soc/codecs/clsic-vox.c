@@ -828,8 +828,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d new mode %s.\n", ret,
-		   vox_clsic_mode_strings[new_mode]);
+	clsic_dbg(vox->clsic, "ret %d new mode %s.\n", ret,
+		  vox_clsic_mode_strings[new_mode]);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1024,7 +1024,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	clsic_info(vox->clsic, "start installing phrase %d.\n", vox->phrase_id);
+	clsic_dbg(vox->clsic, "start installing phrase %d.\n", vox->phrase_id);
 
 	ret = request_firmware(&fw, phrase_files[vox->phrase_id].file,
 			       vox->clsic->dev);
@@ -1057,7 +1057,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 				  fw->data, fw->size,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
+	clsic_dbg(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
 
 	release_firmware(fw);
 
@@ -1072,8 +1072,8 @@ static int vox_install_phrase(struct clsic_vox *vox)
 		if (ret)
 			goto exit;
 		vox->phrase_installed[vox->phrase_id] = true;
-		clsic_info(vox->clsic, "successfully installed phrase %d.\n",
-			   vox->phrase_id);
+		clsic_dbg(vox->clsic, "successfully installed phrase %d.\n",
+			  vox->phrase_id);
 		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case CLSIC_ERR_BPB_SZ_TOO_SMALL:
@@ -1137,7 +1137,7 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
+	clsic_dbg(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1149,8 +1149,8 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 	switch (msg_rsp.rsp_remove_phrase.hdr.err) {
 	case CLSIC_ERR_NONE:
 	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-		clsic_info(vox->clsic, "successfully uninstalled phrase %d.\n",
-			   vox->phrase_id);
+		clsic_dbg(vox->clsic, "successfully uninstalled phrase %d.\n",
+			  vox->phrase_id);
 		/*
 		 * Present no enrolled users for this phrase to reflect what
 		 * CLSIC reports when there is no phrase installed.
@@ -1209,8 +1209,8 @@ static int vox_remove_user(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d user %d phrase %d.\n", ret, vox->user_id,
-		   vox->phrase_id);
+	clsic_dbg(vox->clsic, "ret %d user %d phrase %d.\n", ret, vox->user_id,
+		  vox->phrase_id);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1324,10 +1324,10 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic,
-		   "ret %d user %d phrase %d duration %dms timeout %dms number_of_reps %d.\n",
-		   ret, vox->user_id, vox->phrase_id, vox->duration,
-		   vox->timeout, vox->number_of_reps);
+	clsic_dbg(vox->clsic,
+		  "ret %d user %d phrase %d duration %dms timeout %dms number_of_reps %d.\n",
+		  ret, vox->user_id, vox->phrase_id, vox->duration,
+		  vox->timeout, vox->number_of_reps);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1388,7 +1388,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d perform rep.\n", ret);
+	clsic_dbg(vox->clsic, "ret %d perform rep.\n", ret);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1449,7 +1449,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_info(vox->clsic, "ret %d", ret);
+	clsic_dbg(vox->clsic, "ret %d", ret);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1532,7 +1532,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 				  (uint8_t *) &vox->biometric_results,
 				  size_of_bio_results(vox->bio_results_format));
 
-	clsic_info(vox->clsic, "ret %d", ret);
+	clsic_dbg(vox->clsic, "ret %d", ret);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1587,12 +1587,13 @@ static int vox_stop_bio_results(struct clsic_vox *vox)
 	 * to IDLE *before* the end of audio streaming.
 	 */
 	int ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+
 	if (ret)
 		vox->error_info = VOX_ERROR_LIBRARY;
 	else
 		vox->error_info = VOX_ERROR_SUCCESS;
 
-	clsic_info(vox->clsic, "ret %d", ret);
+	clsic_dbg(vox->clsic, "ret %d", ret);
 
 	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
 
@@ -2187,7 +2188,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		ret = CLSIC_HANDLED;
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
-		clsic_info(clsic, "new biometric results available");
+		clsic_dbg(clsic, "new biometric results available");
 		complete(&vox->new_bio_results_completion);
 		break;
 	default:
