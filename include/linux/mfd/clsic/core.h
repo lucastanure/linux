@@ -225,9 +225,6 @@ struct clsic {
 	/* Array of pointers to service handlers */
 	struct clsic_service *service_handlers[CLSIC_SERVICE_COUNT];
 
-	/* Notifier typically used to signal the codec */
-	struct blocking_notifier_head notifier;
-
 	/* Pre-allocated area for a panic message and debug info payload */
 	struct clsic_panic last_panic;
 
@@ -268,31 +265,6 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg);
 void clsic_maintenance(struct work_struct *data);
 
 /*
- * This controls callback data structure is used to communicate an array of new
- * kcontrols with the codec through the notifier interface
- */
-struct clsic_controls_cb_data {
-	uint8_t kcontrol_count;
-	struct snd_kcontrol_new *kcontrols;
-};
-
-/* Notifier events */
-enum clsic_notifications {
-	CLSIC_NOTIFY_ADD_KCONTROLS,
-	CLSIC_NOTIFY_REMOVE_KCONTROLS,
-};
-
-int clsic_register_notifier(struct clsic *clsic, struct notifier_block *nb);
-int clsic_deregister_notifier(struct clsic *clsic, struct notifier_block *nb);
-
-int clsic_register_codec_controls(struct clsic *clsic,
-				  uint8_t kcontrol_count,
-				  struct snd_kcontrol_new *kcontrols);
-int clsic_deregister_codec_controls(struct clsic *clsic,
-				    uint8_t kcontrol_count,
-				    struct snd_kcontrol_new *kcontrols);
-
-/*
  * This service struct contains instance specific information about a service
  * handler.
  *
@@ -308,9 +280,6 @@ struct clsic_service {
 	uint8_t service_instance;
 	uint16_t service_type;
 	uint32_t service_version;
-
-	uint8_t kcontrol_count;
-	struct snd_kcontrol_new *kcontrols;
 
 	/* A pointer the handler can use to stash instance specific stuff */
 	void *data;

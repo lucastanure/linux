@@ -55,7 +55,6 @@ struct clsic_codec {
 	struct tacna_fll fll[3];
 	struct clsic *clsic;
 	struct snd_soc_codec *codec;
-	struct notifier_block nb;
 };
 
 static const struct wm_adsp_region clsic_dsp2_regions[] = {
@@ -1645,35 +1644,6 @@ static struct snd_soc_dai_driver clsic_dai[] = {
 	},
 };
 
-static int clsic_codec_notify(struct notifier_block *nb,
-				 unsigned long event, void *data)
-{
-	const struct clsic_codec *clsic_codec =
-		container_of(nb, struct clsic_codec, nb);
-	struct clsic_controls_cb_data *cb_data = data;
-	int ret;
-
-	pr_info("%s() nb: %p event: %ld data: %p\n", __func__, nb, event, data);
-
-	pr_info("%s() clsiccodec: %p codec: %p controls: %d @ %p\n",
-		__func__, clsic_codec, clsic_codec->codec,
-		cb_data->kcontrol_count, cb_data->kcontrols);
-
-	switch (event) {
-	case CLSIC_NOTIFY_ADD_KCONTROLS:
-		ret = snd_soc_add_codec_controls(clsic_codec->codec,
-						 cb_data->kcontrols,
-						 cb_data->kcontrol_count);
-		if (ret != 0)
-			pr_err("%s() add ret: %d\n", __func__, ret);
-		break;
-	default:
-		pr_err("%s() defaulted ret: %ld\n", __func__, event);
-	}
-
-	return NOTIFY_DONE;
-}
-
 static int clsic_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_codec *clsic_codec =
@@ -1689,11 +1659,6 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 		return ret;
 
 	clsic_codec->codec = codec;
-	clsic_codec->nb.notifier_call = clsic_codec_notify;
-	ret = clsic_register_notifier(clsic_codec->clsic,
-					 &clsic_codec->nb);
-	if (ret)
-		dev_err(codec->dev, "%s() ret: %d\n", __func__, ret);
 
 	ret = snd_soc_add_codec_controls(codec, clsic_dsp1_rate_controls,
 					 (CLSIC_DSP1_N_RX_CHANNELS +
@@ -1725,9 +1690,6 @@ static int clsic_codec_remove(struct snd_soc_codec *codec)
 	dev_info(codec->dev, "%s() %p\n", __func__, codec);
 
 	tacna->dapm = NULL;
-
-	clsic_deregister_notifier(clsic_codec->clsic,
-				     &clsic_codec->nb);
 
 	wm_adsp2_codec_remove(&clsic_codec->core.dsp[1], codec);
 

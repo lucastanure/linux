@@ -82,33 +82,11 @@ static void clsic_system_service_stop(struct clsic *clsic,
 	 */
 	clsic_send_shutdown_cmd(clsic);
 
-	if (handler->kcontrols != NULL) {
-		clsic_deregister_codec_controls(clsic,
-						handler->kcontrol_count,
-						handler->kcontrols);
-		handler->kcontrol_count = 0;
-		handler->kcontrols = NULL;
-	}
-
 	if (handler->data != NULL) {
 		kfree(handler->data);
 		handler->data = NULL;
 	}
 }
-
-/*
- * XXX Should be in a header (Shared between kernel and userspace)
- */
-struct clsic_srv_info {
-	uint8_t  inst;
-	uint16_t type;
-	uint32_t ver;
-} __packed;
-
-struct clsic_srvs_info {
-	uint8_t count;
-	struct clsic_srv_info info[CLSIC_SERVICE_COUNT];
-} __packed;
 
 /* Structure containing the System Service instance data */
 struct clsic_syssrv_struct {
@@ -116,45 +94,8 @@ struct clsic_syssrv_struct {
 
 	struct clsic_service *srv;
 
-	struct snd_kcontrol_new srvinfo_ctrl;
-	char srvinfo_ctrl_name[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
-	struct soc_bytes_ext srvinfo_ext;
-
 	struct mfd_cell clsic_vox_dev;
 };
-
-static int sys_srv_info_get(struct snd_kcontrol *kcontrol,
-			    struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_bytes_ext *bytes_ext =
-		(struct soc_bytes_ext *) kcontrol->private_value;
-	struct clsic_syssrv_struct *syssrv =
-		container_of(bytes_ext, struct clsic_syssrv_struct,
-			     srvinfo_ext);
-	struct clsic *clsic = syssrv->clsic;
-	struct clsic_srvs_info *srvs_info =
-		(struct clsic_srvs_info *) ucontrol->value.bytes.data;
-	int i;
-
-	if (mutex_lock_interruptible(&clsic->service_lock))
-		return -EINTR;
-
-	/* Generate details of the services */
-	for (i = 0; i <= CLSIC_SERVICE_MAX; i++) {
-		if (clsic->service_handlers[i] != NULL) {
-			srvs_info->count++;
-			srvs_info->info[i].inst = i;
-			srvs_info->info[i].type =
-				clsic->service_handlers[i]->service_type;
-			srvs_info->info[i].ver =
-				clsic->service_handlers[i]->service_version;
-		}
-	}
-
-	mutex_unlock(&clsic->service_lock);
-
-	return 0;
-}
 
 int clsic_system_service_start(struct clsic *clsic,
 			       struct clsic_service *handler)
@@ -174,31 +115,14 @@ int clsic_system_service_start(struct clsic *clsic,
 	if (syssrv == NULL)
 		return -ENOMEM;
 
-	snprintf(syssrv->srvinfo_ctrl_name, SNDRV_CTL_ELEM_ID_NAME_MAXLEN,
-		 "Services Info");
-	syssrv->srvinfo_ext.max = sizeof(struct clsic_srvs_info);
-
-	syssrv->srvinfo_ctrl.name = syssrv->srvinfo_ctrl_name;
-	syssrv->srvinfo_ctrl.info = snd_soc_bytes_info_ext;
-	syssrv->srvinfo_ctrl.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	syssrv->srvinfo_ctrl.get = sys_srv_info_get;
-	syssrv->srvinfo_ctrl.private_value =
-		(unsigned long)(&(syssrv->srvinfo_ext));
-	syssrv->srvinfo_ctrl.access = SNDRV_CTL_ELEM_ACCESS_READ |
-		SNDRV_CTL_ELEM_ACCESS_VOLATILE;
-
 	syssrv->clsic = clsic;
 	syssrv->srv = handler;
 
 	handler->callback = &clsic_system_service_handler;
 	handler->stop = &clsic_system_service_stop;
-	handler->kcontrol_count = 1;
-	handler->kcontrols = &(syssrv->srvinfo_ctrl);
 	handler->data = syssrv;
 
-	return clsic_register_codec_controls(clsic,
-					     handler->kcontrol_count,
-					     handler->kcontrols);
+	return 0;
 }
 
 /*

@@ -209,7 +209,6 @@ static int clsic_register_reboot_notifier(struct clsic *clsic)
 {
 	clsic->clsic_shutdown_notifier.notifier_call =
 		&clsic_shutdown_notifier_cb;
-	BLOCKING_INIT_NOTIFIER_HEAD(&clsic->notifier);
 
 	clsic->instance = atomic_inc_return(&clsic_instances_count);
 
@@ -749,108 +748,6 @@ int clsic_deregister_service_handler(struct clsic *clsic,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clsic_deregister_service_handler);
-
-/*
- * Typically called by the codec driver to register a callback that enables the
- * core driver to pass structures of codec controls.
- */
-int clsic_register_notifier(struct clsic *clsic, struct notifier_block *nb)
-{
-	int ret = 0;
-	int i;
-
-	clsic_info(clsic, "clsic: %p data: %p\n", clsic, nb);
-
-	clsic_info(clsic, "clsic: %p data: %p cb: %pF\n",
-		   clsic, nb, nb->notifier_call);
-
-	ret = blocking_notifier_chain_register(&clsic->notifier, nb);
-	if (ret != 0)
-		return ret;
-
-	/*
-	 * For each service, if they have registered controls before the codec
-	 * registers the callback then register them with the codec
-	 */
-	for (i = 0; i <= CLSIC_SERVICE_MAX; i++) {
-		if ((clsic->service_handlers[i] != NULL) &&
-		    (clsic->service_handlers[i]->kcontrols != NULL)) {
-			clsic_register_codec_controls(clsic,
-				     clsic->service_handlers[i]->kcontrol_count,
-				     clsic->service_handlers[i]->kcontrols);
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(clsic_register_notifier);
-
-/*
- * Typically called by the codec driver to remove it's callback handler.
- */
-int clsic_deregister_notifier(struct clsic *clsic, struct notifier_block *nb)
-{
-	clsic_info(clsic, "clsic: %p data: %p\n", clsic, nb);
-
-	clsic_info(clsic, "clsic: %p data: %p fn: %pF\n",
-		   clsic, nb, nb->notifier_call);
-
-	return blocking_notifier_chain_unregister(&clsic->notifier, nb);
-}
-EXPORT_SYMBOL_GPL(clsic_deregister_notifier);
-
-/*
- * This function passes a service controls structure over to the codec so they
- * can be added.
- *
- * This is currently being invoked by service handlers when they add controls
- * but it could be performed by the service infrastructure after the service
- * start() function returns.
- */
-int clsic_register_codec_controls(struct clsic *clsic,
-				  uint8_t kcontrol_count,
-				  struct snd_kcontrol_new *kcontrols)
-{
-	struct clsic_controls_cb_data cbdata;
-
-	clsic_info(clsic, "%d controls: %p\n", kcontrol_count, kcontrols);
-
-	cbdata.kcontrol_count = kcontrol_count;
-	cbdata.kcontrols = kcontrols;
-
-	return blocking_notifier_call_chain(&clsic->notifier,
-					    CLSIC_NOTIFY_ADD_KCONTROLS,
-					    &cbdata);
-}
-
-/*
- * This function passes a service controls structure over to the codec so they
- * can be removed or deactivated.
- *
- * This is somewhat wishful thinking as I don't think it is possible to remove
- * a control, though it could be possible for the controls to have their type
- * or function callbacks changed to be benign.
- *
- * This is currently being invoked by service handlers in their stop() routine
- * but it could be performed by the service infrastructure before the service
- * stop() function is called.
- */
-
-int clsic_deregister_codec_controls(struct clsic *clsic,
-				    uint8_t kcontrol_count,
-				    struct snd_kcontrol_new *kcontrols)
-{
-	struct clsic_controls_cb_data cbdata;
-
-	clsic_info(clsic, "%d controls: %p\n", kcontrol_count, kcontrols);
-
-	cbdata.kcontrol_count = kcontrol_count;
-	cbdata.kcontrols = kcontrols;
-
-	return blocking_notifier_call_chain(&clsic->notifier,
-					    CLSIC_NOTIFY_REMOVE_KCONTROLS,
-					    &cbdata);
-}
 
 /*
  * This allow services to mark themselves busy(= 1)/idle(= 0).
