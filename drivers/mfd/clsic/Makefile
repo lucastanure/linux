@@ -7,7 +7,6 @@ clsic-objs			:= clsic-core.o clsic-msg.o clsic-irq.o
 clsic-objs			+= clsic-bootsrv.o clsic-syssrv.o
 clsic-objs			+= clsic-regmapsrv.o clsic-tables.o
 clsic-objs			+= clsic-debugsrv.o
-clsic-objs			+= clsic-voxsrv.o
 clsic-objs			+= clsic-tacna.o
 
 obj-$(CONFIG_MFD_CLSIC)	+= clsic.o
