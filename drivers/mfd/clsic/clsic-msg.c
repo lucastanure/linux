@@ -792,8 +792,7 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	mutex_init(&clsic->message_lock);
 
 	clsic->message_cache = kmem_cache_create("clsic_messages",
-						 sizeof(struct
-							clsic_message),
+						 sizeof(struct clsic_message),
 						 0, 0, NULL);
 	if (clsic->message_cache == NULL)
 		return -ENOMEM;
