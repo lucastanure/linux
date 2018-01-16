@@ -282,9 +282,18 @@ static const char *clsic_error_string(int error_index)
 	return "Unrecognised CLSIC error code";
 }
 
-int clsic_vox_asr_stream_open(struct clsic_vox *vox,
-			      struct snd_compr_stream *stream)
+static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 {
+	struct snd_soc_pcm_runtime *rtd = stream->private_data;
+	struct clsic_vox *vox = snd_soc_codec_get_drvdata(rtd->codec);
+
+	if (strcmp(rtd->codec_dai->name, "clsic-dsp-vox-asr") != 0) {
+		clsic_err(vox->clsic,
+			  "No compressed stream supported for: %s\n",
+			  rtd->codec_dai->name);
+		return -EINVAL;
+	}
+
 	/*
 	 * find vox service handler
 	 *
@@ -314,22 +323,6 @@ int clsic_vox_asr_stream_open(struct clsic_vox *vox,
 	trace_clsic_vox_asr_stream_open(stream->direction);
 
 	return 0;
-}
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_open);
-
-static int clsic_codec_asr_stream_open(struct snd_compr_stream *stream)
-{
-	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_vox *vox = snd_soc_codec_get_drvdata(rtd->codec);
-
-	if (strcmp(rtd->codec_dai->name, "clsic-dsp-vox-asr") != 0) {
-		clsic_err(vox->clsic,
-			  "No compressed stream supported for: %s\n",
-			  rtd->codec_dai->name);
-		return -EINVAL;
-	}
-
-	return clsic_vox_asr_stream_open(vox, stream);
 }
 
 int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
@@ -788,7 +781,7 @@ static struct snd_soc_dai_driver clsic_vox_dai[] = {
 };
 
 static struct snd_compr_ops clsic_vox_compr_ops = {
-	.open = clsic_codec_asr_stream_open,
+	.open = clsic_vox_asr_stream_open,
 	.free = clsic_vox_asr_stream_free,
 	.set_params = clsic_vox_asr_stream_set_params,
 	.trigger = clsic_vox_asr_stream_trigger,
