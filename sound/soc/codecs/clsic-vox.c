@@ -2483,10 +2483,6 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	struct clsic_vox *vox;
 	int ret;
 
-	dev_info(&pdev->dev, "%s() service %p.\n", __func__, vox_service);
-
-	dev_info(&pdev->dev, "%s() clsic %p.\n", __func__, clsic);
-
 	vox = devm_kzalloc(&pdev->dev, sizeof(struct clsic_vox),
 				 GFP_KERNEL);
 	if (vox == NULL)
@@ -2517,17 +2513,6 @@ static int clsic_vox_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
 		 &pdev->dev, ret);
-
-	if (ret == 0) {
-		dev_info(&pdev->dev, "%s() test sending idle message.\n",
-			 __func__);
-
-		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-		if (ret) {
-			clsic_err(clsic, "Error sending msg: %d.\n", ret);
-			return -EIO;
-		}
-	}
 
 	return ret;
 }
