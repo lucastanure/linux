@@ -827,6 +827,14 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 		return -EIO;
 	}
 
+	/* Mark vox as using power management when not in CLSIC IDLE mode. */
+	if (new_mode == CLSIC_VOX_MODE_IDLE)
+		clsic_pm_service_mark(vox->clsic,
+				      vox->service->service_instance, false);
+	else
+		clsic_pm_service_mark(vox->clsic,
+				      vox->service->service_instance, true);
+
 	switch (msg_rsp.rsp_set_mode.hdr.err) {
 	case CLSIC_ERR_NONE:
 		return 0;
