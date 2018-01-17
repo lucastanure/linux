@@ -470,17 +470,15 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	msg_rsp = (union clsic_vox_msg *) &msg->response;
 	if (!clsic_get_bulk_bit(msg_rsp->rsp_get_asr_block.hdr.sbc) &&
 	    msg_rsp->rsp_get_asr_block.hdr.err != 0) {
-		clsic_err(clsic,
-			  "Device responded with error code: %s\n",
-			  clsic_error_string(
+		clsic_info(clsic, "response: %s\n",
+			   clsic_error_string(
 				msg_rsp->rsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
 		return CLSIC_MSG_RELEASED;
 	} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
-		clsic_err(clsic,
-			  "Device responded with error code: %s\n",
-			  clsic_error_string(
+		clsic_info(clsic, "bulkresponse: %s\n",
+			   clsic_error_string(
 				msg_rsp->blkrsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
@@ -2190,6 +2188,7 @@ static int vox_notification_handler(struct clsic *clsic,
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
 		clsic_dbg(clsic, "new biometric results available");
 		complete(&vox->new_bio_results_completion);
+		ret = CLSIC_HANDLED;
 		break;
 	default:
 		clsic_err(clsic, "unrecognised message with message ID %d\n",
