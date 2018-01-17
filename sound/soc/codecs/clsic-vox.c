@@ -1751,7 +1751,7 @@ static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
 
-	if (vox->phrase_id > (VOX_MAX_PHRASES - 1))
+	if (ucontrol->value.integer.value[0] > (VOX_MAX_PHRASES - 1))
 		return -EINVAL;
 
 	vox->phrase_id = ucontrol->value.integer.value[0];
