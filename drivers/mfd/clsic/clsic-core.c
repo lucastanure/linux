@@ -777,6 +777,7 @@ void clsic_pm_service_mark(struct clsic *clsic, uint8_t service_instance,
 			clsic_info(clsic, "double clear %d", service_instance);
 	}
 }
+EXPORT_SYMBOL_GPL(clsic_pm_service_mark);
 
 /*
  * Check the services bitmap
