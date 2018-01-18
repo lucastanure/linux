@@ -1819,7 +1819,7 @@ static int clsic_probe(struct platform_device *pdev)
 	dsp->n_rx_channels = CLSIC_DSP2_N_RX_CHANNELS;
 	dsp->n_tx_channels = CLSIC_DSP2_N_TX_CHANNELS;
 
-	ret = wm_halo_init(dsp);
+	ret = wm_halo_init(dsp, &clsic_codec->core.rate_lock);
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to initialise DSP2.\n");
 
