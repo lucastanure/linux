@@ -23,7 +23,6 @@
 #include <linux/mfd/clsic/syssrv.h>
 #include <linux/mfd/clsic/regmapsrv.h>
 #include <linux/mfd/clsic/debugsrv.h>
-#include <linux/mfd/clsic/voxsrv.h>
 #include <linux/mfd/clsic/bootsrv.h>
 #include "clsic-trace.h"
 

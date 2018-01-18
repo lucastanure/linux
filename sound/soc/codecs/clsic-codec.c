@@ -31,7 +31,6 @@
 
 #include <linux/mfd/clsic/core.h>
 #include <linux/mfd/clsic/regmapsrv.h>
-#include <linux/mfd/clsic/voxsrv.h>
 
 #define CLSIC_N_FLL			2
 #define CLSIC_NUM_DSP			2
