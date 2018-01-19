@@ -471,6 +471,10 @@ config SND_SOC_CS42L42
 
 config SND_SOC_CLSIC_VOX
 	tristate "Cirrus Logic CLSIC VOX"
+        depends on MFD_CLSIC
+
+config SND_SOC_CLSIC_ALGORITHM
+	tristate "Cirrus Logic CLSIC ALGORITHM"
 	depends on MFD_CLSIC
 
 config SND_SOC_CS42L51
