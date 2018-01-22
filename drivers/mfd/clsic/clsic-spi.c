@@ -24,8 +24,31 @@
  * Messages are sent to firmware running on the device via the FIFO and the
  * firmware performs activities on our behalf as a proxy.
  *
- * For this reason the regmap configuration is extremely limited and cacheless.
+ * For this reason the regmap configuration is extremely limited, all volatile
+ * and cacheless.
  */
+bool clsic_spi_regmap_readable(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case TACNA_DEVID:
+	case TACNA_REVID:
+	case TACNA_FABID:
+	case TACNA_RELID:
+	case TACNA_OTPID:
+	case TACNA_SFT_RESET:
+	case TACNA_IRQ1_EINT2:
+	case TACNA_IRQ1_MASK2:
+	case CLSIC_FW_UPDATE_REG:
+	case CLSIC_FIFO1_RX:
+	case CLSIC_FIFO1_STS:
+	case CLSIC_FIFO1_TX_SOUNDWIRE: /* and CLSIC_FIFO1_TX_SLIMBUS */
+	case CLSIC_FIFO1_TX_SPI:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static const struct regmap_config clsic_spi_regmap = {
 	.name = "clsic",
 	.reg_bits = 32,
@@ -33,9 +56,8 @@ static const struct regmap_config clsic_spi_regmap = {
 	.val_bits = 32,
 	.reg_stride = 4,
 
-	.max_register = CLSIC_TOP_REGISTER,
-	.readable_reg = &clsic_readable_register,
-	.volatile_reg = &clsic_volatile_register,
+	.max_register = CLSIC_FIFO1_TX_SPI,
+	.readable_reg = &clsic_spi_regmap_readable,
 	.cache_type = REGCACHE_NONE,
 };
 
