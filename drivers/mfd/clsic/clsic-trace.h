@@ -17,7 +17,6 @@
 #define CLSIC_TRACE_H
 
 #include <linux/mfd/clsic/message.h>
-#include <linux/mfd/clsic/voxsrv.h>
 #include <linux/tracepoint.h>
 #include <uapi/sound/compress_offload.h>
 
@@ -197,26 +196,6 @@ TRACE_EVENT(clsic_statechange,
 			)
 );
 
-TRACE_EVENT(clsic_vox_statechange,
-
-	TP_PROTO(enum vox_state_enum state_from,
-		 enum vox_state_enum state_to),
-	TP_ARGS(state_from, state_to),
-	TP_STRUCT__entry(
-			__field(uint8_t, state_from)
-			__field(uint8_t, state_to)
-			),
-	TP_fast_assign(
-			__entry->state_from = state_from;
-			__entry->state_to = state_to
-		),
-	TP_printk(
-			"0x%x -> 0x%x",
-			__entry->state_from,
-			__entry->state_to
-			)
-);
-
 TRACE_EVENT(clsic_vox_modechange,
 	TP_PROTO(enum clsic_vox_mode mode_from,
 		 enum clsic_vox_mode mode_to),
@@ -389,6 +368,119 @@ DEFINE_EVENT(clsic_vox_asr_stream_copy_tpl, clsic_vox_asr_stream_copy_start,
 DEFINE_EVENT(clsic_vox_asr_stream_copy_tpl, clsic_vox_asr_stream_copy_end,
 	TP_PROTO(size_t count, size_t read_idx, size_t write_idx),
 	TP_ARGS(count, read_idx, write_idx)
+);
+
+TRACE_EVENT(clsic_vox_set_mode,
+	TP_PROTO(enum clsic_vox_mode mode),
+	TP_ARGS(mode),
+	TP_STRUCT__entry(
+			__field(uint8_t, mode)
+			),
+	TP_fast_assign(
+			__entry->mode = mode
+		),
+	TP_printk("CLSIC change vox mode to %s (0x%x)",
+		  clsic_mode_to_string(__entry->mode),
+		  __entry->mode
+		)
+);
+
+DECLARE_EVENT_CLASS(clsic_vox_phrase_id,
+	TP_PROTO(uint8_t phrase_id),
+	TP_ARGS(phrase_id),
+	TP_STRUCT__entry(
+			__field(uint8_t, phrase_id)
+			),
+	TP_fast_assign(
+			__entry->phrase_id = phrase_id;
+		),
+	TP_printk("phrase ID %d", __entry->phrase_id)
+);
+
+DEFINE_EVENT(clsic_vox_phrase_id, clsic_vox_install_phrase,
+	TP_PROTO(uint8_t phrase_id),
+	TP_ARGS(phrase_id)
+);
+
+DEFINE_EVENT(clsic_vox_phrase_id, clsic_vox_uninstall_phrase,
+	TP_PROTO(uint8_t phrase_id),
+	TP_ARGS(phrase_id)
+);
+
+TRACE_EVENT(clsic_vox_remove_user,
+	TP_PROTO(uint8_t user_id, uint8_t phrase_id),
+	TP_ARGS(user_id, phrase_id),
+	TP_STRUCT__entry(
+			__field(uint8_t, user_id)
+			__field(uint8_t, phrase_id)
+			),
+	TP_fast_assign(
+			__entry->user_id = user_id;
+			__entry->phrase_id = phrase_id;
+		),
+	TP_printk("remove user %u for phrase %u",
+		  __entry->user_id,
+		  __entry->phrase_id
+		)
+);
+
+TRACE_EVENT(clsic_vox_start_enrol_user,
+	TP_PROTO(uint8_t user_id, uint8_t phrase_id, uint16_t duration,
+		 uint16_t timeout, uint8_t number_of_reps),
+	TP_ARGS(user_id, phrase_id, duration, timeout, number_of_reps),
+	TP_STRUCT__entry(
+			__field(uint8_t, user_id)
+			__field(uint8_t, phrase_id)
+			__field(uint16_t, duration)
+			__field(uint16_t, timeout)
+			__field(uint8_t, number_of_reps)
+			),
+	TP_fast_assign(
+			__entry->user_id = user_id;
+			__entry->phrase_id = phrase_id;
+			__entry->duration = duration;
+			__entry->timeout = timeout;
+			__entry->number_of_reps = number_of_reps;
+		),
+	TP_printk(
+		  "enrol user %u for phrase %u with duration %ums/timeout %ums and %u reps",
+		  __entry->user_id,
+		  __entry->phrase_id,
+		  __entry->duration,
+		  __entry->timeout,
+		  __entry->number_of_reps
+		)
+);
+
+DECLARE_EVENT_CLASS(clsic_vox_generic,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy),
+	TP_STRUCT__entry(
+			__field(uint8_t, dummy)
+			),
+	TP_fast_assign(
+		),
+	TP_printk("%s", " ")
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_perform_enrol_rep,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_complete_enrolment,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_get_bio_results,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_stop_bio_results,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
 );
 
 TRACE_EVENT(clsic_dev_panic,

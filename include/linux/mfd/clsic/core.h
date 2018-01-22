@@ -102,6 +102,24 @@ static inline const char *clsic_state_to_string(enum clsic_states state)
 	}
 }
 
+static inline const char *clsic_mode_to_string(enum clsic_states state)
+{
+	switch (state) {
+	case CLSIC_VOX_MODE_IDLE:
+		return "IDLE";
+	case CLSIC_VOX_MODE_MANAGE:
+		return "MANAGE";
+	case CLSIC_VOX_MODE_ENROL:
+		return "ENROL";
+	case CLSIC_VOX_MODE_LISTEN:
+		return "LISTEN";
+	case CLSIC_VOX_MODE_STREAM:
+		return "STREAM";
+	default:
+		return "UNKNOWN";
+	}
+}
+
 struct clsic_panic {
 	union t_clsic_generic_message msg;
 	struct clsic_debug_info di;

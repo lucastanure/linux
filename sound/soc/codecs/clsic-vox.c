@@ -335,8 +335,6 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
-	struct clsic_vox *vox =
-		container_of(asr_stream, struct clsic_vox, asr_stream);
 
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
@@ -525,6 +523,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	return CLSIC_MSG_RELEASED;
 }
 
+/* The trigger detect callback */
 static void clsic_vox_asr_stream_trig_det_cb(struct clsic *clsic,
 					     struct clsic_service *service)
 {
@@ -833,14 +832,6 @@ static struct snd_soc_platform_driver clsic_vox_compr_platform = {
 	.compr_ops = &clsic_vox_compr_ops,
 };
 
-static const char *vox_clsic_mode_strings[6] = {
-	[CLSIC_VOX_MODE_IDLE]	= "IDLE",
-	[CLSIC_VOX_MODE_MANAGE]	= "MANAGE",
-	[CLSIC_VOX_MODE_ENROL]	= "ENROL",
-	[CLSIC_VOX_MODE_LISTEN] = "LISTEN",
-	[CLSIC_VOX_MODE_STREAM] = "STREAM",
-};
-
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 {
 	union clsic_vox_msg msg_cmd;
@@ -858,8 +849,7 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_dbg(vox->clsic, "ret %d new mode %s.\n", ret,
-		  vox_clsic_mode_strings[new_mode]);
+	trace_clsic_vox_set_mode(new_mode);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1062,7 +1052,7 @@ static int vox_install_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	clsic_dbg(vox->clsic, "start installing phrase %d.\n", vox->phrase_id);
+	trace_clsic_vox_install_phrase(vox->phrase_id);
 
 	ret = request_firmware(&fw, phrase_files[vox->phrase_id].file,
 			       vox->clsic->dev);
@@ -1157,6 +1147,8 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	int ret, usr;
 
+	trace_clsic_vox_uninstall_phrase(vox->phrase_id);
+
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
 		clsic_err(vox->clsic, "%d.\n", ret);
@@ -1174,8 +1166,6 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
-	clsic_dbg(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1228,6 +1218,8 @@ static int vox_remove_user(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
+	trace_clsic_vox_remove_user(vox->user_id, vox->phrase_id);
+
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
 		clsic_err(vox->clsic, "%d.\n", ret);
@@ -1246,9 +1238,6 @@ static int vox_remove_user(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
-	clsic_dbg(vox->clsic, "ret %d user %d phrase %d.\n", ret, vox->user_id,
-		  vox->phrase_id);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1293,6 +1282,10 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret;
+
+	trace_clsic_vox_start_enrol_user(vox->user_id, vox->phrase_id,
+					 vox->duration, vox->timeout,
+					 vox->number_of_reps);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_ENROL);
 	if (ret) {
@@ -1362,11 +1355,6 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_dbg(vox->clsic,
-		  "ret %d user %d phrase %d duration %dms timeout %dms number_of_reps %d.\n",
-		  ret, vox->user_id, vox->phrase_id, vox->duration,
-		  vox->timeout, vox->number_of_reps);
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_LIBRARY;
@@ -1415,6 +1403,8 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
+	trace_clsic_vox_perform_enrol_rep(0);
+
 	/* Start the rep. */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
@@ -1425,8 +1415,6 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
-	clsic_dbg(vox->clsic, "ret %d perform rep.\n", ret);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1483,7 +1471,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_dbg(vox->clsic, "ret %d", ret);
+	trace_clsic_vox_complete_enrolment(0);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1534,6 +1522,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
+	trace_clsic_vox_get_bio_results(0);
+
 	vox->get_bio_results_early_exit = false;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
 
@@ -1565,8 +1555,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 				  sizeof(struct clsic_vox_auth_challenge),
 				  (uint8_t *) &vox->biometric_results,
 				  size_of_bio_results(vox->bio_results_format));
-
-	clsic_dbg(vox->clsic, "ret %d", ret);
 
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -1621,6 +1609,8 @@ exit:
 static void vox_stop_bio_results(struct clsic_vox *vox)
 {
 	vox->error_info = VOX_ERROR_SUCCESS;
+
+	trace_clsic_vox_stop_bio_results(0);
 
 	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
 }
@@ -2218,7 +2208,6 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
-		clsic_dbg(clsic, "new biometric results available");
 		complete(&vox->new_bio_results_completion);
 		break;
 	default:
