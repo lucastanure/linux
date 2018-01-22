@@ -93,9 +93,6 @@ struct clsic_vox {
 	/* ASR data stream */
 	struct clsic_asr_stream asr_stream;
 
-	/* The trigger detect callback */
-	void (*trig_det_cb)(struct clsic *clsic, struct clsic_service *service);
-
 	struct snd_kcontrol_new kcontrol_new[VOX_NUM_NEW_KCONTROLS];
 	struct mutex mgmt_mode_lock;
 	/* mgmt_mode refers to ongoing vox biometric operations only. */
@@ -355,7 +352,6 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	asr_stream->copied_total = 0;
 	asr_stream->stream = NULL;
 	complete(&asr_stream->trigger_heard);
-	vox->trig_det_cb = NULL;
 
 	return 0;
 }
@@ -658,8 +654,6 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
 				       asr_stream,
 				       "clsic-vox-asr-wait-for-trigger");
-
-		vox->trig_det_cb = clsic_vox_asr_stream_trig_det_cb;
 
 		wake_up_process(asr_stream->wait_for_trigger);
 
@@ -2176,8 +2170,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		clsic_err(vox->clsic, "trigger detection error on CLSIC.\n");
 		break;
 	case CLSIC_VOX_MSG_N_TRGR_DETECT:
-		if (vox->trig_det_cb)
-			vox->trig_det_cb(vox->clsic,
+		clsic_vox_asr_stream_trig_det_cb(vox->clsic,
 				clsic_find_first_service(vox->clsic,
 							 CLSIC_SRV_TYPE_VOX));
 		break;
