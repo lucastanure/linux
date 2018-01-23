@@ -2065,40 +2065,16 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		/* Not streaming ASR data. */
 		switch (ucontrol->value.enumerated.item[0]) {
 		case VOX_MGMT_MODE_INSTALL_PHRASE:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				vox->mgmt_mode =
-						VOX_MGMT_MODE_INSTALLING_PHRASE;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
 		case VOX_MGMT_MODE_UNINSTALL_PHRASE:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				vox->mgmt_mode =
-					VOX_MGMT_MODE_UNINSTALLING_PHRASE;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
 		case VOX_MGMT_MODE_REMOVE_USER:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				vox->mgmt_mode = VOX_MGMT_MODE_REMOVING_USER;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
 		case VOX_MGMT_MODE_START_ENROL:
 			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				vox->mgmt_mode = VOX_MGMT_MODE_STARTING_ENROL;
+				/*
+				 * Management mode goes from command
+				 * e.g. INSTALL to a state e.g. INSTALLING
+				 */
+				vox->mgmt_mode =
+					ucontrol->value.enumerated.item[0] + 1;
 				mutex_unlock(&vox->mgmt_mode_lock);
 				schedule_work(&vox->mgmt_mode_work);
 			} else {
@@ -2107,19 +2083,10 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			}
 			break;
 		case VOX_MGMT_MODE_PERFORM_ENROL_REP:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
-				vox->mgmt_mode =
-					VOX_MGMT_MODE_PERFORMING_ENROL_REP;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
 		case VOX_MGMT_MODE_COMPLETE_ENROL:
 			if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
-				vox->mgmt_mode = VOX_MGMT_MODE_COMPLETING_ENROL;
+				vox->mgmt_mode =
+					ucontrol->value.enumerated.item[0] + 1;
 				mutex_unlock(&vox->mgmt_mode_lock);
 				schedule_work(&vox->mgmt_mode_work);
 			} else {
