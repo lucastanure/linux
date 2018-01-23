@@ -92,8 +92,6 @@ struct clsic_syssrv_struct {
 	struct clsic *clsic;
 
 	struct clsic_service *srv;
-
-	struct mfd_cell clsic_vox_dev;
 };
 
 int clsic_system_service_start(struct clsic *clsic,
@@ -207,6 +205,74 @@ static int clsic_system_service_reenumerate(struct clsic *clsic)
 	}
 
 	return 0;
+}
+
+static int clsic_system_service_finder(struct clsic *clsic,
+				uint8_t service_instance,
+				uint16_t service_type,
+				uint32_t service_version)
+{
+	unsigned int type;
+	int ret;
+	struct mfd_cell *dev;
+	struct device_node *services_np, *child_np;
+
+	services_np = of_get_child_by_name(clsic->dev->of_node, "services");
+	for_each_child_of_node(services_np, child_np) {
+		of_property_read_u32(child_np, "type", &type);
+		if (service_type != type)
+			continue;
+		if (clsic->service_handlers[service_instance] != NULL)
+			return 0;
+		dev = devm_kzalloc(clsic->dev, sizeof(struct mfd_cell),
+				   GFP_KERNEL);
+		if (!dev) {
+			ret = -ENOMEM;
+			goto error;
+		}
+
+		ret = of_property_read_string(child_np, "name", &dev->name);
+		if (ret)
+			goto error_withfree;
+
+		ret = of_property_read_string(child_np, "compatible",
+					      &dev->of_compatible);
+		if (ret)
+			goto error_withfree;
+
+		clsic_register_service_handler(clsic, service_instance,
+					       service_type,
+					       service_version,
+					       NULL);
+
+		clsic->service_handlers[service_instance]->data = clsic;
+
+		dev->platform_data = clsic->service_handlers[service_instance];
+		dev->pdata_size = sizeof(struct clsic_service);
+
+		ret = mfd_add_devices(clsic->dev, PLATFORM_DEVID_NONE, dev, 1,
+				      NULL, 0, NULL);
+		if (ret)
+			goto error_withfree;
+		return 0;
+	}
+
+	/* unrecognised */
+	clsic_err(clsic,
+		  " Unrecognised service (%d: type 0x%x ver 0x%x)",
+		  service_instance, service_type,
+		  service_version);
+
+	return -ENODEV;
+
+error_withfree:
+	devm_kfree(clsic->dev, dev);
+error:
+	clsic_err(clsic,
+		  " Failed to add device (%d: type 0x%x ver 0x%x)",
+		  service_instance, service_type,
+		  service_version);
+	return ret;
 }
 
 /*
@@ -392,36 +458,6 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 						    service_version,
 						    clsic_regmap_service_start);
 			break;
-		case CLSIC_SRV_TYPE_VOX:
-			if (clsic->service_handlers[service_instance] == NULL) {
-				/* Do this once - find a nicer way */
-				clsic_register_service_handler(clsic,
-							       service_instance,
-							       service_type,
-							       service_version,
-							       NULL);
-				/* clsic_vox_service_start */
-				clsic->service_handlers[service_instance]->data
-					= clsic;
-
-				syssrv->clsic_vox_dev.name = "clsic-vox";
-				syssrv->clsic_vox_dev.platform_data =
-				      clsic->service_handlers[service_instance];
-				syssrv->clsic_vox_dev.pdata_size =
-					sizeof(struct clsic_service);
-				syssrv->clsic_vox_dev.of_compatible =
-					"cirrus,clsic-vox";
-
-				ret = mfd_add_devices(clsic->dev,
-						      PLATFORM_DEVID_NONE,
-						      &syssrv->clsic_vox_dev, 1,
-						      NULL, 0, NULL);
-				if (ret)
-					clsic_err(clsic,
-						  "Failed to add vox device %d\n",
-						  ret);
-			}
-			break;
 		case CLSIC_SRV_TYPE_DBG:
 			clsic_register_service_handler(clsic,
 						       service_instance,
@@ -429,11 +465,13 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 						       service_version, NULL);
 			break;
 		default:
-			/* unrecognised */
-			clsic_err(clsic,
-				  " Unrecognised service (%d: type 0x%x ver 0x%x)",
-				  service_instance, service_type,
-				  service_version);
+			ret = clsic_system_service_finder(clsic,
+							  service_instance,
+							  service_type,
+							  service_version);
+			if (!ret)
+				break;
+
 			clsic_register_service_handler(clsic,
 						       service_instance,
 						       service_type,
