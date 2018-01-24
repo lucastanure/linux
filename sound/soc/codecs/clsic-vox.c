@@ -1724,9 +1724,6 @@ static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
 
-	if (ucontrol->value.integer.value[0] > (VOX_MAX_PHRASES - 1))
-		return -EINVAL;
-
 	vox->phrase_id = ucontrol->value.integer.value[0];
 
 	return 0;
@@ -1752,10 +1749,6 @@ static int vox_ctrl_user_id_put(struct snd_kcontrol *kcontrol,
 		(struct soc_mixer_control *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, user_id_mixer_ctrl);
-
-	if ((ucontrol->value.integer.value[0] < CLSIC_VOX_USER1) ||
-	    (ucontrol->value.integer.value[0] > CLSIC_VOX_USER3))
-		return -EINVAL;
 
 	vox->user_id = ucontrol->value.integer.value[0];
 
@@ -1783,10 +1776,6 @@ static int vox_ctrl_duration_put(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, duration_mixer_ctrl);
 
-	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] > VOX_MAX_DURATION_TIMEOUT))
-		return -EINVAL;
-
 	vox->duration = ucontrol->value.integer.value[0];
 
 	return 0;
@@ -1812,10 +1801,6 @@ static int vox_ctrl_timeout_put(struct snd_kcontrol *kcontrol,
 		(struct soc_mixer_control *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, timeout_mixer_ctrl);
-
-	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] > VOX_MAX_DURATION_TIMEOUT))
-		return -EINVAL;
 
 	vox->timeout = ucontrol->value.integer.value[0];
 
@@ -1843,10 +1828,6 @@ static int vox_ctrl_reps_put(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox =
 		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
 
-	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] > VOX_MAX_NUM_REPS))
-		return -EINVAL;
-
 	vox->number_of_reps = ucontrol->value.integer.value[0];
 
 	return 0;
@@ -1871,10 +1852,6 @@ static int vox_ctrl_sec_level_put(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_error_info);
 
-	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] >= VOX_NUM_SEC_LEVEL_TYPES))
-		return -EINVAL;
-
 	vox->security_level = ucontrol->value.enumerated.item[0];
 
 	return 0;
@@ -1898,10 +1875,6 @@ static int vox_ctrl_bio_res_type_put(struct snd_kcontrol *kcontrol,
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_error_info);
-
-	if ((ucontrol->value.integer.value[0] < 0) ||
-	    (ucontrol->value.integer.value[0] >= VOX_NUM_BIO_RESULTS_TYPES))
-		return -EINVAL;
 
 	vox->bio_results_format = ucontrol->value.enumerated.item[0];
 
