@@ -96,17 +96,17 @@ struct clsic_vox {
 	struct snd_kcontrol_new kcontrol_new[VOX_NUM_NEW_KCONTROLS];
 	struct mutex mgmt_mode_lock;
 	/* mgmt_mode refers to ongoing vox biometric operations only. */
-	int mgmt_mode;
-	int error_info;
+	unsigned int mgmt_mode;
+	unsigned int error_info;
 	/* Used for showing result of a top level control mode change. */
 
-	uint8_t phrase_id;
-	uint8_t user_id;
-	uint16_t duration;
-	uint16_t timeout;
-	uint8_t number_of_reps;
-	uint8_t security_level;
-	uint8_t bio_results_format;
+	unsigned int phrase_id;
+	unsigned int user_id;
+	unsigned int duration;
+	unsigned int timeout;
+	unsigned int number_of_reps;
+	unsigned int security_level;
+	unsigned int bio_results_format;
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
 	struct clsic_vox_auth_key bio_pub_key;
@@ -1676,18 +1676,6 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 	}
 }
 
-static int vox_ctrl_error_info_get(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_error_info);
-
-	ucontrol->value.enumerated.item[0] = vox->error_info;
-
-	return 0;
-}
-
 static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
@@ -1703,180 +1691,48 @@ static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int vox_ctrl_phrase_id_get(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
+/* Handle getting of all INT kcontrols. */
+static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
+	struct soc_mixer_control *e =
+			(struct soc_mixer_control *) kcontrol->private_value;
 
-	ucontrol->value.integer.value[0] = vox->phrase_id;
+	ucontrol->value.enumerated.item[0] = *(unsigned int *)e->dobj.private;
 
 	return 0;
 }
 
-static int vox_ctrl_phrase_id_put(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
+/* Handle setting of all INT kcontrols. */
+static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, phrase_id_mixer_ctrl);
+	struct soc_mixer_control *e =
+			(struct soc_mixer_control *) kcontrol->private_value;
 
-	vox->phrase_id = ucontrol->value.integer.value[0];
+	*(unsigned int *) e->dobj.private = ucontrol->value.enumerated.item[0];
 
 	return 0;
 }
 
-static int vox_ctrl_user_id_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, user_id_mixer_ctrl);
-
-	ucontrol->value.integer.value[0] = vox->user_id;
-
-	return 0;
-}
-
-static int vox_ctrl_user_id_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, user_id_mixer_ctrl);
-
-	vox->user_id = ucontrol->value.integer.value[0];
-
-	return 0;
-}
-
-static int vox_ctrl_duration_get(struct snd_kcontrol *kcontrol,
-				 struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, duration_mixer_ctrl);
-
-	ucontrol->value.integer.value[0] = vox->duration;
-
-	return 0;
-}
-
-static int vox_ctrl_duration_put(struct snd_kcontrol *kcontrol,
-				 struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, duration_mixer_ctrl);
-
-	vox->duration = ucontrol->value.integer.value[0];
-
-	return 0;
-}
-
-static int vox_ctrl_timeout_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, timeout_mixer_ctrl);
-
-	ucontrol->value.integer.value[0] = vox->timeout;
-
-	return 0;
-}
-
-static int vox_ctrl_timeout_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, timeout_mixer_ctrl);
-
-	vox->timeout = ucontrol->value.integer.value[0];
-
-	return 0;
-}
-
-static int vox_ctrl_reps_get(struct snd_kcontrol *kcontrol,
+/* Handle getting of all ENUM kcontrols. */
+static int vox_ctrl_enum_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 
-	ucontrol->value.integer.value[0] = vox->number_of_reps;
+	ucontrol->value.enumerated.item[0] = *(unsigned int *) e->dobj.private;
 
 	return 0;
 }
 
-static int vox_ctrl_reps_put(struct snd_kcontrol *kcontrol,
+/* Handle setting of all ENUM kcontrols. */
+static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(mc, struct clsic_vox, reps_mixer_ctrl);
-
-	vox->number_of_reps = ucontrol->value.integer.value[0];
-
-	return 0;
-}
-
-static int vox_ctrl_sec_level_get(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
-{
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_error_info);
 
-	ucontrol->value.enumerated.item[0] = vox->security_level;
-
-	return 0;
-}
-
-static int vox_ctrl_sec_level_put(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_error_info);
-
-	vox->security_level = ucontrol->value.enumerated.item[0];
-
-	return 0;
-}
-
-static int vox_ctrl_bio_res_type_get(struct snd_kcontrol *kcontrol,
-				     struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_error_info);
-
-	ucontrol->value.enumerated.item[0] = vox->bio_results_format;
-
-	return 0;
-}
-
-static int vox_ctrl_bio_res_type_put(struct snd_kcontrol *kcontrol,
-				     struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_error_info);
-
-	vox->bio_results_format = ucontrol->value.enumerated.item[0];
+	*(unsigned int *) e->dobj.private = ucontrol->value.enumerated.item[0];
 
 	return 0;
 }
@@ -1963,18 +1819,6 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.integer.value[0] =
 	   vox->user_installed[(vox->phrase_id * VOX_MAX_USERS) + vox->user_id];
-
-	return 0;
-}
-
-static int vox_ctrl_mgmt_get(struct snd_kcontrol *kcontrol,
-			     struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(e, struct clsic_vox, soc_enum_mode);
-
-	ucontrol->value.enumerated.item[0] = vox->mgmt_mode;
 
 	return 0;
 }
@@ -2187,10 +2031,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[0].name = "Vox Management Mode";
 	vox->kcontrol_new[0].info = snd_soc_info_enum_double;
 	vox->kcontrol_new[0].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[0].get = vox_ctrl_mgmt_get;
+	vox->kcontrol_new[0].get = vox_ctrl_enum_get;
 	vox->kcontrol_new[0].put = vox_ctrl_mgmt_put;
 	vox->soc_enum_mode.items = VOX_NUM_MGMT_MODES;
 	vox->soc_enum_mode.texts = vox_mgmt_mode_text;
+	vox->soc_enum_mode.dobj.private = &vox->mgmt_mode;
 	vox->kcontrol_new[0].private_value =
 					(unsigned long) &vox->soc_enum_mode;
 	vox->kcontrol_new[0].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2202,10 +2047,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[1].name = "Vox Error Info";
 	vox->kcontrol_new[1].info = snd_soc_info_enum_double;
 	vox->kcontrol_new[1].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[1].get = vox_ctrl_error_info_get;
+	vox->kcontrol_new[1].get = vox_ctrl_enum_get;
 	vox->kcontrol_new[1].put = vox_ctrl_error_info_put;
 	vox->soc_enum_error_info.items = VOX_NUM_ERRORS;
 	vox->soc_enum_error_info.texts = vox_error_info_text;
+	vox->soc_enum_error_info.dobj.private = &vox->error_info;
 	vox->kcontrol_new[1].private_value =
 				(unsigned long)(&(vox->soc_enum_error_info));
 	vox->kcontrol_new[1].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2219,11 +2065,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->phrase_id_mixer_ctrl.min = 0;
 	vox->phrase_id_mixer_ctrl.max = VOX_MAX_PHRASES - 1;
 	vox->phrase_id_mixer_ctrl.platform_max = VOX_MAX_PHRASES - 1;
+	vox->phrase_id_mixer_ctrl.dobj.private = &vox->phrase_id;
 	vox->kcontrol_new[2].name = "Vox Phrase ID";
 	vox->kcontrol_new[2].info = snd_soc_info_volsw;
 	vox->kcontrol_new[2].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[2].get = vox_ctrl_phrase_id_get;
-	vox->kcontrol_new[2].put = vox_ctrl_phrase_id_put;
+	vox->kcontrol_new[2].get = vox_ctrl_int_get;
+	vox->kcontrol_new[2].put = vox_ctrl_int_put;
 	vox->kcontrol_new[2].private_value =
 		(unsigned long)(&(vox->phrase_id_mixer_ctrl));
 	vox->kcontrol_new[2].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2252,11 +2099,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->user_id_mixer_ctrl.min = CLSIC_VOX_USER1;
 	vox->user_id_mixer_ctrl.max = CLSIC_VOX_USER3;
 	vox->user_id_mixer_ctrl.platform_max = CLSIC_VOX_USER3;
+	vox->user_id_mixer_ctrl.dobj.private = &vox->user_id;
 	vox->kcontrol_new[4].name = "Vox User ID";
 	vox->kcontrol_new[4].info = snd_soc_info_volsw;
 	vox->kcontrol_new[4].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[4].get = vox_ctrl_user_id_get;
-	vox->kcontrol_new[4].put = vox_ctrl_user_id_put;
+	vox->kcontrol_new[4].get = vox_ctrl_int_get;
+	vox->kcontrol_new[4].put = vox_ctrl_int_put;
 	vox->kcontrol_new[4].private_value =
 		(unsigned long)(&(vox->user_id_mixer_ctrl));
 	vox->kcontrol_new[4].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2283,11 +2131,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->duration_mixer_ctrl.min = 0;
 	vox->duration_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
 	vox->duration_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
+	vox->duration_mixer_ctrl.dobj.private = &vox->duration;
 	vox->kcontrol_new[6].name = "Vox Duration in ms";
 	vox->kcontrol_new[6].info = snd_soc_info_volsw;
 	vox->kcontrol_new[6].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[6].get = vox_ctrl_duration_get;
-	vox->kcontrol_new[6].put = vox_ctrl_duration_put;
+	vox->kcontrol_new[6].get = vox_ctrl_int_get;
+	vox->kcontrol_new[6].put = vox_ctrl_int_put;
 	vox->kcontrol_new[6].private_value =
 		(unsigned long)(&(vox->duration_mixer_ctrl));
 	vox->kcontrol_new[6].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2300,11 +2149,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->timeout_mixer_ctrl.min = 0;
 	vox->timeout_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
 	vox->timeout_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
+	vox->timeout_mixer_ctrl.dobj.private = &vox->timeout;
 	vox->kcontrol_new[7].name = "Vox Timeout in ms";
 	vox->kcontrol_new[7].info = snd_soc_info_volsw;
 	vox->kcontrol_new[7].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[7].get = vox_ctrl_timeout_get;
-	vox->kcontrol_new[7].put = vox_ctrl_timeout_put;
+	vox->kcontrol_new[7].get = vox_ctrl_int_get;
+	vox->kcontrol_new[7].put = vox_ctrl_int_put;
 	vox->kcontrol_new[7].private_value =
 		(unsigned long)(&(vox->timeout_mixer_ctrl));
 	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2317,11 +2167,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->reps_mixer_ctrl.min = 1;
 	vox->reps_mixer_ctrl.max = VOX_MAX_NUM_REPS;
 	vox->reps_mixer_ctrl.platform_max = VOX_MAX_NUM_REPS;
+	vox->reps_mixer_ctrl.dobj.private = &vox->number_of_reps;
 	vox->kcontrol_new[8].name = "Vox Number of Enrolment Repetitions";
 	vox->kcontrol_new[8].info = snd_soc_info_volsw;
 	vox->kcontrol_new[8].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[8].get = vox_ctrl_reps_get;
-	vox->kcontrol_new[8].put = vox_ctrl_reps_put;
+	vox->kcontrol_new[8].get = vox_ctrl_int_get;
+	vox->kcontrol_new[8].put = vox_ctrl_int_put;
 	vox->kcontrol_new[8].private_value =
 		(unsigned long)(&(vox->reps_mixer_ctrl));
 	vox->kcontrol_new[8].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2333,10 +2184,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[9].name = "Vox Security Level";
 	vox->kcontrol_new[9].info = snd_soc_info_enum_double;
 	vox->kcontrol_new[9].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[9].get = vox_ctrl_sec_level_get;
-	vox->kcontrol_new[9].put = vox_ctrl_sec_level_put;
+	vox->kcontrol_new[9].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[9].put = vox_ctrl_enum_put;
 	vox->soc_enum_sec_level.items = VOX_NUM_SEC_LEVEL_TYPES;
 	vox->soc_enum_sec_level.texts = vox_sec_level_type_text;
+	vox->soc_enum_sec_level.dobj.private = &vox->security_level;
 	vox->kcontrol_new[9].private_value =
 				(unsigned long)(&(vox->soc_enum_sec_level));
 	vox->kcontrol_new[9].access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -2348,10 +2200,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[10].name = "Vox Biometric Results Format";
 	vox->kcontrol_new[10].info = snd_soc_info_enum_double;
 	vox->kcontrol_new[10].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[10].get = vox_ctrl_bio_res_type_get;
-	vox->kcontrol_new[10].put = vox_ctrl_bio_res_type_put;
+	vox->kcontrol_new[10].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[10].put = vox_ctrl_enum_put;
 	vox->soc_enum_bio_res_type.items = VOX_NUM_BIO_RESULTS_TYPES;
 	vox->soc_enum_bio_res_type.texts = vox_bio_results_type_text;
+	vox->soc_enum_bio_res_type.dobj.private = &vox->bio_results_format;
 	vox->kcontrol_new[10].private_value =
 				(unsigned long)(&(vox->soc_enum_bio_res_type));
 	vox->kcontrol_new[10].access = SNDRV_CTL_ELEM_ACCESS_READ |
