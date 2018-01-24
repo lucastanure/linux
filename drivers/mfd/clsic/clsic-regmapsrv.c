@@ -433,6 +433,16 @@ static struct mfd_cell clsic_devs[] = {
 	{ .name = "clsic-gpio", },
 };
 
+/*
+ * The RAS service does nothing when we receive a notification that the device
+ * has suspended
+ *
+ * The driver used to switch the regmap into cache_only and marked the cache as
+ * dirty, but this caused some downstream drivers to have failed regmap calls.
+ *
+ * On resume, marking the cache as dirty and calling sync recommits the
+ * previous contents of the regmap cache
+ */
 static int clsic_regmap_service_pm_handler(struct clsic_service *handler,
 					   int pm_event)
 {
@@ -443,14 +453,10 @@ static int clsic_regmap_service_pm_handler(struct clsic_service *handler,
 
 	switch (pm_event) {
 	case PM_EVENT_SUSPEND:
-		clsic_dbg(regmapsrv->clsic, "Suspending (cacheon+dirty)");
-		regcache_cache_only(regmapsrv->regmap, true);
-		regcache_mark_dirty(regmapsrv->regmap);
 		break;
 
 	case PM_EVENT_RESUME:
-		clsic_dbg(regmapsrv->clsic, "Resuming (cacheoff+sync)");
-		regcache_cache_only(regmapsrv->regmap, false);
+		regcache_mark_dirty(regmapsrv->regmap);
 		regcache_sync(regmapsrv->regmap);
 		break;
 
