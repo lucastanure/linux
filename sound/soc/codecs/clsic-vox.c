@@ -2216,6 +2216,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	memset(&vox->phrase_id_mixer_ctrl, 0,
 	       sizeof(vox->phrase_id_mixer_ctrl));
+	vox->phrase_id_mixer_ctrl.min = 0;
 	vox->phrase_id_mixer_ctrl.max = VOX_MAX_PHRASES - 1;
 	vox->phrase_id_mixer_ctrl.platform_max = VOX_MAX_PHRASES - 1;
 	vox->kcontrol_new[2].name = "Vox Phrase ID";
