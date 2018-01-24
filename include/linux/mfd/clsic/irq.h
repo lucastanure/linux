@@ -26,7 +26,7 @@ static inline void clsic_irq_enable(struct clsic *clsic)
 {
 	enable_irq(clsic->irq);
 
-	regmap_update_bits(clsic->regmap, TACNA_IRQ1_MASK2,
+	regmap_update_bits(clsic->regmap, TACNA_IRQ1_MASK_2,
 			   TACNA_CPF1_IRQ_EXT_EINT1_MASK, 0);
 
 #ifdef CONFIG_DEBUG_FS

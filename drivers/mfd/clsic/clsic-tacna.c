@@ -29,7 +29,7 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 	u32 devid;
 	int ret = 0;
 
-	ret = regmap_read(regmapsrv->regmap, CLSIC_DEVID, &devid);
+	ret = regmap_read(regmapsrv->regmap, TACNA_DEVID, &devid);
 	dev_dbg(&pdev->dev, "%s() regmap access test: devid 0x%x (%d)\n",
 		__func__, devid, ret);
 

@@ -980,7 +980,7 @@ static int clsic_fifo_write(struct clsic *clsic, uint8_t *src,
 		bytes_thiswrite = min_t(uint32_t, bytes_left,
 					CLSIC_FIFO_TRANSACTION_MAX);
 		ret = regmap_raw_write(clsic->regmap,
-				       CLSIC_FIFO1_RX,
+				       TACNA_CPF1_RX_WRDATA,
 				       tmp_src, bytes_thiswrite);
 		if (ret != 0)
 			goto err;
@@ -1707,9 +1707,11 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 	 * messages that should be processed
 	 */
 	do {
-		ret = regmap_read(clsic->regmap, CLSIC_FIFO1_STS, &sts);
+		ret = regmap_read(clsic->regmap, TACNA_CPF1_TX_GPR_STATUS1,
+				  &sts);
 		if (ret != 0) {
-			clsic_err(clsic, "CLSIC_FIFO1_STS ret %d\n", ret);
+			clsic_err(clsic, "TACNA_CPF1_TX_GPR_STATUS1 ret %d\n",
+				  ret);
 			return;
 		}
 
@@ -1718,7 +1720,7 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 		 * read a fixed sized message from the FIFO and call the message
 		 * handler to progress it
 		 */
-		if ((sts & CLSIC_FIFO1_STS_TX_FIFO_NOT_EMPTY) != 0) {
+		if ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0) {
 			memset(&msg, 0, sizeof(struct clsic_message));
 			ret = clsic_fifo_readmessage(clsic, &msg);
 			if (ret != 0) {
@@ -1729,7 +1731,7 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 			clsic_message_handler(clsic, &msg);
 		}
 		/* the loop handled a FIFO message then go around again */
-	} while ((sts & CLSIC_FIFO1_STS_TX_FIFO_NOT_EMPTY) != 0);
+	} while ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0);
 }
 
 static void clsic_message_worker_sending(struct clsic *clsic,

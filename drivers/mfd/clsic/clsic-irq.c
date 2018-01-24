@@ -31,7 +31,7 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
 	int ret;
 
 	do {
-		ret = regmap_read(clsic->regmap, TACNA_IRQ1_EINT2, &reg);
+		ret = regmap_read(clsic->regmap, TACNA_IRQ1_EINT_2, &reg);
 		if (ret != 0)
 			return IRQ_NONE;
 
@@ -39,7 +39,7 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
 			clsic_handle_incoming_messages(clsic);
 
 		if ((reg & TACNA_BOOT_DONE_EINT1_MASK) != 0) {
-			regmap_write(clsic->regmap, TACNA_IRQ1_EINT2,
+			regmap_write(clsic->regmap, TACNA_IRQ1_EINT_2,
 				     TACNA_BOOT_DONE_EINT1);
 		}
 	} while ((reg & TACNA_CPF1_IRQ_EXT_EINT1_MASK) != 0);

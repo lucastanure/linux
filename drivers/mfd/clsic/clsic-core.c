@@ -98,7 +98,7 @@ static bool clsic_wait_for_boot_done(struct clsic *clsic)
 	unsigned int val;
 	int ret;
 
-	ret = clsic_read_poll_timeout(clsic->regmap, TACNA_IRQ1_EINT2, val,
+	ret = clsic_read_poll_timeout(clsic->regmap, TACNA_IRQ1_EINT_2, val,
 				      (val & TACNA_BOOT_DONE_EINT1_MASK),
 				      CLSIC_BOOT_POLL_MICROSECONDS,
 				      CLSIC_BOOT_TIMEOUT_MICROSECONDS);

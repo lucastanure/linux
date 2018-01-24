@@ -36,13 +36,13 @@ bool clsic_spi_regmap_readable(struct device *dev, unsigned int reg)
 	case TACNA_RELID:
 	case TACNA_OTPID:
 	case TACNA_SFT_RESET:
-	case TACNA_IRQ1_EINT2:
-	case TACNA_IRQ1_MASK2:
+	case TACNA_IRQ1_EINT_2:
+	case TACNA_IRQ1_MASK_2:
 	case CLSIC_FW_UPDATE_REG:
-	case CLSIC_FIFO1_RX:
-	case CLSIC_FIFO1_STS:
-	case CLSIC_FIFO1_TX_SOUNDWIRE: /* and CLSIC_FIFO1_TX_SLIMBUS */
-	case CLSIC_FIFO1_TX_SPI:
+	case TACNA_CPF1_RX_WRDATA:
+	case TACNA_CPF1_TX_GPR_STATUS1:
+	case TACNA_CPF1_TX_RDDATA1:
+	case TACNA_CPF1_TX_RDDATA2:
 		return true;
 	default:
 		return false;
@@ -56,7 +56,7 @@ static const struct regmap_config clsic_spi_regmap = {
 	.val_bits = 32,
 	.reg_stride = 4,
 
-	.max_register = CLSIC_FIFO1_TX_SPI,
+	.max_register = TACNA_CPF1_TX_RDDATA2,
 	.readable_reg = &clsic_spi_regmap_readable,
 	.cache_type = REGCACHE_NONE,
 };
@@ -93,7 +93,7 @@ static int clsic_spi_probe(struct spi_device *spi)
 	 * Assign the location of the FIFO TX register for this bus type
 	 * SPI is using a prefetching serial control port.
 	 */
-	clsic->fifo_tx = CLSIC_FIFO1_TX_SPI;
+	clsic->fifo_tx = TACNA_CPF1_TX_RDDATA2;
 
 	return clsic_dev_init(clsic);
 }
