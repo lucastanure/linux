@@ -34,14 +34,11 @@
 #include <linux/mfd/clsic/voxsrv.h>
 
 #define CLSIC_N_FLL			2
-
+#define CLSIC_NUM_DSP			2
 #define CLSIC_DSP1_N_RX_CHANNELS	9
-#define CLSIC_DSP1_N_TX_CHANNELS	9
+#define CLSIC_DSP1_N_TX_CHANNELS	8 /* XXX investigate DSP1TX9 */
 #define CLSIC_DSP2_N_RX_CHANNELS	8
 #define CLSIC_DSP2_N_TX_CHANNELS	8
-
-#define CLSIC_DSP_RATE_SHIFT		0
-#define CLSIC_DSP_RATE_MASK		0x1f
 
 struct clsic_codec {
 	struct tacna_priv core;
@@ -168,120 +165,6 @@ error:
 		     CLSIC_DSP2_ISOLATE_ENABLE | CLSIC_DSP2_SHUTOFF);
 	return ret;
 }
-
-static const struct soc_enum clsic_dsp1_rate_enum[] = {
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX1,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX2,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX3,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX4,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX5,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text,  tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX6,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX7,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX8,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_RX9,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX1,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX2,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX3,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX4,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX5,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX6,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX7,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX8,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-	SOC_VALUE_ENUM_SINGLE(TACNA_DSP1_SAMPLE_RATE_TX9,
-			      CLSIC_DSP_RATE_SHIFT,
-			      CLSIC_DSP_RATE_MASK >> CLSIC_DSP_RATE_SHIFT,
-			      TACNA_RATE_ENUM_SIZE,
-			      tacna_rate_text, tacna_rate_val),
-};
-
-static const struct snd_kcontrol_new clsic_dsp1_rate_controls[] = {
-	SOC_ENUM("DSP1RX1 Rate", clsic_dsp1_rate_enum[0]),
-	SOC_ENUM("DSP1RX2 Rate", clsic_dsp1_rate_enum[1]),
-	SOC_ENUM("DSP1RX3 Rate", clsic_dsp1_rate_enum[2]),
-	SOC_ENUM("DSP1RX4 Rate", clsic_dsp1_rate_enum[3]),
-	SOC_ENUM("DSP1RX5 Rate", clsic_dsp1_rate_enum[4]),
-	SOC_ENUM("DSP1RX6 Rate", clsic_dsp1_rate_enum[5]),
-	SOC_ENUM("DSP1RX7 Rate", clsic_dsp1_rate_enum[6]),
-	SOC_ENUM("DSP1RX8 Rate", clsic_dsp1_rate_enum[7]),
-	SOC_ENUM("DSP1RX9 Rate", clsic_dsp1_rate_enum[8]),
-	SOC_ENUM("DSP1TX1 Rate", clsic_dsp1_rate_enum[9]),
-	SOC_ENUM("DSP1TX2 Rate", clsic_dsp1_rate_enum[10]),
-	SOC_ENUM("DSP1TX3 Rate", clsic_dsp1_rate_enum[11]),
-	SOC_ENUM("DSP1TX4 Rate", clsic_dsp1_rate_enum[12]),
-	SOC_ENUM("DSP1TX5 Rate", clsic_dsp1_rate_enum[13]),
-	SOC_ENUM("DSP1TX6 Rate", clsic_dsp1_rate_enum[14]),
-	SOC_ENUM("DSP1TX7 Rate", clsic_dsp1_rate_enum[15]),
-	SOC_ENUM("DSP1TX8 Rate", clsic_dsp1_rate_enum[16]),
-	SOC_ENUM("DSP1TX9 Rate", clsic_dsp1_rate_enum[17]),
-};
 
 static const struct snd_kcontrol_new clsic_snd_controls[] = {
 SOC_ENUM("IN1 OSR", tacna_in_dmic_osr[0]),
@@ -1146,6 +1029,12 @@ SND_SOC_DAPM_OUTPUT("MICSUPP"),
 	{ name, "DSP2.7", "DSP2" }, \
 	{ name, "DSP2.8", "DSP2" }
 
+	/*
+	 * XXX what happened to:
+	 * { name, "DSP1.9", "DSP1" },
+	 * is it needed?
+	 */
+
 static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	/* Internal clock domains */
 	{ "ASRC1IN1L", NULL, "SYSCLK" },
@@ -1356,7 +1245,7 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	TACNA_MIXER_ROUTES("DSP1", "DSP1RX8"),
 	TACNA_MIXER_ROUTES("DSP1", "DSP1RX9"),
 
-	TACNA_DSP_ROUTES("DSP2"),
+	TACNA_DSP_ROUTES_1_8("DSP2"),
 
 	{ "DSP Trigger Out", NULL, "DSP2 Trigger Output" },
 	{ "DSP2 Trigger Output", "Switch", "DSP2" },
@@ -1545,23 +1434,13 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 
 	clsic_codec->codec = codec;
 
-	ret = snd_soc_add_codec_controls(codec, clsic_dsp1_rate_controls,
-					 (CLSIC_DSP1_N_RX_CHANNELS +
-					  CLSIC_DSP1_N_TX_CHANNELS));
-	if (ret)
-		dev_err(codec->dev,
-			"%s() ret: %d; Failed to add DSP1 rate ctls.\n",
-			__func__, ret);
-
-	ret = snd_soc_add_codec_controls(codec, (tacna_dsp_rate_controls + 16),
-					 (CLSIC_DSP2_N_RX_CHANNELS +
-					  CLSIC_DSP2_N_TX_CHANNELS));
+	ret = tacna_dsp_add_codec_controls(codec, CLSIC_NUM_DSP);
 	if (ret)
 		dev_err(codec->dev,
 			"%s() ret: %d; Failed to add DSP rate ctls.\n",
 			__func__, ret);
 
-	wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec);
+	wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec, false);
 
 	return ret;
 }
@@ -1682,10 +1561,19 @@ static int clsic_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	/* A mini setup for DSP1 as wm_halo_init() creates rate caches */
+	dsp = &clsic_codec->core.dsp[0];
+	dsp->n_rx_channels = CLSIC_DSP1_N_RX_CHANNELS;
+	dsp->n_tx_channels = CLSIC_DSP1_N_TX_CHANNELS;
+	ret = wm_halo_init(dsp, &clsic_codec->core.rate_lock);
+	if (ret != 0)
+		dev_err(&pdev->dev, "Failed to initialise DSP1.\n");
+
 	/* TODO: initialise dsp2 MPU error interrupt */
 	dsp = &clsic_codec->core.dsp[1];
 	dsp->part = "clsic";
 	dsp->num = 2;
+	dsp->suffix = "";
 	dsp->type = WMFW_HALO;
 	dsp->rev = 0;
 	dsp->dev = clsic_codec->core.tacna->dev;
