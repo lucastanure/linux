@@ -2998,7 +2998,7 @@ static int tacna_hw_params_rate(struct snd_pcm_substream *substream,
 	struct snd_soc_component *comp = dai->component;
 	struct tacna_priv *priv = snd_soc_component_get_drvdata(comp);
 	struct tacna_dai_priv *dai_priv = &priv->dai[dai->id - 1];
-	unsigned int rate_addr = dai->driver->base + TACNA_ASP_CONTROL1;
+	unsigned int base = dai->driver->base;
 	int ret = 0;
 	unsigned int i, sr_val, sr_reg, sr_mask;
 	unsigned int cur_asp_rate, tar_asp_rate, rate;
@@ -3045,8 +3045,9 @@ static int tacna_hw_params_rate(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	if (rate_addr) {
-		ret = regmap_read(priv->tacna->regmap, rate_addr,
+	if (base) {
+		ret = regmap_read(priv->tacna->regmap,
+				  base + TACNA_ASP_CONTROL1,
 				  &cur_asp_rate);
 		if (ret != 0) {
 			tacna_asp_err(dai, "Failed to check rate: %d\n", ret);
@@ -3064,8 +3065,8 @@ static int tacna_hw_params_rate(struct snd_pcm_substream *substream,
 	}
 
 	snd_soc_component_update_bits(comp, sr_reg, sr_mask, sr_val);
-	if (rate_addr)
-		snd_soc_component_update_bits(comp, rate_addr,
+	if (base)
+		snd_soc_component_update_bits(comp, base + TACNA_ASP_CONTROL1,
 					      TACNA_ASP1_RATE_MASK,
 					      tar_asp_rate);
 
