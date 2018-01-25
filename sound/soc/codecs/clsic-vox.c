@@ -471,6 +471,12 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	msg_rsp = (union clsic_vox_msg *) &msg->response;
 	if (!clsic_get_bulk_bit(msg_rsp->rsp_get_asr_block.hdr.sbc) &&
 	    msg_rsp->rsp_get_asr_block.hdr.err != 0) {
+		/*
+		 * Error CLSIC_ERR_CANCELLED simply means that we have set CLSIC
+		 * to IDLE mode while there is a pending ASR request (see
+		 * clsic_vox_asr_stream_trigger). This causes CLSIC to forcibly
+		 * cancel the request for that ASR block.
+		 */
 		clsic_info(clsic, "response: %s\n",
 			   clsic_error_string(
 				msg_rsp->rsp_get_asr_block.hdr.err));
@@ -478,7 +484,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 		snd_compr_fragment_elapsed(asr_stream->stream);
 		return CLSIC_MSG_RELEASED;
 	} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
-		clsic_info(clsic, "bulkresponse: %s\n",
+		clsic_info(clsic, "bulk response: %s\n",
 			   clsic_error_string(
 				msg_rsp->blkrsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
