@@ -1617,24 +1617,11 @@ exit:
 	return ret;
 }
 
-static int vox_stop_bio_results(struct clsic_vox *vox)
+static void vox_stop_bio_results(struct clsic_vox *vox)
 {
-	/*
-	 * This is necessary as CLSIC effectively crashes if its mode is not set
-	 * to IDLE *before* the end of audio streaming.
-	 */
-	int ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-
-	if (ret)
-		vox->error_info = VOX_ERROR_LIBRARY;
-	else
-		vox->error_info = VOX_ERROR_SUCCESS;
-
-	clsic_dbg(vox->clsic, "ret %d", ret);
+	vox->error_info = VOX_ERROR_SUCCESS;
 
 	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
-
-	return ret;
 }
 
 /*
@@ -1690,10 +1677,7 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 				  ret);
 		break;
 	case VOX_MGMT_MODE_STOPPING_BIO_RESULTS:
-		ret = vox_stop_bio_results(vox);
-		if (ret)
-			clsic_err(vox->clsic, "vox_stop_bio_results ret %d.\n",
-				  ret);
+		vox_stop_bio_results(vox);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
