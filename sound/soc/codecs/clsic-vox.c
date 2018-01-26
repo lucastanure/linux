@@ -228,23 +228,23 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
-#define VOX_NUM_BIO_RESULTS_TYPES	2
+#define VOX_NUM_BIO_RESULTS_FORMATS	2
 
 #define VOX_BIO_RESULTS_CLASSIC		0
 #define VOX_BIO_RESULTS_EXT_V1		1
 
-static const char *vox_bio_results_type_text[VOX_NUM_BIO_RESULTS_TYPES] = {
+static const char *vox_bio_results_format_text[VOX_NUM_BIO_RESULTS_FORMATS] = {
 	[VOX_BIO_RESULTS_CLASSIC]	= "Classic",
 	[VOX_BIO_RESULTS_EXT_V1]	= "Extended Version 1",
 };
 
-#define VOX_NUM_SEC_LEVEL_TYPES		3
+#define VOX_NUM_SEC_LEVEL		3
 
 #define VOX_SEC_LEVEL_LOW		0
 #define VOX_SEC_LEVEL_MEDIUM		1
 #define VOX_SEC_LEVEL_HIGH		2
 
-static const char *vox_sec_level_type_text[VOX_NUM_SEC_LEVEL_TYPES] = {
+static const char *vox_sec_level_text[VOX_NUM_SEC_LEVEL] = {
 	[VOX_SEC_LEVEL_LOW]		= "Low",
 	[VOX_SEC_LEVEL_MEDIUM]		= "Medium",
 	[VOX_SEC_LEVEL_HIGH]		= "High",
@@ -2192,8 +2192,8 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[9].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	vox->kcontrol_new[9].get = vox_ctrl_enum_get;
 	vox->kcontrol_new[9].put = vox_ctrl_enum_put;
-	vox->soc_enum_sec_level.items = VOX_NUM_SEC_LEVEL_TYPES;
-	vox->soc_enum_sec_level.texts = vox_sec_level_type_text;
+	vox->soc_enum_sec_level.items = VOX_NUM_SEC_LEVEL;
+	vox->soc_enum_sec_level.texts = vox_sec_level_text;
 	vox->soc_enum_sec_level.dobj.private = &vox->security_level;
 	vox->kcontrol_new[9].private_value =
 				(unsigned long)(&(vox->soc_enum_sec_level));
@@ -2208,8 +2208,8 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[10].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	vox->kcontrol_new[10].get = vox_ctrl_enum_get;
 	vox->kcontrol_new[10].put = vox_ctrl_enum_put;
-	vox->soc_enum_bio_res_type.items = VOX_NUM_BIO_RESULTS_TYPES;
-	vox->soc_enum_bio_res_type.texts = vox_bio_results_type_text;
+	vox->soc_enum_bio_res_type.items = VOX_NUM_BIO_RESULTS_FORMATS;
+	vox->soc_enum_bio_res_type.texts = vox_bio_results_format_text;
 	vox->soc_enum_bio_res_type.dobj.private = &vox->bio_results_format;
 	vox->kcontrol_new[10].private_value =
 				(unsigned long)(&(vox->soc_enum_bio_res_type));
