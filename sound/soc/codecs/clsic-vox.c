@@ -78,6 +78,7 @@ struct clsic_asr_stream {
 
 	struct task_struct *wait_for_trigger;
 	struct completion trigger_heard;
+	struct completion asr_block_completion;
 };
 
 union bio_results_u {
@@ -467,6 +468,8 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	size_t read_idx, write_idx;
 	u32 payload_sz;
 
+	complete(&asr_stream->asr_block_completion);
+
 	if (!asr_stream->stream) {
 		clsic_dbg(clsic, "ASR stream is no longer active.\n");
 		return CLSIC_MSG_RELEASED;
@@ -570,6 +573,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
 
+	reinit_completion(&asr_stream->asr_block_completion);
+
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -665,6 +670,8 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
+		wait_for_completion(&asr_stream->asr_block_completion);
+
 		mutex_lock(&vox->mgmt_mode_lock);
 		if ((vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) &&
 		    (vox->asr_strm_mode == VOX_ASR_MODE_STREAMING)) {
@@ -754,6 +761,8 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
+
+	reinit_completion(&asr_stream->asr_block_completion);
 
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
@@ -2479,6 +2488,8 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	vox->get_bio_results_early_exit = false;
 	init_completion(&vox->new_bio_results_completion);
+
+	init_completion(&vox->asr_stream.asr_block_completion);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 	if (ret != 0)
