@@ -34,7 +34,6 @@
 
 #include "clsic-vox.h"
 
-/* TODO: may require tuning */
 #define VOX_ASR_MIN_FRAGMENT_SZ	0
 #define VOX_ASR_MAX_FRAGMENT_SZ	307200
 #define VOX_ASR_MIN_FRAGMENTS	1
@@ -43,9 +42,9 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	15
+#define VOX_NUM_NEW_KCONTROLS	17
 
-#define CLSIC_BPB_SIZE_ALIGNMENT	4
+#define CLSIC_ASSET_SIZE_ALIGNMENT	4
 
 #define VOX_DEFAULT_DURATION		0
 #define VOX_DEFAULT_TIMEOUT		4000
@@ -53,7 +52,7 @@
 #define VOX_DEFAULT_NUM_REPS		3
 #define VOX_MAX_NUM_REPS		5
 
-#define CLSIC_VOX_SRV_VERSION_MVP2	0x00030002
+#define CLSIC_VOX_SRV_VERSION_MVP2	0x00030002	/* 2.0.248 */
 
 struct clsic_asr_stream_buf {
 	void *data;
@@ -102,11 +101,13 @@ struct clsic_vox {
 	struct mutex mgmt_mode_lock;
 	/* mgmt_mode refers to ongoing vox biometric operations only. */
 	unsigned int mgmt_mode;
+	/* error_info for showing result of a top level control mode change. */
 	unsigned int error_info;
-	/* Used for showing result of a top level control mode change. */
+	unsigned int asset_type;
 
 	unsigned int phrase_id;
 	unsigned int user_id;
+	unsigned int bin_id;
 	unsigned int duration;
 	unsigned int timeout;
 	unsigned int number_of_reps;
@@ -130,24 +131,29 @@ struct clsic_vox {
 	struct soc_enum soc_enum_sec_level;
 	struct soc_enum soc_enum_bio_res_type;
 	struct soc_enum soc_enum_barge_in;
+	struct soc_enum soc_enum_asset_type;
+
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
 	struct soc_mixer_control duration_mixer_ctrl;
 	struct soc_mixer_control timeout_mixer_ctrl;
 	struct soc_mixer_control reps_mixer_ctrl;
+	struct soc_mixer_control bin_id_mixer_ctrl;
+
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
 	struct soc_bytes_ext s_bytes_bio_pub_key;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
+	bool bin_installed[CLSIC_VOX_BIN_CNT];
+	bool bio_vte_map_installed;
 
 	struct work_struct mgmt_mode_work;
 	struct snd_kcontrol *mgmt_mode_kctrl;
 
 	struct completion new_bio_results_completion;
 };
-
 static const struct {
 	u32 id;
 	struct snd_codec_desc desc;
@@ -170,10 +176,10 @@ static const struct {
 #define VOX_NUM_MGMT_MODES			20
 
 #define VOX_MGMT_MODE_NEUTRAL			0
-#define VOX_MGMT_MODE_INSTALL_PHRASE		1
-#define VOX_MGMT_MODE_INSTALLING_PHRASE		2
-#define VOX_MGMT_MODE_UNINSTALL_PHRASE		3
-#define VOX_MGMT_MODE_UNINSTALLING_PHRASE	4
+#define VOX_MGMT_MODE_INSTALL_ASSET		1
+#define VOX_MGMT_MODE_INSTALLING_ASSET		2
+#define VOX_MGMT_MODE_UNINSTALL_ASSET		3
+#define VOX_MGMT_MODE_UNINSTALLING_ASSET	4
 #define VOX_MGMT_MODE_REMOVE_USER		5
 #define VOX_MGMT_MODE_REMOVING_USER		6
 #define VOX_MGMT_MODE_START_ENROL		7
@@ -192,10 +198,10 @@ static const struct {
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
-	[VOX_MGMT_MODE_INSTALL_PHRASE]		= "Install Phrase",
-	[VOX_MGMT_MODE_INSTALLING_PHRASE]	= "Installing Phrase",
-	[VOX_MGMT_MODE_UNINSTALL_PHRASE]	= "Uninstall Phrase",
-	[VOX_MGMT_MODE_UNINSTALLING_PHRASE]	= "Uninstalling Phrase",
+	[VOX_MGMT_MODE_INSTALL_ASSET]		= "Install Asset",
+	[VOX_MGMT_MODE_INSTALLING_ASSET]	= "Installing Asset",
+	[VOX_MGMT_MODE_UNINSTALL_ASSET]		= "Uninstall Asset",
+	[VOX_MGMT_MODE_UNINSTALLING_ASSET]	= "Uninstalling Asset",
 	[VOX_MGMT_MODE_REMOVE_USER]		= "Remove User",
 	[VOX_MGMT_MODE_REMOVING_USER]		= "Removing User",
 	[VOX_MGMT_MODE_START_ENROL]		= "Start User Enrolment",
@@ -219,7 +225,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 #define VOX_ERROR_SUCCESS		0
 #define VOX_ERROR_LIBRARY		1
 #define VOX_ERROR_TIMEOUT		2
-#define VOX_ERROR_BAD_BPB		3
+#define VOX_ERROR_BAD_ASSET		3
 #define VOX_ERROR_DISABLE_BARGE_IN	4
 #define VOX_ERROR_MORE_SPEECH_NEEDED	5
 #define VOX_ERROR_TOO_LOUD		6
@@ -232,7 +238,7 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
 	[VOX_ERROR_LIBRARY]		= "Library",
 	[VOX_ERROR_TIMEOUT]		= "Timed Out",
-	[VOX_ERROR_BAD_BPB]		= "Bad BPB File",
+	[VOX_ERROR_BAD_ASSET]		= "Bad Asset File",
 	[VOX_ERROR_DISABLE_BARGE_IN]	= "Barge-in Must Be Disabled",
 	[VOX_ERROR_MORE_SPEECH_NEEDED]	= "More Speech Needed",
 	[VOX_ERROR_TOO_LOUD]		= "Too Loud",
@@ -276,13 +282,36 @@ static const char *vox_barge_in_text[VOX_NUM_BARGE_IN] = {
 	[VOX_BARGE_IN_ENABLED]		= "Loudspeaker Enabled",
 };
 
-/* Present method of phrase installation uses a fixed list of files. */
+#define VOX_NUM_ASSET_TYPES_MVP2	1
+#define VOX_NUM_ASSET_TYPES_MVP		3
+
+#define VOX_ASSET_TYPE_PHRASE		0
+#define VOX_ASSET_TYPE_BIN		1
+#define VOX_ASSET_TYPE_BIO_VTE_MAP	2
+
+static const char *vox_asset_type_text_mvp[VOX_NUM_ASSET_TYPES_MVP] = {
+	[VOX_ASSET_TYPE_PHRASE]		= "Biometric Phrase",
+	[VOX_ASSET_TYPE_BIN]		= "Voice Trigger Engine Phrase",
+	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "Biometric Voice Trigger Engine Map",
+};
+
+/* Present method of asset installation uses a fixed list of files. */
 static struct {
 	const char *file;
 } phrase_files[VOX_MAX_PHRASES]	= {
 	[CLSIC_VOX_PHRASE_VDT1]	= { .file = "bpb.p00" },
 	[CLSIC_VOX_PHRASE_TI]	= { .file = "bpb.p04" },
 };
+
+static struct {
+	const char *file;
+} bin_files[VOX_MAX_PHRASES]	= {
+	[CLSIC_VOX_BIN_VTE1]	= { .file = "vte1.bin" },
+	[CLSIC_VOX_BIN_VTE2]	= { .file = "vte2.bin" },
+	[CLSIC_VOX_BIN_SSF]	= { .file = "ssf.bin" },
+};
+
+static const char vox_bio_vte_map_file[] = "biovte.map";
 
 static inline int size_of_bio_results(uint8_t bio_results_format)
 {
@@ -935,12 +964,13 @@ void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
 		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
 }
 
-static int vox_update_phrase_status(struct clsic_vox *vox)
+static int vox_update_phrases(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret, phr;
 
+	/* Phrases. */
 	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
@@ -980,6 +1010,122 @@ static int vox_update_phrase_status(struct clsic_vox *vox)
 	}
 
 	return 0;
+}
+
+static int vox_update_bins(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret, bin;
+
+	/* VTE bins. */
+	for (bin = 0; bin < CLSIC_VOX_BIN_CNT; bin++) {
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED);
+		msg_cmd.cmd_is_bin_installed.binid = bin;
+
+		ret = clsic_send_msg_sync(
+				     vox->clsic,
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+		if (ret) {
+			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+			return -EIO;
+		}
+
+		switch (msg_rsp.rsp_is_bin_installed.hdr.err) {
+		case CLSIC_ERR_NONE:
+			vox->bin_installed[bin] = true;
+			break;
+		case CLSIC_ERR_BIN_NOT_INSTALLED:
+			vox->bin_installed[bin] = false;
+			break;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVALID_BIN_ID:
+		case CLSIC_ERR_INVALID_BIN_DATA:
+			/* TODO: check these error codes are possible. */
+			clsic_err(vox->clsic, "failure %s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_is_bin_installed.hdr.err));
+			return -EIO;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d.\n",
+				  msg_rsp.rsp_is_bin_installed.hdr.err);
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int vox_update_map(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	/* Map between VTE and biometric phrase. */
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED);
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		return -EIO;
+	}
+
+	switch (msg_rsp.rsp_is_biovte_map_installed.hdr.err) {
+	case CLSIC_ERR_NONE:
+		vox->bio_vte_map_installed = true;
+		break;
+	case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
+		vox->bio_vte_map_installed = false;
+		break;
+	case CLSIC_ERR_BIOVTE_MAP_INVALID:
+	case CLSIC_ERR_BIOVTE_MAP_SZ_INVALID:
+	case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
+		/* TODO: check these error codes are possible. */
+		clsic_err(vox->clsic, "failure %s.\n",
+			  clsic_error_string(
+				msg_rsp.rsp_is_biovte_map_installed.hdr.err));
+		return -EIO;
+	default:
+		clsic_err(vox->clsic,
+			  "unexpected CLSIC error code %d.\n",
+			  msg_rsp.rsp_is_biovte_map_installed.hdr.err);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int vox_update_assets_status(struct clsic_vox *vox)
+{
+	struct clsic_service *handler =
+		clsic_find_first_service(vox->clsic, CLSIC_SRV_TYPE_VOX);
+	int ret;
+
+	ret = vox_update_phrases(vox);
+	if (ret)
+		return ret;
+
+	if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
+		/* MVP2.0 nothing else to update. */
+		return 0;
+
+	ret = vox_update_bins(vox);
+	if (ret)
+		return ret;
+
+	return vox_update_map(vox);
 }
 
 static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
@@ -1077,11 +1223,12 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	}
 }
 
-static int vox_install_phrase(struct clsic_vox *vox)
+static int vox_install_asset(struct clsic_vox *vox)
 {
 	const struct firmware *fw;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	const char *file = NULL;
 	int ret;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1091,10 +1238,22 @@ static int vox_install_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	trace_clsic_vox_install_phrase(vox->phrase_id);
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		trace_clsic_vox_install_phrase(vox->phrase_id);
+		file = phrase_files[vox->phrase_id].file;
+		break;
+	case VOX_ASSET_TYPE_BIN:
+		trace_clsic_vox_install_bin(vox->bin_id);
+		file = bin_files[vox->bin_id].file;
+		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		trace_clsic_vox_install_bio_vte_map(0);
+		file = vox_bio_vte_map_file;
+		break;
+	}
 
-	ret = request_firmware(&fw, phrase_files[vox->phrase_id].file,
-			       vox->clsic->dev);
+	ret = request_firmware(&fw, file, vox->clsic->dev);
 	if (ret) {
 		clsic_err(vox->clsic, "request_firmware failed for %s.\n",
 			  phrase_files[vox->phrase_id].file);
@@ -1102,21 +1261,38 @@ static int vox_install_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	if (fw->size % CLSIC_BPB_SIZE_ALIGNMENT) {
+	if (fw->size % CLSIC_ASSET_SIZE_ALIGNMENT) {
 		clsic_err(vox->clsic,
 			  "firmware file %s size %d is not a multiple of %d.\n",
 			  phrase_files[vox->phrase_id].file, fw->size,
-			  CLSIC_BPB_SIZE_ALIGNMENT);
+			  CLSIC_ASSET_SIZE_ALIGNMENT);
 		release_firmware(fw);
 		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
 
-	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CR_INSTALL_PHRASE);
-	msg_cmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
-	msg_cmd.cmd_install_phrase.phraseid = vox->phrase_id;
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_INSTALL_PHRASE);
+		msg_cmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
+		msg_cmd.cmd_install_phrase.phraseid = vox->phrase_id;
+		break;
+	case VOX_ASSET_TYPE_BIN:
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_INSTALL_BIN);
+		msg_cmd.blkcmd_install_bin.hdr.bulk_sz = fw->size;
+		msg_cmd.blkcmd_install_bin.binid = vox->bin_id;
+		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP);
+		msg_cmd.blkcmd_install_biovte_map.hdr.bulk_sz = fw->size;
+		break;
+	}
 
 	ret = clsic_send_msg_sync(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
@@ -1124,54 +1300,135 @@ static int vox_install_phrase(struct clsic_vox *vox)
 				  fw->data, fw->size,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_dbg(vox->clsic, "ret %d phrase %d.\n", ret, vox->phrase_id);
-
 	release_firmware(fw);
 
 	if (ret)
 		goto exit;
-
-	switch (msg_rsp.rsp_install_phrase.hdr.err) {
-	case CLSIC_ERR_NONE:
-		/* Get updated information on enrolled users. */
-		ret = vox_update_user_status(vox, vox->phrase_id,
-					     vox->phrase_id);
-		if (ret)
-			goto exit;
-		vox->phrase_installed[vox->phrase_id] = true;
-		clsic_dbg(vox->clsic, "successfully installed phrase %d.\n",
-			  vox->phrase_id);
-		vox->error_info = VOX_ERROR_SUCCESS;
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		switch (msg_rsp.rsp_install_phrase.hdr.err) {
+		case CLSIC_ERR_NONE:
+			/* Get updated information on enrolled users. */
+			ret = vox_update_user_status(vox, vox->phrase_id,
+						     vox->phrase_id);
+			if (ret)
+				goto exit;
+			vox->phrase_installed[vox->phrase_id] = true;
+			clsic_dbg(vox->clsic,
+				  "successfully installed phrase %d.\n",
+				  vox->phrase_id);
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_BPB_SZ_TOO_SMALL:
+		case CLSIC_ERR_BPB_SZ_UNALIGNED:
+		case CLSIC_ERR_BPB_BAD_HDR:
+		case CLSIC_ERR_BPB_BAD_IMGMAP:
+		case CLSIC_ERR_BPB_SZ_INCONSISTENT:
+		case CLSIC_ERR_BPB_AUTH_FAILED:
+		case CLSIC_ERR_BPB_ASSET_INVAL_VER:
+		case CLSIC_ERR_BPB_ASSET_INVAL_SZ:
+		case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TYPE:
+		case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TABLE_SZ:
+		case CLSIC_ERR_BPB_ASSET_INVAL_FLAGS:
+			clsic_err(vox->clsic,
+				  "phrase installation error %s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_install_phrase.hdr.err));
+			vox->error_info = VOX_ERROR_BAD_ASSET;
+			break;
+		case CLSIC_ERR_NO_MEM:
+		case CLSIC_ERR_FLASH:
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVAL_PHRASEID:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic, "phrase installation error %s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_install_phrase.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_install_phrase.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_install_phrase.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+		}
 		break;
-	case CLSIC_ERR_BPB_SZ_TOO_SMALL:
-	case CLSIC_ERR_BPB_SZ_UNALIGNED:
-	case CLSIC_ERR_BPB_BAD_HDR:
-	case CLSIC_ERR_BPB_BAD_IMGMAP:
-	case CLSIC_ERR_BPB_SZ_INCONSISTENT:
-	case CLSIC_ERR_BPB_AUTH_FAILED:
-	case CLSIC_ERR_BPB_ASSET_INVAL_VER:
-	case CLSIC_ERR_BPB_ASSET_INVAL_SZ:
-	case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TYPE:
-	case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TABLE_SZ:
-	case CLSIC_ERR_BPB_ASSET_INVAL_FLAGS:
-		clsic_err(vox->clsic, "phrase installation error %s.\n",
-			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_BAD_BPB;
+	case VOX_ASSET_TYPE_BIN:
+		/* TODO: check these are all the error codes possible. */
+		switch (msg_rsp.rsp_install_bin.hdr.err) {
+		case CLSIC_ERR_NONE:
+			vox->bin_installed[vox->bin_id] = true;
+			clsic_dbg(vox->clsic,
+				  "successfully installed bin %d.\n",
+				  vox->bin_id);
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_INVALID_BIN_DATA:
+			clsic_err(vox->clsic,
+				  "bin installation error %s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_install_bin.hdr.err));
+			vox->error_info = VOX_ERROR_BAD_ASSET;
+			break;
+		case CLSIC_ERR_INVALID_BIN_ID:
+		case CLSIC_ERR_NO_MEM:
+		case CLSIC_ERR_FLASH:
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic, "bin installation error %s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_install_bin.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_install_bin.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_install_bin.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+		}
 		break;
-	case CLSIC_ERR_NO_MEM:
-	case CLSIC_ERR_FLASH:
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_INVAL_PHRASEID:
-	case CLSIC_ERR_VOICEID:
-		clsic_err(vox->clsic, "phrase installation error %s.\n",
-			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_LIBRARY;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		/* TODO: check these are all the error codes possible. */
+		switch (msg_rsp.rsp_install_biovte_map.hdr.err) {
+		case CLSIC_ERR_NONE:
+			vox->bio_vte_map_installed = true;
+			clsic_dbg(vox->clsic,
+				  "successfully installed bin %d.\n",
+				  vox->bin_id);
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_BIOVTE_MAP_SZ_INVALID:
+		case CLSIC_ERR_BIOVTE_MAP_INVALID:
+		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
+			clsic_err(vox->clsic,
+				  "biometric VTE installation error %s.\n",
+				  clsic_error_string(
+				       msg_rsp.rsp_install_biovte_map.hdr.err));
+			vox->error_info = VOX_ERROR_BAD_ASSET;
+			break;
+		case CLSIC_ERR_NO_MEM:
+		case CLSIC_ERR_FLASH:
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic,
+				  "biometric VTE installation error %s.\n",
+				  clsic_error_string(
+				       msg_rsp.rsp_install_biovte_map.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_install_biovte_map.hdr.err,
+				  clsic_error_string(
+				       msg_rsp.rsp_install_biovte_map.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+		}
 		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
-			 msg_rsp.rsp_install_phrase.hdr.err,
-			clsic_error_string(msg_rsp.rsp_install_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_LIBRARY;
 	}
 
 exit:
@@ -1180,13 +1437,11 @@ exit:
 	return ret;
 }
 
-static int vox_uninstall_phrase(struct clsic_vox *vox)
+static int vox_uninstall_asset(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret, usr;
-
-	trace_clsic_vox_uninstall_phrase(vox->phrase_id);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
@@ -1195,10 +1450,28 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CR_REMOVE_PHRASE);
-	msg_cmd.cmd_remove_phrase.phraseid = vox->phrase_id;
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		trace_clsic_vox_uninstall_phrase(vox->phrase_id);
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_REMOVE_PHRASE);
+		msg_cmd.cmd_remove_phrase.phraseid = vox->phrase_id;
+		break;
+	case VOX_ASSET_TYPE_BIN:
+		trace_clsic_vox_uninstall_bin(vox->bin_id);
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_REMOVE_BIN);
+		msg_cmd.cmd_remove_bin.binid = vox->bin_id;
+		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		trace_clsic_vox_uninstall_bio_vte_map(vox->phrase_id);
+		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP);
+		break;
+	}
 
 	ret = clsic_send_msg_sync(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
@@ -1213,35 +1486,107 @@ static int vox_uninstall_phrase(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	switch (msg_rsp.rsp_remove_phrase.hdr.err) {
-	case CLSIC_ERR_NONE:
-	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-		clsic_dbg(vox->clsic, "successfully uninstalled phrase %d.\n",
-			  vox->phrase_id);
-		/*
-		 * Present no enrolled users for this phrase to reflect what
-		 * CLSIC reports when there is no phrase installed.
-		 */
-		for (usr = CLSIC_VOX_USER1; usr <= CLSIC_VOX_USER3; usr++)
-			vox->user_installed[
-				(vox->phrase_id * VOX_MAX_USERS) + usr] = false;
-		vox->phrase_installed[vox->phrase_id] = false;
-		vox->error_info = VOX_ERROR_SUCCESS;
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		switch (msg_rsp.rsp_remove_phrase.hdr.err) {
+		case CLSIC_ERR_NONE:
+		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+			clsic_dbg(vox->clsic,
+				  "successfully uninstalled phrase %d.\n",
+				  vox->phrase_id);
+			/*
+			 * Present no enrolled users for this phrase to reflect
+			 * what CLSIC reports when there is no phrase installed.
+			 */
+			for (usr = CLSIC_VOX_USER1;
+			     usr <= CLSIC_VOX_USER3;
+			     usr++)
+				vox->user_installed[
+						(vox->phrase_id * VOX_MAX_USERS)
+						+ usr] = false;
+			vox->phrase_installed[vox->phrase_id] = false;
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVAL_PHRASEID:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic, "%s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_remove_phrase.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_remove_phrase.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_remove_phrase.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		}
 		break;
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_INVAL_PHRASEID:
-	case CLSIC_ERR_VOICEID:
-		clsic_err(vox->clsic, "%s.\n",
-			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_LIBRARY;
-		ret = -EIO;
+	case VOX_ASSET_TYPE_BIN:
+		/* TODO: check these are all the error codes possible. */
+		switch (msg_rsp.rsp_remove_bin.hdr.err) {
+		case CLSIC_ERR_NONE:
+		case CLSIC_ERR_BIN_NOT_INSTALLED:
+			clsic_dbg(vox->clsic,
+				  "successfully uninstalled bin %d.\n",
+				  vox->bin_id);
+			vox->bin_installed[vox->bin_id] = false;
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INVALID_BIN_ID:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic, "%s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_remove_bin.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_remove_bin.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_remove_bin.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		}
 		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
-			  msg_rsp.rsp_remove_phrase.hdr.err,
-			 clsic_error_string(msg_rsp.rsp_remove_phrase.hdr.err));
-		vox->error_info = VOX_ERROR_LIBRARY;
-		ret = -EIO;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		/* TODO: check these are all the error codes possible. */
+		switch (msg_rsp.rsp_remove_biovte_map.hdr.err) {
+		case CLSIC_ERR_NONE:
+		case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
+			clsic_dbg(vox->clsic,
+				  "successfully uninstalled biometric VTE map %d.\n",
+				  vox->bin_id);
+			vox->bio_vte_map_installed = false;
+			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_VOICEID:
+			clsic_err(vox->clsic, "%s.\n",
+				  clsic_error_string(
+					msg_rsp.rsp_remove_biovte_map.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		default:
+			clsic_err(vox->clsic,
+				  "unexpected CLSIC error code %d: %s.\n",
+				  msg_rsp.rsp_remove_biovte_map.hdr.err,
+				  clsic_error_string(
+					msg_rsp.rsp_remove_biovte_map.hdr.err));
+			vox->error_info = VOX_ERROR_LIBRARY;
+			ret = -EIO;
+			break;
+		}
 		break;
 	}
 
@@ -1383,11 +1728,6 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
 							vox->number_of_reps;
 	}
-
-	/*
-	 * TODO: more complicated scenario using the
-	 * CLSIC_VOX_PHRASE_FLAG_DISCARD flag.
-	 */
 
 	ret = clsic_send_msg_sync(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
@@ -1698,16 +2038,16 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 	int ret;
 
 	switch (vox->mgmt_mode) {
-	case VOX_MGMT_MODE_INSTALLING_PHRASE:
-		ret = vox_install_phrase(vox);
+	case VOX_MGMT_MODE_INSTALLING_ASSET:
+		ret = vox_install_asset(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_install_phrase ret %d.\n",
+			clsic_err(vox->clsic, "vox_install_asset ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_UNINSTALLING_PHRASE:
-		ret = vox_uninstall_phrase(vox);
+	case VOX_MGMT_MODE_UNINSTALLING_ASSET:
+		ret = vox_uninstall_asset(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_uninstall_phrase ret %d.\n",
+			clsic_err(vox->clsic, "vox_uninstall_asset ret %d.\n",
 				  ret);
 		break;
 	case VOX_MGMT_MODE_REMOVING_USER:
@@ -1877,14 +2217,32 @@ static int vox_ctrl_bio_pub_key(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int vox_ctrl_phrase_installed_get(struct snd_kcontrol *kcontrol,
-					 struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
 {
 	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
 
-	ucontrol->value.integer.value[0] =
-					  vox->phrase_installed[vox->phrase_id];
+	switch (vox->asset_type) {
+	case VOX_ASSET_TYPE_PHRASE:
+		ucontrol->value.integer.value[0] =
+					vox->phrase_installed[vox->phrase_id];
+		break;
+	case VOX_ASSET_TYPE_BIN:
+		ucontrol->value.integer.value[0] =
+					vox->bin_installed[vox->bin_id];
+		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+		ucontrol->value.integer.value[0] =
+					vox->bio_vte_map_installed;
+		break;
+	}
 
+	return 0;
+}
+
+static int vox_ctrl_asset_installed_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
 	return 0;
 }
 
@@ -2016,8 +2374,8 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 	} else if (vox->asr_strm_mode == VOX_ASR_MODE_INACTIVE) {
 		/* Not streaming ASR data. */
 		switch (ucontrol->value.enumerated.item[0]) {
-		case VOX_MGMT_MODE_INSTALL_PHRASE:
-		case VOX_MGMT_MODE_UNINSTALL_PHRASE:
+		case VOX_MGMT_MODE_INSTALL_ASSET:
+		case VOX_MGMT_MODE_UNINSTALL_ASSET:
 		case VOX_MGMT_MODE_REMOVE_USER:
 		case VOX_MGMT_MODE_START_ENROL:
 			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
@@ -2251,14 +2609,15 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	if (ret != 0)
 		return ret;
 
-	ret = vox_update_phrase_status(vox);
+	ret = vox_update_assets_status(vox);
 	if (ret != 0)
 		return ret;
 
-	vox->kcontrol_new[3].name = "Vox Phrase Installed";
+	vox->kcontrol_new[3].name = "Vox Asset Installed";
 	vox->kcontrol_new[3].info = snd_soc_info_bool_ext;
 	vox->kcontrol_new[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[3].get = vox_ctrl_phrase_installed_get;
+	vox->kcontrol_new[3].get = vox_ctrl_asset_installed_get;
+	vox->kcontrol_new[3].put = vox_ctrl_asset_installed_put;
 	vox->kcontrol_new[3].private_value = (unsigned long)vox;
 	vox->kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READ |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
@@ -2435,8 +2794,41 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->soc_enum_barge_in.dobj.private = &vox->barge_in_status;
 	vox->kcontrol_new[14].private_value =
 				(unsigned long)(&(vox->soc_enum_barge_in));
-	vox->kcontrol_new[14].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				       SNDRV_CTL_ELEM_ACCESS_WRITE |
+
+	vox->bin_id = CLSIC_VOX_BIN_VTE1;
+
+	memset(&vox->bin_id_mixer_ctrl, 0, sizeof(vox->bin_id_mixer_ctrl));
+	vox->bin_id_mixer_ctrl.min = 0;
+	vox->bin_id_mixer_ctrl.max = CLSIC_VOX_BIN_CNT - 1;
+	vox->bin_id_mixer_ctrl.platform_max = CLSIC_VOX_BIN_CNT - 1;
+	vox->bin_id_mixer_ctrl.dobj.private = &vox->bin_id;
+	vox->kcontrol_new[15].name = "Vox Bin ID";
+	vox->kcontrol_new[15].info = snd_soc_info_volsw;
+	vox->kcontrol_new[15].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[15].get = vox_ctrl_int_get;
+	vox->kcontrol_new[15].put = vox_ctrl_int_put;
+	vox->kcontrol_new[15].private_value =
+		(unsigned long)(&(vox->bin_id_mixer_ctrl));
+	vox->kcontrol_new[15].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->asset_type = VOX_ASSET_TYPE_PHRASE;
+
+	vox->kcontrol_new[16].name = "Vox Asset Type";
+	vox->kcontrol_new[16].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[16].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[16].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[16].put = vox_ctrl_enum_put;
+	if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
+		vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES_MVP2;
+	else
+		vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES_MVP;
+	vox->soc_enum_asset_type.texts = vox_asset_type_text_mvp;
+
+	vox->soc_enum_asset_type.dobj.private = &vox->asset_type;
+	vox->kcontrol_new[16].private_value =
+				(unsigned long) &vox->soc_enum_asset_type;
+	vox->kcontrol_new[16].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
@@ -2549,7 +2941,7 @@ static struct platform_driver clsic_vox_driver = {
 
 module_platform_driver(clsic_vox_driver);
 
-MODULE_DESCRIPTION("ASoC Cirrus Logic CLSIC VOX codec");
+MODULE_DESCRIPTION("ASoC Cirrus Logic CLSIC vox codec");
 MODULE_AUTHOR("Piotr Stankiewicz <piotrs@opensource.wolfsonmicro.com>");
 MODULE_AUTHOR("Ralph Clark <ralph.clark@cirrus.com>");
 MODULE_AUTHOR("Simon Trimmer <simont@opensource.cirrus.com>");

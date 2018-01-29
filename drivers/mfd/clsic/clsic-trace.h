@@ -507,6 +507,38 @@ TRACE_EVENT(clsic_vox_new_auth_result,
 			)
 );
 
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_install_bio_vte_map,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_uninstall_bio_vte_map,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DECLARE_EVENT_CLASS(clsic_vox_bin_id,
+	TP_PROTO(uint8_t bin_id),
+	TP_ARGS(bin_id),
+	TP_STRUCT__entry(
+			__field(uint8_t, bin_id)
+			),
+	TP_fast_assign(
+			__entry->bin_id = bin_id;
+		),
+	TP_printk("bin ID %d", __entry->bin_id)
+);
+
+DEFINE_EVENT(clsic_vox_bin_id, clsic_vox_install_bin,
+	TP_PROTO(uint8_t bin_id),
+	TP_ARGS(bin_id)
+);
+
+DEFINE_EVENT(clsic_vox_bin_id, clsic_vox_uninstall_bin,
+	TP_PROTO(uint8_t bin_id),
+	TP_ARGS(bin_id)
+);
+
 TRACE_EVENT(clsic_dev_panic,
 	TP_PROTO(enum clsic_states state),
 	TP_ARGS(state),
