@@ -963,18 +963,18 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 	for (phr = start_phr; phr <= end_phr; phr++) {
 		for (usr = CLSIC_VOX_USER1; usr <= CLSIC_VOX_USER3; usr++) {
 			clsic_init_message(
-				      (union t_clsic_generic_message *)&msg_cmd,
-				      vox->service->service_instance,
-				      CLSIC_VOX_MSG_CR_IS_USER_INSTALLED);
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     vox->service->service_instance,
+				     CLSIC_VOX_MSG_CR_IS_USER_INSTALLED);
 			msg_cmd.cmd_is_user_installed.userid = usr;
 			msg_cmd.cmd_is_user_installed.phraseid = phr;
 
 			ret = clsic_send_msg_sync(
-				      vox->clsic,
-				      (union t_clsic_generic_message *)&msg_cmd,
-				      (union t_clsic_generic_message *)&msg_rsp,
-				      CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				      CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+				     vox->clsic,
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 			if (ret) {
 				clsic_err(vox->clsic,
 					  "clsic_send_msg_sync %d.\n", ret);
@@ -987,8 +987,8 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 									true;
 				break;
 			case CLSIC_ERR_USER_NOT_INSTALLED:
-			    vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
-						+ vox->user_id] = false;
+			    vox->user_installed[(phr * VOX_MAX_USERS) + usr] =
+									false;
 				break;
 			case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 			case CLSIC_ERR_INVAL_USERID:
