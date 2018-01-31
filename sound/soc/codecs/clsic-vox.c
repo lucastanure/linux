@@ -347,7 +347,9 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
 
-	kfree(asr_stream->buf.data);
+	if (asr_stream->buf.data)
+		kfree(asr_stream->buf.data);
+	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
 	asr_stream->buf.read_idx = 0;
