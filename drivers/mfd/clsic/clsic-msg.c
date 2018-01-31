@@ -1843,6 +1843,13 @@ static void clsic_message_worker(struct work_struct *data)
 				CLSIC_STATE_CHANGE_LOCKHELD);
 
 		/*
+		 * The messaging worker could have been triggered by both a
+		 * message being enqueued and debugcontrol being requested,
+		 * purge the message queues now that debugcontrol is granted.
+		 */
+		clsic_purge_message_queues(clsic);
+
+		/*
 		 * Need to disable interrupts to prevent messages sent to the
 		 * host being processed
 		 */
