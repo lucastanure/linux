@@ -637,8 +637,10 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		vox_update_barge_in(vox);
 
 		ret = vox_set_mode(vox, CLSIC_VOX_MODE_LISTEN);
-		if (ret)
-			return -EIO;
+		if (ret) {
+			ret = -EIO;
+			goto exit;
+		}
 
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
@@ -656,14 +658,16 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 		if (ret) {
 			clsic_err(clsic, "Error sending msg: %d\n", ret);
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		if (msg_rsp.rsp_listen_start.hdr.err) {
 			clsic_err(clsic,
 				  "Failed to start listening: %s\n",
 				  clsic_error_string(
 					msg_rsp.rsp_listen_start.hdr.err));
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 
 		trace_clsic_vox_asr_stream_listen(
@@ -704,8 +708,15 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		break;
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
+	}
+
+exit:
+	/* In case of failure during SNDRV_PCM_TRIGGER_START. */
+	if (ret) {
+		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+
+		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
 	}
 
 	return ret;
