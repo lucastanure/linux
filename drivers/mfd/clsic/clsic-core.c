@@ -818,6 +818,10 @@ static int clsic_runtime_resume(struct device *dev)
 	bool force_reset = false;
 	int ret;
 
+	/* if the driver has halted, don't switch back on */
+	if (clsic->state == CLSIC_STATE_HALTED)
+		return -EINVAL;
+
 	trace_clsic_pm(RPM_RESUMING);
 
 	clsic_state_set(clsic, CLSIC_STATE_RESUMING,
@@ -877,13 +881,15 @@ static int clsic_runtime_suspend(struct device *dev)
 
 	trace_clsic_pm(RPM_SUSPENDING);
 
-	clsic_state_set(clsic, CLSIC_STATE_SUSPENDING,
-			CLSIC_STATE_CHANGE_LOCKNOTHELD);
+	if (clsic->state != CLSIC_STATE_HALTED) {
+		clsic_state_set(clsic, CLSIC_STATE_SUSPENDING,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
 
-	/* suspend services */
-	ret = clsic_pm_service_transition(clsic, PM_EVENT_SUSPEND);
-	if (ret)
-		return ret;
+		/* suspend services */
+		ret = clsic_pm_service_transition(clsic, PM_EVENT_SUSPEND);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * disable IRQ before removing VDD_D, balances with an enable in resume
@@ -893,9 +899,11 @@ static int clsic_runtime_suspend(struct device *dev)
 	clsic->vdd_d_powered_off = false;
 	regulator_disable(clsic->vdd_d);
 
-	trace_clsic_pm(RPM_SUSPENDED);
+	if (clsic->state != CLSIC_STATE_HALTED)
+		clsic_state_set(clsic, CLSIC_STATE_OFF,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
 
-	clsic_state_set(clsic, CLSIC_STATE_OFF, CLSIC_STATE_CHANGE_LOCKNOTHELD);
+	trace_clsic_pm(RPM_SUSPENDED);
 
 	return 0;
 }
@@ -1062,6 +1070,10 @@ static ssize_t clsic_store_state(struct device *dev,
 		/* Debug control prevents device state changes */
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
 			return -EPERM;
+
+		if (clsic->state == CLSIC_STATE_HALTED)
+			clsic_state_set(clsic, CLSIC_STATE_OFF,
+					CLSIC_STATE_CHANGE_LOCKNOTHELD);
 
 		pm_runtime_suspend(clsic->dev);
 
