@@ -310,64 +310,36 @@ TRACE_EVENT(clsic_vox_asr_stream_queue_read,
 	TP_printk("bytes copied up to now: %zu", __entry->bytes_copied)
 );
 
-DECLARE_EVENT_CLASS(clsic_vox_asr_stream_data_rcv_tpl,
-	TP_PROTO(u32 sz, size_t read_idx, size_t write_idx),
-	TP_ARGS(sz, read_idx, write_idx),
-	TP_STRUCT__entry(
-			__field(u32, sz)
-			__field(size_t, read_idx)
-			__field(size_t, write_idx)
-			),
-	TP_fast_assign(
-			__entry->sz = sz;
-			__entry->read_idx = read_idx;
-			__entry->write_idx = write_idx;
-		),
-	TP_printk("receiving: %ub; buf r/w idxs %zu/%zu",
-		  __entry->sz,
-		  __entry->read_idx,
-		  __entry->write_idx)
+TRACE_EVENT(clsic_vox_asr_stream_data_rcv_start,
+	TP_PROTO(size_t sz),
+	TP_ARGS(sz),
+	TP_STRUCT__entry(__field(size_t, sz)),
+	TP_fast_assign(__entry->sz = sz;),
+	TP_printk("receiving: %u bytes", __entry->sz)
 );
 
-DEFINE_EVENT(clsic_vox_asr_stream_data_rcv_tpl,
-	     clsic_vox_asr_stream_data_rcv_start,
-	TP_PROTO(u32 sz, size_t read_idx, size_t write_idx),
-	TP_ARGS(sz, read_idx, write_idx)
+TRACE_EVENT(clsic_vox_asr_stream_data_rcv_end,
+	TP_PROTO(size_t sz),
+	TP_ARGS(sz),
+	TP_STRUCT__entry(__field(size_t, sz)),
+	TP_fast_assign(__entry->sz = sz;),
+	TP_printk("receiving: %u bytes", __entry->sz)
 );
 
-DEFINE_EVENT(clsic_vox_asr_stream_data_rcv_tpl,
-	     clsic_vox_asr_stream_data_rcv_end,
-	TP_PROTO(u32 sz, size_t read_idx, size_t write_idx),
-	TP_ARGS(sz, read_idx, write_idx)
+TRACE_EVENT(clsic_vox_asr_stream_copy_start,
+	TP_PROTO(size_t count),
+	TP_ARGS(count),
+	TP_STRUCT__entry(__field(size_t, count)),
+	TP_fast_assign(__entry->count = count;),
+	TP_printk("copying: %zu bytes", __entry->count)
 );
 
-DECLARE_EVENT_CLASS(clsic_vox_asr_stream_copy_tpl,
-	TP_PROTO(size_t count, size_t read_idx, size_t write_idx),
-	TP_ARGS(count, read_idx, write_idx),
-	TP_STRUCT__entry(
-			__field(size_t, count)
-			__field(size_t, read_idx)
-			__field(size_t, write_idx)
-			),
-	TP_fast_assign(
-			__entry->count = count;
-			__entry->read_idx = read_idx;
-			__entry->write_idx = write_idx;
-		),
-	TP_printk("copying: %zub; buf r/w idxs %zu/%zu",
-		  __entry->count,
-		  __entry->read_idx,
-		  __entry->write_idx)
-);
-
-DEFINE_EVENT(clsic_vox_asr_stream_copy_tpl, clsic_vox_asr_stream_copy_start,
-	TP_PROTO(size_t count, size_t read_idx, size_t write_idx),
-	TP_ARGS(count, read_idx, write_idx)
-);
-
-DEFINE_EVENT(clsic_vox_asr_stream_copy_tpl, clsic_vox_asr_stream_copy_end,
-	TP_PROTO(size_t count, size_t read_idx, size_t write_idx),
-	TP_ARGS(count, read_idx, write_idx)
+TRACE_EVENT(clsic_vox_asr_stream_copy_end,
+	TP_PROTO(size_t count),
+	TP_ARGS(count),
+	TP_STRUCT__entry(__field(size_t, count)),
+	TP_fast_assign(__entry->count = count;),
+	TP_printk("copying: %zu bytes", __entry->count)
 );
 
 TRACE_EVENT(clsic_vox_set_mode,

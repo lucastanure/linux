@@ -381,15 +381,6 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 		return -EINVAL;
 	}
 
-	/*
-	 * find vox service handler
-	 *
-	 * FIXME: for now an assumption is made that there is only one vox
-	 *        service, which may not be the case in the future; to solve
-	 *        this each instance of the vox service should be represented
-	 *        by its own codec device
-	 */
-
 	if (vox->asr_stream.stream) {
 		clsic_err(vox->clsic, "ASR stream already active.\n");
 		return -EBUSY;
@@ -419,8 +410,8 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
 
-	if (asr_stream->buf.data)
-		kfree(asr_stream->buf.data);
+	kfree(asr_stream->buf.data);
+
 	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
@@ -467,7 +458,7 @@ int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 	struct clsic_vox *vox =
 		container_of(asr_stream, struct clsic_vox, asr_stream);
 	struct clsic *clsic = vox->clsic;
-	size_t size, frag_sz = params->buffer.fragment_size;
+	size_t frag_sz = params->buffer.fragment_size;
 	int block_sz, i, frame_sz;
 	bool params_ok = true;
 
@@ -508,14 +499,14 @@ int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 	}
 
 	asr_stream->block_sz = block_sz;
-
-	size = frag_sz * params->buffer.fragments;
-	asr_stream->buf.data = kmalloc(size, GFP_KERNEL);
+	/* Avoid memory leaks from multiple calls to set_params. */
+	kfree(asr_stream->buf.data);
+	asr_stream->buf.data = kmalloc(frag_sz, GFP_KERNEL);
 	if (!asr_stream->buf.data)
 		return -ENOMEM;
-	asr_stream->buf.size = size;
+	asr_stream->buf.size = frag_sz;
 
-	trace_clsic_vox_asr_stream_set_params(params, size);
+	trace_clsic_vox_asr_stream_set_params(params, frag_sz);
 
 	return 0;
 }
@@ -532,12 +523,9 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 						      struct clsic *clsic,
 						      struct clsic_message *msg)
 {
-	struct clsic_service *handler =
-		clsic_find_first_service(clsic, CLSIC_SRV_TYPE_VOX);
-	struct clsic_vox *vox = handler->data;
+	struct clsic_vox *vox = (struct clsic_vox *) (uintptr_t) msg->cookie;
 	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
 	union clsic_vox_msg *msg_rsp;
-	size_t read_idx, write_idx;
 	u32 payload_sz;
 
 	asr_stream->asr_block_pending = false;
@@ -572,39 +560,19 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 		return CLSIC_MSG_RELEASED;
 	}
 
-	write_idx = asr_stream->buf.write_idx;
-	read_idx = READ_ONCE(asr_stream->buf.read_idx);
 	payload_sz = msg_rsp->blkrsp_get_asr_block.hdr.bulk_sz;
 
-	trace_clsic_vox_asr_stream_data_rcv_start(payload_sz, read_idx,
-						  write_idx);
+	trace_clsic_vox_asr_stream_data_rcv_start(payload_sz);
 
-	if ((read_idx - (write_idx + 1)) % asr_stream->buf.size >=
-	    asr_stream->buf.frag_sz) {
-		/* extract data from the response to an intermediate buffer */
-		memcpy((u8 *) asr_stream->buf.data + write_idx,
-		       msg->bulk_rxbuf,
-		       payload_sz);
+	/* Extract data from the response to an intermediate buffer. */
+	memcpy((uint8_t *) asr_stream->buf.data, msg->bulk_rxbuf, payload_sz);
 
-		smp_store_release(&asr_stream->buf.write_idx,
-				  (write_idx + payload_sz) %
-				  (asr_stream->buf.size));
+	asr_stream->copied_total += payload_sz;
 
-		asr_stream->copied_total += payload_sz;
+	/* Notify the compressed framework of available data. */
+	snd_compr_fragment_elapsed(asr_stream->stream);
 
-		/* notify the compressed framework of available data */
-		snd_compr_fragment_elapsed(asr_stream->stream);
-
-		trace_clsic_vox_asr_stream_data_rcv_end(payload_sz,
-						    asr_stream->buf.read_idx,
-						    asr_stream->buf.write_idx);
-	} else {
-		clsic_err(clsic, "ASR stream overflow.\n");
-		asr_stream->error = true;
-		asr_stream->copied_total += payload_sz;
-		snd_compr_fragment_elapsed(asr_stream->stream);
-		return CLSIC_MSG_RELEASED;
-	}
+	trace_clsic_vox_asr_stream_data_rcv_end(payload_sz);
 
 	return CLSIC_MSG_RELEASED;
 }
@@ -702,7 +670,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				   CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN,
-				   0,
+				   (uint64_t) (uintptr_t) vox,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
 		clsic_err(clsic, "Error sending msg: %d\n", ret);
@@ -757,7 +725,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_LISTEN_START);
-		/* TODO: add handling for external trigger */
+
 		msg_cmd.cmd_listen_start.trgr_domain =
 						CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
@@ -862,42 +830,23 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 		container_of(asr_stream, struct clsic_vox, asr_stream);
 	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
-	size_t write_idx, read_idx;
 	int ret = 0;
 
 	if (asr_stream->error) {
-		clsic_err(clsic, "ASR stream xrun.\n");
+		clsic_err(clsic, "ASR stream error.\n");
 		return -EIO;
 	}
 
-	write_idx = smp_load_acquire(&asr_stream->buf.write_idx);
-	read_idx = asr_stream->buf.read_idx;
+	count = min(count, asr_stream->buf.size);
 
-	trace_clsic_vox_asr_stream_copy_start(count, read_idx, write_idx);
+	trace_clsic_vox_asr_stream_copy_start(count);
 
-	if ((write_idx - read_idx) % asr_stream->buf.size >= count) {
-		if (copy_to_user(buf, (uint8_t *) asr_stream->buf.data +
-						read_idx, count)) {
-			clsic_err(clsic, "Failed to copy data to user.\n");
-			return -EFAULT;
-		}
-
-		smp_store_release(&asr_stream->buf.read_idx,
-				  (read_idx + count) %
-				  (asr_stream->buf.size));
-
-		trace_clsic_vox_asr_stream_copy_end(count,
-						    asr_stream->buf.read_idx,
-						    asr_stream->buf.write_idx);
-	} else {
-		/*
-		 * underrun - should never happen as the stream will be
-		 * signalled only when there is data available or the stream
-		 * has overran
-		 */
-		clsic_err(clsic, "ASR stream underrun.\n");
-		return -EIO;
+	if (copy_to_user(buf, (uint8_t *) asr_stream->buf.data, count)) {
+		clsic_err(clsic, "Failed to copy data to user.\n");
+		return -EFAULT;
 	}
+
+	trace_clsic_vox_asr_stream_copy_end(count);
 
 	/* queue up next read */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -910,7 +859,7 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				   CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN,
-				   0,
+				   (uint64_t) (uintptr_t) vox,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
 		asr_stream->asr_block_pending = false;
@@ -2619,8 +2568,7 @@ static int vox_notification_handler(struct clsic *clsic,
 static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
-	struct clsic_service *handler =
-		clsic_find_first_service(vox->clsic, CLSIC_SRV_TYPE_VOX);
+	struct clsic_service *handler = vox->service;
 	int ret;
 
 	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
@@ -3017,7 +2965,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	vox->clsic = clsic;
-	vox->service = vox_service;
+	vox->service = clsic->service_handlers[vox_service->service_instance];
 
 	platform_set_drvdata(pdev, vox);
 #if 0
