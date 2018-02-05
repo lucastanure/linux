@@ -83,7 +83,6 @@ struct clsic_asr_stream {
 union bio_results_u {
 	struct clsic_vox_auth_result result;
 	struct clsic_vox_auth_result_ex result_ex;
-	struct clsic_vox_auth_result_ex2 result_ex2;
 };
 
 struct clsic_vox {
@@ -230,16 +229,14 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
-#define VOX_NUM_BIO_RESULTS_TYPES	3
+#define VOX_NUM_BIO_RESULTS_TYPES	2
 
 #define VOX_BIO_RESULTS_CLASSIC		0
 #define VOX_BIO_RESULTS_EXT_V1		1
-#define VOX_BIO_RESULTS_EXT_V2		2
 
 static const char *vox_bio_results_type_text[VOX_NUM_BIO_RESULTS_TYPES] = {
 	[VOX_BIO_RESULTS_CLASSIC]	= "Classic",
 	[VOX_BIO_RESULTS_EXT_V1]	= "Extended Version 1",
-	[VOX_BIO_RESULTS_EXT_V2]	= "Extended Version 2",
 };
 
 #define VOX_NUM_SEC_LEVEL_TYPES		3
@@ -269,8 +266,6 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 		return sizeof(struct clsic_vox_auth_result);
 	case VOX_BIO_RESULTS_EXT_V1:
 		return sizeof(struct clsic_vox_auth_result_ex);
-	case VOX_BIO_RESULTS_EXT_V2:
-		return sizeof(struct clsic_vox_auth_result_ex2);
 	default:
 		return 0;
 	}
@@ -2205,14 +2200,14 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_TRGR_TIMEOUT:
 			vox->error_info = VOX_ERROR_TIMEOUT;
 			break;
-		case CLSIC_ERR_REP_TOO_NOISY:
+	case CLSIC_ERR_REP_NOISE_LVL:
 			vox->error_info = VOX_ERROR_TOO_NOISY;
 			break;
-		case CLSIC_ERR_REP_NOT_ENOUGH_SPEECH:
-		case CLSIC_ERR_REP_NO_SPEECH:
+		case CLSIC_ERR_REP_SPEECH_RATIO:
+		case CLSIC_ERR_REP_NET_SPEECH:
 			vox->error_info = VOX_ERROR_MORE_SPEECH_NEEDED;
 			break;
-		case CLSIC_ERR_REP_SAT_TOO_HIGH:
+		case CLSIC_ERR_REP_SATURATION:
 			vox->error_info = VOX_ERROR_TOO_LOUD;
 			break;
 		case CLSIC_ERR_INPUT_PATH:

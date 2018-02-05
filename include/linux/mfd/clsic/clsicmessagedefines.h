@@ -41,7 +41,7 @@
  */
 #define CLSIC_SRV_VERSION_SYS			(CONFIG_VERSION_NUMBER)
 #define CLSIC_SRV_VERSION_RAS			(0x00020000)
-#define CLSIC_SRV_VERSION_VOX			(0x00040001)
+#define CLSIC_SRV_VERSION_VOX			(0x00030002)
 #define CLSIC_SRV_VERSION_DBG			(0x00020000)
 #define CLSIC_SRV_VERSION_BLD			(0x01000000)
 
@@ -165,10 +165,10 @@ enum clsic_err {
 	CLSIC_ERR_REPS_COMPLETE			= 37,
 	CLSIC_ERR_REP_TRGR_TIMEOUT		= 38,
 	CLSIC_ERR_REP_UNEXPECTED_TRGR		= 39,
-	CLSIC_ERR_REP_TOO_NOISY			= 40,
-	CLSIC_ERR_REP_NOT_ENOUGH_SPEECH		= 41,
-	CLSIC_ERR_REP_NO_SPEECH			= 42,
-	CLSIC_ERR_REP_SAT_TOO_HIGH		= 43,
+	CLSIC_ERR_REP_NOISE_LVL			= 40,
+	CLSIC_ERR_REP_SPEECH_RATIO		= 41,
+	CLSIC_ERR_REP_NET_SPEECH		= 42,
+	CLSIC_ERR_REP_SATURATION		= 43,
 	CLSIC_ERR_REP_FEATURE_OVERFLOW		= 44,
 	CLSIC_ERR_REPS_NOT_ENOUGH_VALID		= 45,
 	CLSIC_ERR_AUTH_IN_PROGRESS		= 46,
@@ -198,13 +198,12 @@ enum clsic_err {
 	CLSIC_ERR_BPB_ASSET_INVAL_COMP_TYPE	= 70,
 	CLSIC_ERR_BPB_ASSET_INVAL_COMP_TABLE_SZ	= 71,
 	CLSIC_ERR_BPB_ASSET_INVAL_FLAGS		= 72,
-	CLSIC_ERR_INVALID_BIN_ID		= 73,
-	CLSIC_ERR_INVALID_BIN_DATA		= 74,
-	CLSIC_ERR_BIN_NOT_INSTALLED		= 75,
-	CLSIC_ERR_BIOVTE_MAP_INVALID		= 76,
-	CLSIC_ERR_BIOVTE_MAP_SZ_INVALID		= 77,
-	CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED	= 78,
-	CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST = 79,
+	CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED	= 73,
+	CLSIC_ERR_AUTH_NO_USERS_TO_MATCH	= 74,
+	CLSIC_ERR_AUTH_BIOM_DISABLED		= 75,
+	CLSIC_ERR_REP_PLOSIVE			= 76,
+	CLSIC_ERR_REP_SNR			= 77,
+	CLSIC_ERR_REP_REWIND_OVF		= 78,
 	CLSIC_ERR_BL_AUTH_FAILED		= 200,
 	CLSIC_ERR_BL_INVAL_VERSION		= 201,
 	CLSIC_ERR_BL_FLASH_WRITE_FAILED		= 202,
@@ -245,6 +244,35 @@ struct clsic_nty_hdr {
 } PACKED;
 
 /**
+ *
+ */
+static inline void clsic_cmd_hdr_init(struct clsic_cmd_hdr *hdr, uint8_t msgid) {
+	clsic_set_bulk(&hdr->sbc, 0);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_CMD);
+	hdr->msgid = msgid;
+}
+
+static inline void clsic_rsp_hdr_init(struct clsic_rsp_hdr *hdr, uint8_t msgid,
+				      uint8_t err) {
+	clsic_set_bulk(&hdr->sbc, 0);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_RSP);
+	hdr->msgid = msgid;
+	hdr->err = err;
+}
+
+static inline void clsic_ack_hdr_init(struct clsic_ack_hdr *hdr, uint8_t msgid) {
+	clsic_set_bulk(&hdr->sbc, 0);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_ACK);
+	hdr->msgid = msgid;
+}
+
+static inline void clsic_nty_hdr_init(struct clsic_nty_hdr *hdr, uint8_t msgid) {
+	clsic_set_bulk(&hdr->sbc, 0);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_NTY);
+	hdr->msgid = msgid;
+}
+
+/**
  *  Header structures for bulk messages.
  */
 struct clsic_blkcmd_hdr {
@@ -265,6 +293,32 @@ struct clsic_blknty_hdr {
 	uint8_t msgid;
 	uint32_t bulk_sz;
 } PACKED;
+
+static inline void clsic_blkcmd_hdr_init(struct clsic_blkcmd_hdr *hdr,
+					 uint8_t msgid, uint32_t bulk_sz) {
+	clsic_set_bulk(&hdr->sbc, 1);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_CMD);
+	hdr->msgid = msgid;
+	hdr->bulk_sz = bulk_sz;
+}
+
+static inline void clsic_blkrsp_hdr_init(struct clsic_blkrsp_hdr *hdr,
+					 uint8_t msgid, uint32_t bulk_sz,
+					 uint8_t err) {
+	clsic_set_bulk(&hdr->sbc, 1);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_RSP);
+	hdr->msgid = msgid;
+	hdr->err = err;
+	hdr->bulk_sz = bulk_sz;
+}
+
+static inline void clsic_blknty_hdr_init(struct clsic_blknty_hdr *hdr,
+					 uint8_t msgid, uint32_t bulk_sz) {
+	clsic_set_bulk(&hdr->sbc, 1);
+	clsic_set_cran(&hdr->sbc, CLSIC_CRAN_NTY);
+	hdr->msgid = msgid;
+	hdr->bulk_sz = bulk_sz;
+}
 
 /**
  *  Structure output as the bulk part of all PANIC and GET_DEBUG_INFO messages.
@@ -295,6 +349,8 @@ enum clsic_sys_msg_id {
 	CLSIC_SYS_MSG_CR_SET_TRACE_FILTER	= 6,
 	CLSIC_SYS_MSG_CR_GET_DEBUG_INFO		= 7,
 	CLSIC_SYS_MSG_CR_GET_KEY_VAL		= 8,
+	CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT	= 9,
+	CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT	= 10,
 };
 
 /**
@@ -398,17 +454,62 @@ union clsic_sys_msg {
 	} PACKED rsp_set_trace_filter;
 
 	/**
+	 *  CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_get_di_category_count;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category_count;
+	} PACKED rsp_get_di_category_count;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+	} PACKED cmd_get_di_page_count;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page_count;
+	} PACKED rsp_get_di_page_count;
+
+	/**
 	 *  CLSIC_SYS_MSG_CR_GET_DEBUG_INFO command structure.
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED cmd_get_debug_info;
 
 	/**
 	 *  CLSIC_SYS_MSG_CR_GET_DEBUG_INFO response structure.
 	 */
 	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
+	} PACKED rsp_get_debug_info;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_GET_DEBUG_INFO response structure.
+	 */
+	struct {
 		struct clsic_blkrsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED blkrsp_get_debug_info;
 
 	/**
@@ -491,6 +592,8 @@ enum clsic_ras_msg_id {
 	CLSIC_RAS_MSG_CR_WRREG_BULK		= 5,
 	CLSIC_RAS_MSG_CR_SET_IRQ_NTY_MODE	= 6,
 	CLSIC_RAS_MSG_N_IRQ			= 7,
+	CLSIC_RAS_MSG_CR_GET_DI_CATEGORY_COUNT	= 8,
+	CLSIC_RAS_MSG_CR_GET_DI_PAGE_COUNT	= 9,
 };
 
 enum clsic_ras_irq_nty_mode {
@@ -546,17 +649,62 @@ union clsic_ras_msg {
 	} PACKED rsp_wrreg;
 
 	/**
+	 *  CLSIC_RAS_MSG_CR_GET_DI_CATEGORY_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_get_di_category_count;
+
+	/**
+	 *  CLSIC_RAS_MSG_CR_GET_DI_CATEGORY_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category_count;
+	} PACKED rsp_get_di_category_count;
+
+	/**
+	 *  CLSIC_RAS_MSG_CR_GET_DI_PAGE_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+	} PACKED cmd_get_di_page_count;
+
+	/**
+	 *  CLSIC_RAS_MSG_CR_GET_DI_PAGE_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page_count;
+	} PACKED rsp_get_di_page_count;
+
+	/**
 	 *  CLSIC_RAS_MSG_CR_GET_DEBUG_INFO command structure.
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED cmd_get_debug_info;
 
 	/**
 	 *  CLSIC_RAS_MSG_CR_GET_DEBUG_INFO response structure.
 	 */
 	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
+	} PACKED rsp_get_debug_info;
+
+	/**
+	 *  CLSIC_RAS_MSG_CR_GET_DEBUG_INFO response structure.
+	 */
+	struct {
 		struct clsic_blkrsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED blkrsp_get_debug_info;
 
 	/**
@@ -623,7 +771,7 @@ union clsic_ras_msg {
 	 */
 	struct {
 		struct clsic_nty_hdr hdr;
-		uint32_t irq_id;
+        uint32_t irq_id;
 	} PACKED nty_irq;
 } PACKED;
 
@@ -639,6 +787,8 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_BARGE_IN_ENA		= 2,
 	CLSIC_VOX_MSG_CR_BARGE_IN_DIS		= 3,
 	CLSIC_VOX_MSG_CR_GET_DEBUG_INFO		= 26,
+	CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT	= 28,
+	CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT	= 29,
 
 	/**
 	 *  VOX Messages for Enrol mode.
@@ -654,7 +804,7 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_LISTEN_START		= 12,
 	CLSIC_VOX_MSG_N_LISTEN_ERR		= 13,
 	CLSIC_VOX_MSG_N_TRGR_DETECT		= 14,
-	CLSIC_VOX_MSG_CR_SET_TRGR_DETECT	= 15,
+	CLSIC_VOX_MSG_CR_SET_TRGR_INFO		= 15,
 
 	/**
 	 *  VOX Messages for Streaming mode.
@@ -663,7 +813,7 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_GET_TRGR_INFO		= 16,
 	CLSIC_VOX_MSG_CR_GET_AVAIL_ASR_DATA	= 17,
 	CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK		= 18,
-	CLSIC_VOX_MSG_N_NEW_AUTH_RESULT		= 27,
+	CLSIC_VOX_MSG_N_NEW_AUTH_RESULT 	= 27,
 
 	/**
 	 *  VOX Messages for Manage mode.
@@ -674,12 +824,6 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_IS_USER_INSTALLED	= 23,
 	CLSIC_VOX_MSG_CR_REMOVE_USER		= 24,
 	CLSIC_VOX_MSG_CR_GET_AUTH_KEY		= 25,
-	CLSIC_VOX_MSG_CR_INSTALL_BIN		= 28,
-	CLSIC_VOX_MSG_CR_REMOVE_BIN			= 29,
-	CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED	= 30,
-	CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP = 31,
-	CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP	= 32,
-	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED	= 33,
 };
 
 /**
@@ -727,16 +871,6 @@ enum clsic_vox_userid {
 enum clsic_vox_phraseid {
 	CLSIC_VOX_PHRASE_VDT1			= 0,
 	CLSIC_VOX_PHRASE_TI			= 4,
-};
-
-/**
- *  VOX Service bin identifiers.
- */
-enum clsic_vox_binid {
-	CLSIC_VOX_BIN_VTE1	= 0,
-	CLSIC_VOX_BIN_VTE2	= 1,
-	CLSIC_VOX_BIN_SSF	= 2,
-	CLSIC_VOX_BIN_CNT	= 3,
 };
 
 /**
@@ -800,12 +934,6 @@ enum clsic_vox_auth_result_format {
 	 *  specified by struct clsic_vox_auth_result_ex
 	 */
 	CLSIC_VOX_AUTH_RESULT_EXTENDED		= 0x1,
-
-	/**
-	 *  If this Flag is used then result will be in the foramt
-	 *  specified by struct clsic_vox_auth_result_ex2
-	 */
-	CLSIC_VOX_AUTH_RESULT_EXTENDED2		= 0x2,
 };
 
 
@@ -880,17 +1008,62 @@ union clsic_vox_msg {
 	} PACKED rsp_barge_in_dis;
 
 	/**
+	 *  CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_get_di_category_count;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category_count;
+	} PACKED rsp_get_di_category_count;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+	} PACKED cmd_get_di_page_count;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page_count;
+	} PACKED rsp_get_di_page_count;
+
+	/**
 	 *  CLSIC_VOX_MSG_CR_GET_DEBUG_INFO command structure.
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED cmd_get_debug_info;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_GET_DEBUG_INFO response structure.
 	 */
 	struct {
+		struct clsic_rsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
+	} PACKED rsp_get_debug_info;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_GET_DEBUG_INFO response structure.
+	 */
+	struct {
 		struct clsic_blkrsp_hdr hdr;
+		uint16_t category;
+		uint16_t page;
 	} PACKED blkrsp_get_debug_info;
 
 
@@ -949,6 +1122,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint64_t tag;
 	} PACKED cmd_install_user_complete;
 
 	/**
@@ -987,7 +1161,6 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_nty_hdr hdr;
-		uint8_t err;
 	} PACKED nty_listen_err;
 
 	/**
@@ -998,20 +1171,18 @@ union clsic_vox_msg {
 	} PACKED nty_trgr_detect;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_SET_TRGR_DETECT command structure.
+	 *  CLSIC_VOX_MSG_CR_SET_TRGR_INFO command structure.
 	 */
 	struct {
-		struct clsic_cmd_hdr hdr;
-		int32_t vte_engineid;
-		int32_t vte_phraseid;
-	} PACKED cmd_set_trgr_detect;
+		struct clsic_blkcmd_hdr hdr;
+	} PACKED cmd_set_trgr_info;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_SET_TRGR_DETECT response structure.
+	 *  CLSIC_VOX_MSG_CR_SET_TRGR_INFO response structure.
 	 */
 	struct {
 		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_set_trgr_detect;
+	} PACKED rsp_set_trgr_info;
 
 
 	/**
@@ -1041,7 +1212,6 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_auth_user;
-
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_GET_TRGR_INFO command structure.
@@ -1114,6 +1284,7 @@ union clsic_vox_msg {
 		struct clsic_nty_hdr hdr;
 		int32_t total_frames_processed;
 		uint8_t userid[CLSIC_VOX_SECURITY_LVL_COUNT];
+		uint8_t auth_stop_reason;
 	} PACKED nty_new_auth_result;
 
 
@@ -1181,6 +1352,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_rsp_hdr hdr;
+		uint64_t tag;
 	} PACKED rsp_is_user_installed;
 
 	/**
@@ -1219,97 +1391,11 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_get_auth_key;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN command structure.
-	 */
-	struct {
-		struct clsic_blkcmd_hdr hdr;
-		uint8_t binid;
-	} PACKED blkcmd_install_bin;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_install_bin;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED command structure.
-	 */
-	struct {
-		struct clsic_cmd_hdr hdr;
-		uint8_t binid;
-	} PACKED cmd_is_bin_installed;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_is_bin_installed;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_REMOVE_BIN command structure.
-	 */
-	struct {
-		struct clsic_cmd_hdr hdr;
-		uint8_t binid;
-	} PACKED cmd_remove_bin;
-
-	/**
-	 *  CLSIC_VOX_MSG_CR_REMOVE_BIN response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_remove_bin;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP command structure.
-	 */
-	struct {
-		struct clsic_blkcmd_hdr hdr;
-	} PACKED blkcmd_install_biovte_map;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_install_biovte_map;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED command structure.
-	 */
-	struct {
-		struct clsic_cmd_hdr hdr;
-	} PACKED cmd_is_biovte_map_installed;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_is_biovte_map_installed;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP command structure.
-	 */
-	struct {
-		struct clsic_cmd_hdr hdr;
-	} PACKED cmd_remove_biovte_map;
-
-	/**
-	 * CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP response structure.
-	 */
-	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_remove_biovte_map;
 } PACKED;
 
 /**
- *  Bulk part of CLSIC_VOX_MSG_CR_GET_TRGR_INFO response
+ *  Bulk part of the CLSIC_VOX_MSG_CR_SET_TRGR_INFO command and
+ *  CLSIC_VOX_MSG_CR_GET_TRGR_INFO response.
  */
 struct clsic_vox_trgr_info {
 	uint8_t phraseid;
@@ -1396,79 +1482,12 @@ struct clsic_vox_auth_result_ex {
 } PACKED;
 
 /**
- *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
- *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_EXTENDED2
- *
- *  If result_count is greater than CLSIC_VOX_MAX_AUTH_RESULT_COUNT
- *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
- *  in the below structure else result_count number of results will be
- *  available.
- *
- *  Results are sorted in ascending order of time i.e. start_frame[i+1]
- *  will be greater than end_frame[i].
- *
- *  The "secure_audio_src" field is a bit field where each of bits [0:9] are
- *  used to represent the security of each result segment. 0 means that the
- *  audio for the segment was sourced from a non-secure audio source. 1 means
- *  that the audio for the segment was sourced from a secure audio source.
- *
- *  In the extended2 result format biometric scores and antispoofing scores
- *  will be included for all installed users even if no user was identified.
- *
- *  .userid would give the identified user if any, by only considering the
- *  biometric score given by .score
- *
- *  If .is_spoof is set that would mean that user identified in .userid may
- *  be because of spoof or recorded audio rather than real live audio spoken
- *  by a person
- *
- */
-struct clsic_vox_auth_result_ex2 {
-	uint8_t nonce[16];
-	uint8_t security_lvl;
-	int32_t result_count;
-	int32_t start_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	int32_t end_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
-	uint8_t userid[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	float score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint8_t is_spoof[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint8_t as_result1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	float as_score1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint8_t as_result2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	float as_score2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint16_t secure_audio_src;
-	uint8_t pad1[13];
-	uint8_t signature[74];
-	uint8_t pad2[2];
-} PACKED;
-
-/**
  *  Bulk part of the CLSIC_VOX_MSG_CR_GET_AUTH_KEY response.
  */
 struct clsic_vox_auth_key {
 	uint8_t pub_key[33];
 	uint8_t pad[3];
 } PACKED;
-
-/**
- *  Part of clsic_vox_biovte_map
- */
-struct clsic_vox_biovte_map_entry {
-	int32_t bio_phraseid;
-	int32_t vte_engineid;
-	int32_t vte_phraseid;
-} PACKED;
-
-/**
- *  Bulk part of the CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP command,
- *  map will have cnt number of entries.
- */
-struct clsic_vox_biovte_map {
-	uint32_t cnt;
-	struct clsic_vox_biovte_map_entry map[0];
-} PACKED;
-
 
 /**
  *  Boot Loader Service message identifiers.
@@ -1599,7 +1618,6 @@ union clsic_bl_msg {
 		uint8_t component;
 	} PACKED nty_flash_corrupted;
 } PACKED;
-
 
 /**
  * Used for handling and identifying messages
