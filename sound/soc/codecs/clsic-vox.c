@@ -205,7 +205,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
 };
 
-#define VOX_NUM_ERRORS			9
+#define VOX_NUM_ERRORS			10
 
 #define VOX_ERROR_SUCCESS		0
 #define VOX_ERROR_LIBRARY		1
@@ -215,7 +215,8 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 #define VOX_ERROR_MORE_SPEECH_NEEDED	5
 #define VOX_ERROR_TOO_LOUD		6
 #define VOX_ERROR_TOO_NOISY		7
-#define VOX_ERROR_CLEARED		8
+#define VOX_ERROR_NO_USERS		8
+#define VOX_ERROR_CLEARED		9
 
 static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
@@ -226,6 +227,7 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_MORE_SPEECH_NEEDED]	= "More Speech Needed",
 	[VOX_ERROR_TOO_LOUD]		= "Too Loud",
 	[VOX_ERROR_TOO_NOISY]		= "Too Noisy",
+	[VOX_ERROR_NO_USERS]		= "No Users Identified",
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
@@ -1580,6 +1582,11 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		vox->error_info = VOX_ERROR_SUCCESS;
 	} else {
 		switch (msg_rsp.rsp_auth_user.hdr.err) {
+		case CLSIC_ERR_NO_USER_IDENTIFIED:
+		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
+			vox->error_info = VOX_ERROR_NO_USERS;
+			ret = -EIO;
+			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_CANCELLED:
 		case CLSIC_ERR_TOO_SMALL:
@@ -1588,9 +1595,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_VOICEID:
 		case CLSIC_ERR_INPUT_PATH:
 		case CLSIC_ERR_SECURITY_FAIL:
-		case CLSIC_ERR_NO_USER_IDENTIFIED:
 		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
-		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
 		case CLSIC_ERR_AUTH_BIOM_DISABLED:
 			clsic_err(vox->clsic, "%s.\n",
 				clsic_error_string(
