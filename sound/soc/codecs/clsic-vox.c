@@ -1590,6 +1590,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_SECURITY_FAIL:
 		case CLSIC_ERR_NO_USER_IDENTIFIED:
 		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
+		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
+		case CLSIC_ERR_AUTH_BIOM_DISABLED:
 			clsic_err(vox->clsic, "%s.\n",
 				clsic_error_string(
 				    msg_rsp.rsp_auth_user.hdr.err));
@@ -2200,7 +2202,8 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_TRGR_TIMEOUT:
 			vox->error_info = VOX_ERROR_TIMEOUT;
 			break;
-	case CLSIC_ERR_REP_NOISE_LVL:
+		case CLSIC_ERR_REP_NOISE_LVL:
+		case CLSIC_ERR_REP_SNR:
 			vox->error_info = VOX_ERROR_TOO_NOISY;
 			break;
 		case CLSIC_ERR_REP_SPEECH_RATIO:
@@ -2215,6 +2218,8 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_UNEXPECTED_TRGR:
 		case CLSIC_ERR_SECURITY_FAIL:
 		case CLSIC_ERR_REP_FEATURE_OVERFLOW:
+		case CLSIC_ERR_REP_PLOSIVE:
+		case CLSIC_ERR_REP_REWIND_OVF:
 			clsic_err(vox->clsic, "%s.\n",
 				  clsic_error_string(
 					msg_rsp->nty_rep_complete.err));
