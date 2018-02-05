@@ -1436,7 +1436,6 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	switch (msg_rsp.rsp_rep_start.hdr.err) {
 	case CLSIC_ERR_NONE:
 	case CLSIC_ERR_ONGOING_REP:
-		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case CLSIC_ERR_REPS_COMPLETE:
 	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
@@ -1462,10 +1461,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 		break;
 	}
 
-	/* Wait for the notification. */
-
 exit:
-
 	return ret;
 }
 
@@ -2178,29 +2174,24 @@ static int vox_notification_handler(struct clsic *clsic,
 {
 	struct clsic_vox *vox = (struct clsic_vox *) handler->data;
 	enum clsic_vox_msg_id msgid;
-	union clsic_vox_msg *msg_rsp = (union clsic_vox_msg *) &msg->response;
-	int ret = CLSIC_UNHANDLED;
-
-	/* Make sure it is a notification message. */
-	if (clsic_get_cran_frommsg(msg) != CLSIC_CRAN_NTY)
-		return ret;
+	union clsic_vox_msg *msg_nty = (union clsic_vox_msg *) &msg->fsm;
+	int ret = CLSIC_HANDLED;
 
 	msgid = clsic_get_messageid(msg);
+
 	switch (msgid) {
 	case CLSIC_VOX_MSG_N_LISTEN_ERR:
 		/* TODO: should we be doing something more than this here? */
 		clsic_err(vox->clsic, "trigger detection error on CLSIC.\n");
-		ret = CLSIC_HANDLED;
 		break;
 	case CLSIC_VOX_MSG_N_TRGR_DETECT:
 		if (vox->trig_det_cb)
 			vox->trig_det_cb(vox->clsic,
 				clsic_find_first_service(vox->clsic,
 							 CLSIC_SRV_TYPE_VOX));
-		ret = CLSIC_HANDLED;
 		break;
 	case CLSIC_VOX_MSG_N_REP_COMPLETE:
-		switch (msg_rsp->nty_rep_complete.err) {
+		switch (msg_nty->nty_rep_complete.err) {
 		case CLSIC_ERR_NONE:
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
@@ -2227,30 +2218,29 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_REWIND_OVF:
 			clsic_err(vox->clsic, "%s.\n",
 				  clsic_error_string(
-					msg_rsp->nty_rep_complete.err));
+					msg_nty->nty_rep_complete.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
 		default:
 			clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
-				  msg_rsp->nty_rep_complete.err,
+				  msg_nty->nty_rep_complete.err,
 				  clsic_error_string(
-					msg_rsp->nty_rep_complete.err));
+					msg_nty->nty_rep_complete.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
 		}
 
 		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
 
-		ret = CLSIC_HANDLED;
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
 		clsic_dbg(clsic, "new biometric results available");
 		complete(&vox->new_bio_results_completion);
-		ret = CLSIC_HANDLED;
 		break;
 	default:
 		clsic_err(clsic, "unrecognised message with message ID %d\n",
 			  msgid);
+		ret = CLSIC_UNHANDLED;
 	}
 
 	return ret;
