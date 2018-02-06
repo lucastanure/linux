@@ -41,7 +41,7 @@
  */
 #define CLSIC_SRV_VERSION_SYS			(CONFIG_VERSION_NUMBER)
 #define CLSIC_SRV_VERSION_RAS			(0x00020000)
-#define CLSIC_SRV_VERSION_VOX			(0x00030002)
+#define CLSIC_SRV_VERSION_VOX			(0x00040001)
 #define CLSIC_SRV_VERSION_DBG			(0x00020000)
 #define CLSIC_SRV_VERSION_BLD			(0x01000000)
 
@@ -204,6 +204,13 @@ enum clsic_err {
 	CLSIC_ERR_REP_PLOSIVE			= 76,
 	CLSIC_ERR_REP_SNR			= 77,
 	CLSIC_ERR_REP_REWIND_OVF		= 78,
+	CLSIC_ERR_INVALID_BIN_ID		= 79,
+	CLSIC_ERR_INVALID_BIN_DATA		= 80,
+	CLSIC_ERR_BIN_NOT_INSTALLED		= 81,
+	CLSIC_ERR_BIOVTE_MAP_INVALID		= 82,
+	CLSIC_ERR_BIOVTE_MAP_SZ_INVALID 	= 83,
+	CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED	= 84,
+	CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST = 85,
 	CLSIC_ERR_BL_AUTH_FAILED		= 200,
 	CLSIC_ERR_BL_INVAL_VERSION		= 201,
 	CLSIC_ERR_BL_FLASH_WRITE_FAILED		= 202,
@@ -787,8 +794,8 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_BARGE_IN_ENA		= 2,
 	CLSIC_VOX_MSG_CR_BARGE_IN_DIS		= 3,
 	CLSIC_VOX_MSG_CR_GET_DEBUG_INFO		= 26,
-	CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT	= 28,
-	CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT	= 29,
+	CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT	= 34,
+	CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT	= 35,
 
 	/**
 	 *  VOX Messages for Enrol mode.
@@ -804,7 +811,7 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_LISTEN_START		= 12,
 	CLSIC_VOX_MSG_N_LISTEN_ERR		= 13,
 	CLSIC_VOX_MSG_N_TRGR_DETECT		= 14,
-	CLSIC_VOX_MSG_CR_SET_TRGR_INFO		= 15,
+	CLSIC_VOX_MSG_CR_SET_TRGR_DETECT	= 15,
 
 	/**
 	 *  VOX Messages for Streaming mode.
@@ -824,6 +831,12 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_IS_USER_INSTALLED	= 23,
 	CLSIC_VOX_MSG_CR_REMOVE_USER		= 24,
 	CLSIC_VOX_MSG_CR_GET_AUTH_KEY		= 25,
+	CLSIC_VOX_MSG_CR_INSTALL_BIN		= 28,
+	CLSIC_VOX_MSG_CR_REMOVE_BIN		= 29,
+	CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED	= 30,
+	CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP	= 31,
+	CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP	= 32,
+	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED	= 33,
 };
 
 /**
@@ -871,6 +884,16 @@ enum clsic_vox_userid {
 enum clsic_vox_phraseid {
 	CLSIC_VOX_PHRASE_VDT1			= 0,
 	CLSIC_VOX_PHRASE_TI			= 4,
+};
+
+/**
+ *  VOX Service bin identifiers.
+ */
+enum clsic_vox_binid {
+	CLSIC_VOX_BIN_VTE1	= 0,
+	CLSIC_VOX_BIN_VTE2	= 1,
+	CLSIC_VOX_BIN_SSF	= 2,
+	CLSIC_VOX_BIN_CNT	= 3,
 };
 
 /**
@@ -934,6 +957,12 @@ enum clsic_vox_auth_result_format {
 	 *  specified by struct clsic_vox_auth_result_ex
 	 */
 	CLSIC_VOX_AUTH_RESULT_EXTENDED		= 0x1,
+
+	/**
+	 *  If this Flag is used then result will be in the foramt
+	 *  specified by struct clsic_vox_auth_result_ex2
+	 */
+	CLSIC_VOX_AUTH_RESULT_EXTENDED2		= 0x2,
 };
 
 
@@ -1161,6 +1190,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_nty_hdr hdr;
+		uint8_t err;
 	} PACKED nty_listen_err;
 
 	/**
@@ -1171,18 +1201,20 @@ union clsic_vox_msg {
 	} PACKED nty_trgr_detect;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_SET_TRGR_INFO command structure.
+	 *  CLSIC_VOX_MSG_CR_SET_TRGR_DETECT command structure.
 	 */
 	struct {
-		struct clsic_blkcmd_hdr hdr;
-	} PACKED cmd_set_trgr_info;
+		struct clsic_cmd_hdr hdr;
+		int32_t vte_engineid;
+		int32_t vte_phraseid;
+	} PACKED cmd_set_trgr_detect;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_SET_TRGR_INFO response structure.
+	 *  CLSIC_VOX_MSG_CR_SET_TRGR_DETECT response structure.
 	 */
 	struct {
 		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_set_trgr_info;
+	} PACKED rsp_set_trgr_detect;
 
 
 	/**
@@ -1391,11 +1423,97 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_get_auth_key;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN command structure.
+	 */
+	struct {
+		struct clsic_blkcmd_hdr hdr;
+		uint8_t binid;
+	} PACKED blkcmd_install_bin;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_install_bin;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint8_t binid;
+	} PACKED cmd_is_bin_installed;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_is_bin_installed;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_REMOVE_BIN command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint8_t binid;
+	} PACKED cmd_remove_bin;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_REMOVE_BIN response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_remove_bin;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP command structure.
+	 */
+	struct {
+		struct clsic_blkcmd_hdr hdr;
+	} PACKED blkcmd_install_biovte_map;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_install_biovte_map;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_is_biovte_map_installed;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_is_biovte_map_installed;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_remove_biovte_map;
+
+	/**
+	 * CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_remove_biovte_map;
 } PACKED;
 
 /**
- *  Bulk part of the CLSIC_VOX_MSG_CR_SET_TRGR_INFO command and
- *  CLSIC_VOX_MSG_CR_GET_TRGR_INFO response.
+ *  Bulk part of CLSIC_VOX_MSG_CR_GET_TRGR_INFO response
  */
 struct clsic_vox_trgr_info {
 	uint8_t phraseid;
@@ -1482,12 +1600,79 @@ struct clsic_vox_auth_result_ex {
 } PACKED;
 
 /**
+ *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
+ *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_EXTENDED2
+ *
+ *  If result_count is greater than CLSIC_VOX_MAX_AUTH_RESULT_COUNT
+ *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
+ *  in the below structure else result_count number of results will be
+ *  available.
+ *
+ *  Results are sorted in ascending order of time i.e. start_frame[i+1]
+ *  will be greater than end_frame[i].
+ *
+ *  The "secure_audio_src" field is a bit field where each of bits [0:9] are
+ *  used to represent the security of each result segment. 0 means that the
+ *  audio for the segment was sourced from a non-secure audio source. 1 means
+ *  that the audio for the segment was sourced from a secure audio source.
+ *
+ *  In the extended2 result format biometric scores and antispoofing scores
+ *  will be included for all installed users even if no user was identified.
+ *
+ *  .userid would give the identified user if any, by only considering the
+ *  biometric score given by .score
+ *
+ *  If .is_spoof is set that would mean that user identified in .userid may
+ *  be because of spoof or recorded audio rather than real live audio spoken
+ *  by a person
+ *
+ */
+struct clsic_vox_auth_result_ex2 {
+	uint8_t nonce[16];
+	uint8_t security_lvl;
+	int32_t result_count;
+	int32_t start_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
+	int32_t end_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
+	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
+	uint8_t userid[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
+	float score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	uint8_t is_spoof[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	uint8_t as_result1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	float as_score1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	uint8_t as_result2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	float as_score2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
+	uint16_t secure_audio_src;
+	uint8_t pad1[13];
+	uint8_t signature[74];
+	uint8_t pad2[2];
+} PACKED;
+
+/**
  *  Bulk part of the CLSIC_VOX_MSG_CR_GET_AUTH_KEY response.
  */
 struct clsic_vox_auth_key {
 	uint8_t pub_key[33];
 	uint8_t pad[3];
 } PACKED;
+
+/**
+ *  Part of clsic_vox_biovte_map
+ */
+struct clsic_vox_biovte_map_entry {
+	int32_t bio_phraseid;
+	int32_t vte_engineid;
+	int32_t vte_phraseid;
+} PACKED;
+
+/**
+ *  Bulk part of the CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP command,
+ *  map will have cnt number of entries.
+ */
+struct clsic_vox_biovte_map {
+	uint32_t cnt;
+	struct clsic_vox_biovte_map_entry map[0];
+} PACKED;
+
 
 /**
  *  Boot Loader Service message identifiers.
