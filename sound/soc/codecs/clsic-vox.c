@@ -1590,7 +1590,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_NO_USER_IDENTIFIED:
 		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
 			vox->error_info = VOX_ERROR_NO_USERS;
-			ret = -EIO;
 			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_CANCELLED:
