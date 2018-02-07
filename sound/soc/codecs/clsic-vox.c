@@ -53,6 +53,8 @@
 #define VOX_DEFAULT_NUM_REPS		3
 #define VOX_MAX_NUM_REPS		5
 
+#define CLSIC_VOX_SRV_VERSION_MVP2	0x00030002
+
 struct clsic_asr_stream_buf {
 	void *data;
 
@@ -72,6 +74,7 @@ struct clsic_asr_stream {
 	unsigned int copied_total;
 
 	unsigned int sample_rate;
+	bool listen_error;
 
 	bool error;
 
@@ -545,19 +548,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	return CLSIC_MSG_RELEASED;
 }
 
-/* The trigger detect callback */
-static void clsic_vox_asr_stream_trig_det_cb(struct clsic *clsic,
-					     struct clsic_service *service)
-{
-	struct clsic_vox *vox = service->data;
-	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
-
-	trace_clsic_vox_trigger_heard(service->service_instance);
-
-	if (asr_stream->stream)
-		complete(&asr_stream->trigger_heard);
-}
-
+/* Wait for initial keyphrase trigger from CLSIC. */
 static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 {
 	struct clsic_asr_stream *asr_stream = data;
@@ -567,7 +558,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	union clsic_vox_msg msg_cmd;
 	int ret = 0;
 
-	if (wait_for_completion_interruptible(&asr_stream->trigger_heard)) {
+	ret = wait_for_completion_interruptible(&asr_stream->trigger_heard);
+	if (ret || asr_stream->listen_error) {
 		clsic_dbg(clsic, "Wait for ASR stream trigger aborted.\n");
 
 		if (asr_stream->stream) {
@@ -642,6 +634,10 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			goto exit;
 		}
 
+		reinit_completion(&asr_stream->trigger_heard);
+
+		reinit_completion(&vox->new_bio_results_completion);
+
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_LISTEN_START);
@@ -673,9 +669,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		trace_clsic_vox_asr_stream_listen(
 					  msg_cmd.cmd_listen_start.trgr_domain);
 
-		reinit_completion(&asr_stream->trigger_heard);
-
-		reinit_completion(&vox->new_bio_results_completion);
+		vox->asr_stream.listen_error = false;
 
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
@@ -2029,13 +2023,34 @@ static int vox_notification_handler(struct clsic *clsic,
 
 	switch (msgid) {
 	case CLSIC_VOX_MSG_N_LISTEN_ERR:
-		/* TODO: should we be doing something more than this here? */
-		clsic_err(vox->clsic, "trigger detection error on CLSIC.\n");
+		trace_clsic_vox_trigger_heard(false);
+
+		/* Failed to trigger. */
+		if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
+			clsic_err(vox->clsic,
+				"trigger detection error on CLSIC.\n");
+		else
+			clsic_err(vox->clsic,
+				  "trigger detection error on CLSIC %d: %s.\n",
+				  msg_nty->nty_listen_err.err,
+				  clsic_error_string(
+					msg_nty->nty_listen_err.err));
+
+		vox->asr_stream.listen_error = true;
+
+		if (vox->asr_stream.stream)
+			complete(&vox->asr_stream.trigger_heard);
+
 		break;
 	case CLSIC_VOX_MSG_N_TRGR_DETECT:
-		clsic_vox_asr_stream_trig_det_cb(vox->clsic,
-				clsic_find_first_service(vox->clsic,
-							 CLSIC_SRV_TYPE_VOX));
+		trace_clsic_vox_trigger_heard(true);
+
+		/* Normal trigger. */
+		vox->asr_stream.listen_error = false;
+
+		if (vox->asr_stream.stream)
+			complete(&vox->asr_stream.trigger_heard);
+
 		break;
 	case CLSIC_VOX_MSG_N_REP_COMPLETE:
 		switch (msg_nty->nty_rep_complete.err) {
@@ -2084,7 +2099,9 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
+		/* TODO: 2.0.235: handle auth_stop_reason error code. */
 		complete(&vox->new_bio_results_completion);
+
 		break;
 	default:
 		clsic_err(clsic, "unrecognised message with message ID %d\n",

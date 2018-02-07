@@ -216,13 +216,13 @@ TRACE_EVENT(clsic_vox_modechange,
 );
 
 TRACE_EVENT(clsic_vox_trigger_heard,
-	TP_PROTO(u8 service_instance),
-	TP_ARGS(service_instance),
-	TP_STRUCT__entry(__field(u8, service_instance)),
+	TP_PROTO(u8 trigger),
+	TP_ARGS(trigger),
+	TP_STRUCT__entry(__field(u8, trigger)),
 	TP_fast_assign(
-			__entry->service_instance = service_instance;
+			__entry->trigger = trigger;
 		),
-	TP_printk("service instance: 0x%x", __entry->service_instance)
+	TP_printk("end of triggering with trigger state %d", __entry->trigger)
 );
 
 TRACE_EVENT(clsic_vox_asr_stream_open,
