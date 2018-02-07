@@ -116,6 +116,7 @@ struct clsic_vox {
 	union bio_results_u biometric_results;
 	struct clsic_vox_auth_key bio_pub_key;
 	bool get_bio_results_early_exit;
+	uint8_t auth_error;
 	/*
 	 * asr_streaming tells us if we are currently streaming audio data -
 	 * it is only possible to enter/exit this mode when not undertaking any
@@ -213,7 +214,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
 };
 
-#define VOX_NUM_ERRORS			10
+#define VOX_NUM_ERRORS			11
 
 #define VOX_ERROR_SUCCESS		0
 #define VOX_ERROR_LIBRARY		1
@@ -224,7 +225,8 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 #define VOX_ERROR_TOO_LOUD		6
 #define VOX_ERROR_TOO_NOISY		7
 #define VOX_ERROR_NO_USERS		8
-#define VOX_ERROR_CLEARED		9
+#define VOX_ERROR_BIO_TIME_EXCEEDED	9
+#define VOX_ERROR_CLEARED		10
 
 static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
@@ -236,6 +238,7 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_TOO_LOUD]		= "Too Loud",
 	[VOX_ERROR_TOO_NOISY]		= "Too Noisy",
 	[VOX_ERROR_NO_USERS]		= "No Users Identified",
+	[VOX_ERROR_BIO_TIME_EXCEEDED]	= "Maximum Voice ID Duration Exceeded",
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
@@ -1575,6 +1578,36 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		 */
 		return -EBUSY;
 
+	switch (vox->auth_error) {
+	case CLSIC_ERR_NONE:
+		break;
+	case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
+		vox->error_info = VOX_ERROR_NO_USERS;
+		ret = 0;
+		goto exit;
+	case CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED:
+		/* The maximum amount of audio has been processed.*/
+		vox->error_info = VOX_ERROR_BIO_TIME_EXCEEDED;
+		ret = -EIO;
+		goto exit;
+	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
+		/* i.e. BPB not installed. */
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
+	case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
+		vox->error_info = VOX_ERROR_DISABLE_BARGE_IN;
+		ret = -EIO;
+		goto exit;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  vox->auth_error, clsic_error_string(vox->auth_error));
+		vox->error_info = VOX_ERROR_LIBRARY;
+		ret = -EIO;
+		goto exit;
+	}
+
 	/* Now get the results. */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
@@ -2119,7 +2152,8 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
-		/* TODO: 2.0.235: handle auth_stop_reason error code. */
+		vox->auth_error = msg_nty->nty_new_auth_result.auth_stop_reason;
+
 		complete(&vox->new_bio_results_completion);
 
 		break;
