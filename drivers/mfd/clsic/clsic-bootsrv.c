@@ -402,8 +402,17 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
 		ret = CLSIC_UNHANDLED;
 	}
-	if (clsic->blrequest != CLSIC_BL_IDLE)
+	if (clsic->blrequest != CLSIC_BL_IDLE) {
+		/*
+		 * If a bootloader message bas been received then purge the
+		 * message queues as this will interrupt any messages currently
+		 * in the system that may be blocked - the corresponding
+		 * bootloader message will be sent when the maintenance handler
+		 * runs.
+		 */
+		clsic_purge_message_queues(clsic);
 		schedule_work(&clsic->maintenance_handler);
+	}
 	return ret;
 }
 
