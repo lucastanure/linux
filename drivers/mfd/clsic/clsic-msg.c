@@ -1211,6 +1211,8 @@ static int clsic_send_message_interrupted(struct clsic *clsic,
 static int clsic_send_message_core(struct clsic *clsic,
 				   struct clsic_message *msg)
 {
+	int i;
+
 	/* Sanity check message to be sent */
 	if (clsic_get_cran(msg->fsm.cmd.hdr.sbc) != CLSIC_CRAN_CMD)
 		return -EINVAL;
@@ -1271,20 +1273,23 @@ static int clsic_send_message_core(struct clsic *clsic,
 
 	clsic_pm_use(clsic);
 
-	/* Check whether messaging is limited to the core services */
+	/* Check whether messaging is limited to the bootloader service */
 	if ((clsic->blrequest != CLSIC_BL_IDLE) &&
-	    !((clsic_get_servinst(msg) == CLSIC_SRV_INST_SYS) ||
-	      (clsic_get_servinst(msg) == CLSIC_SRV_INST_BLD))) {
-		/*
-		 * XXX It's not causing any issues at the moment though I'm
-		 * wondering at this point whether the message should be
-		 * delayed or whether it should be failed with an error.
-		 */
-		clsic_info(clsic, "States: %s %d %d %d\n",
-			   clsic_state_to_string(clsic->state),
-			   clsic->blrequest, clsic->enumeration_required,
-			   clsic->msgproc_state);
-		clsic_dump_message(clsic, msg, "should wait?");
+	    (clsic_get_servinst(msg) != CLSIC_SRV_INST_BLD)) {
+		for (i = 0; i < CLSIC_WAIT_FOR_STATE_MAX_CYCLES; i++)
+			if (clsic->blrequest != CLSIC_BL_IDLE)
+				msleep(CLSIC_WAIT_FOR_STATE_DELAY_MS);
+
+		if (clsic->blrequest != CLSIC_BL_IDLE) {
+			clsic_pm_release(clsic);
+			clsic_dump_message(clsic, msg, "Can't send");
+			clsic_info(clsic, "Can't send: %s %d %d %d\n",
+				   clsic_state_to_string(clsic->state),
+				   clsic->blrequest,
+				   clsic->enumeration_required,
+				   clsic->msgproc_state);
+			return -EBUSY;
+		}
 	}
 
 	/*
