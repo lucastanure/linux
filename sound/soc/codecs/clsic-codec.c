@@ -71,11 +71,10 @@ static const unsigned int clsic_dsp2_sram_power_regs[] = {
 #define TACNA_DSP_CLOCK_FREQ_OFFS		0x00000
 #define TACNA_DSP_CLOCK_STATUS_OFFS		0x00008
 
-static int clsic_dsp_memory_enable(struct tacna_priv *priv,
-				   unsigned int dsp_num)
+static int clsic_dsp_memory_enable(struct tacna_priv *priv)
 {
 	struct regmap *regmap = priv->tacna->regmap;
-	const unsigned int *reg_list = priv->dsp_power_regs[dsp_num];
+	const unsigned int *reg_list = clsic_dsp2_sram_power_regs;
 	int ret;
 
 	for (; *reg_list != 0; ++reg_list) {
@@ -94,11 +93,10 @@ err:
 	return ret;
 }
 
-static void clsic_dsp_memory_disable(struct tacna_priv *priv,
-				     unsigned int dsp_num)
+static void clsic_dsp_memory_disable(struct tacna_priv *priv)
 {
 	struct regmap *regmap = priv->tacna->regmap;
-	const unsigned int *reg_list = priv->dsp_power_regs[dsp_num];
+	const unsigned int *reg_list = clsic_dsp2_sram_power_regs;
 	int ret;
 
 	for (; *reg_list != 0; ++reg_list) {
@@ -147,14 +145,14 @@ int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 			goto error;
 		}
 
-		ret = clsic_dsp_memory_enable(priv, 1);
+		ret = clsic_dsp_memory_enable(priv);
 		if (ret)
 			goto error;
 
 		return wm_halo_early_event(w, kcontrol, event);
 	case SND_SOC_DAPM_PRE_PMD:
 		ret = wm_halo_early_event(w, kcontrol, event);
-		clsic_dsp_memory_disable(priv, 1);
+		clsic_dsp_memory_disable(priv);
 		return ret;
 	default:
 		return 0;
@@ -1555,7 +1553,6 @@ static int clsic_probe(struct platform_device *pdev)
 	clsic_codec->core.num_inputs = 8;
 	clsic_codec->core.max_analogue_inputs = 0;
 	clsic_codec->core.num_dmic_clksrc = 4;
-	clsic_codec->core.dsp_power_regs[1] = clsic_dsp2_sram_power_regs;
 
 	ret = tacna_core_init(&clsic_codec->core);
 	if (ret)
