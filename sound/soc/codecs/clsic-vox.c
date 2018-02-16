@@ -422,7 +422,7 @@ int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 				params->codec.sample_rate)
 			break;
 	params_ok = params_ok &&
-		(i < clsic_asr_stream_caps.desc.num_sample_rates);
+			(i < clsic_asr_stream_caps.desc.num_sample_rates);
 
 	if (!params_ok) {
 		clsic_err(clsic,
@@ -574,7 +574,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	trace_clsic_vox_asr_stream_data_start(asr_stream->copied_total);
 
 	/* queue up the first read */
-	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
 
@@ -632,7 +632,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 				   CLSIC_VOX_MSG_CR_LISTEN_START);
 		/* TODO: add handling for external trigger */
 		msg_cmd.cmd_listen_start.trgr_domain =
-			CLSIC_VOX_TRIG_DOMAIN_INTRNL;
+						CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
 
 		ret = clsic_send_msg_sync(
@@ -757,7 +757,7 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 	}
 
 	/* queue up next read */
-	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
 
@@ -1009,7 +1009,7 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
-	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_GET_AUTH_KEY);
 
@@ -1241,7 +1241,6 @@ static int vox_remove_user(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_LIBRARY;
@@ -1357,7 +1356,6 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_LIBRARY;
@@ -1558,7 +1556,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 				  sizeof(struct clsic_vox_auth_challenge),
 				  (uint8_t *) &vox->biometric_results,
 				  size_of_bio_results(vox->bio_results_format));
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_LIBRARY;
@@ -1701,7 +1698,7 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
 	struct soc_mixer_control *e =
 			(struct soc_mixer_control *) kcontrol->private_value;
 
-	ucontrol->value.enumerated.item[0] = *(unsigned int *)e->dobj.private;
+	ucontrol->value.enumerated.item[0] = *(unsigned int *) e->dobj.private;
 
 	return 0;
 }
@@ -2276,7 +2273,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 						vox->codec->component.card,
 						"Vox Management Mode");
 
-	handler->data = (void *)vox;
+	handler->data = (void *) vox;
 	handler->callback = &vox_notification_handler;
 
 	return ret;
@@ -2305,8 +2302,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	struct clsic_vox *vox;
 	int ret;
 
-	vox = devm_kzalloc(&pdev->dev, sizeof(struct clsic_vox),
-				 GFP_KERNEL);
+	vox = devm_kzalloc(&pdev->dev, sizeof(struct clsic_vox), GFP_KERNEL);
 	if (vox == NULL)
 		return -ENOMEM;
 
