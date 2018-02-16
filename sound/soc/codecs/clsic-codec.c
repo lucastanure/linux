@@ -44,6 +44,7 @@ struct clsic_codec {
 	struct tacna_fll fll[3];
 	struct clsic *clsic;
 	struct snd_soc_codec *codec;
+	bool host_controls_dsp2;
 };
 
 static const struct wm_adsp_region clsic_dsp2_regions[] = {
@@ -364,8 +365,6 @@ TACNA_MIXER_CONTROLS("SLIMTX6", TACNA_SLIMTX6_INPUT1),
 TACNA_MIXER_CONTROLS("SLIMTX7", TACNA_SLIMTX7_INPUT1),
 TACNA_MIXER_CONTROLS("SLIMTX8", TACNA_SLIMTX8_INPUT1),
 
-WM_ADSP2_PRELOAD_SWITCH("DSP2", 2),
-
 TACNA_MIXER_CONTROLS("DSP1RX1", TACNA_DSP1RX1_INPUT1),
 TACNA_MIXER_CONTROLS("DSP1RX2", TACNA_DSP1RX2_INPUT1),
 TACNA_MIXER_CONTROLS("DSP1RX3", TACNA_DSP1RX3_INPUT1),
@@ -384,6 +383,10 @@ TACNA_MIXER_CONTROLS("DSP2RX5", TACNA_DSP2RX5_INPUT1),
 TACNA_MIXER_CONTROLS("DSP2RX6", TACNA_DSP2RX6_INPUT1),
 TACNA_MIXER_CONTROLS("DSP2RX7", TACNA_DSP2RX7_INPUT1),
 TACNA_MIXER_CONTROLS("DSP2RX8", TACNA_DSP2RX8_INPUT1),
+};
+
+static const struct snd_kcontrol_new clsic_snd_controls_dsp2_visible[] = {
+WM_ADSP2_PRELOAD_SWITCH("DSP2", 2),
 };
 
 TACNA_MIXER_ENUMS(EQ1, TACNA_EQ1_INPUT1);
@@ -805,8 +808,6 @@ SND_SOC_DAPM_PGA("LHPF3", TACNA_LHPF_CONTROL1, TACNA_LHPF3_EN_SHIFT, 0,
 SND_SOC_DAPM_PGA("LHPF4", TACNA_LHPF_CONTROL1, TACNA_LHPF4_EN_SHIFT, 0,
 		 NULL, 0),
 
-WM_HALO("DSP2", 1, clsic_dsp_power_ev),
-
 SND_SOC_DAPM_OUTPUT("DSP1"),
 SND_SOC_DAPM_OUTPUT("DSP1RX1"),
 SND_SOC_DAPM_OUTPUT("DSP1RX2"),
@@ -924,11 +925,27 @@ TACNA_MIXER_WIDGETS(DSP2RX6, "DSP2RX6"),
 TACNA_MIXER_WIDGETS(DSP2RX7, "DSP2RX7"),
 TACNA_MIXER_WIDGETS(DSP2RX8, "DSP2RX8"),
 
-SND_SOC_DAPM_SWITCH("DSP2 Trigger Output", SND_SOC_NOPM, 0, 0,
-		    &tacna_dsp_trigger_output_mux[1]),
-
 SND_SOC_DAPM_OUTPUT("MICSUPP"),
 }; /* end of clsic_dapm_widgets[] */
+
+static const struct snd_soc_dapm_widget clsic_dapm_widgets_dsp2_visible[] = {
+WM_HALO("DSP2", 1, clsic_dsp_power_ev),
+
+SND_SOC_DAPM_SWITCH("DSP2 Trigger Output", SND_SOC_NOPM, 0, 0,
+		    &tacna_dsp_trigger_output_mux[1]),
+};
+
+static const struct snd_soc_dapm_widget clsic_dapm_widgets_dsp2_hidden[] = {
+SND_SOC_DAPM_OUTPUT("DSP2"),
+SND_SOC_DAPM_OUTPUT("DSP2RX1"),
+SND_SOC_DAPM_OUTPUT("DSP2RX2"),
+SND_SOC_DAPM_OUTPUT("DSP2RX3"),
+SND_SOC_DAPM_OUTPUT("DSP2RX4"),
+SND_SOC_DAPM_OUTPUT("DSP2RX5"),
+SND_SOC_DAPM_OUTPUT("DSP2RX6"),
+SND_SOC_DAPM_OUTPUT("DSP2RX7"),
+SND_SOC_DAPM_OUTPUT("DSP2RX8"),
+};
 
 #define TACNA_MIXER_INPUT_ROUTES(name) \
 	{ name, "Tone Generator 1", "Tone Generator 1" }, \
@@ -1242,11 +1259,6 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	TACNA_MIXER_ROUTES("DSP1", "DSP1RX8"),
 	TACNA_MIXER_ROUTES("DSP1", "DSP1RX9"),
 
-	TACNA_DSP_ROUTES_1_8("DSP2"),
-
-	{ "DSP Trigger Out", NULL, "DSP2 Trigger Output" },
-	{ "DSP2 Trigger Output", "Switch", "DSP2" },
-
 	TACNA_MUX_ROUTES("ISRC1INT1", "ISRC1INT1"),
 	TACNA_MUX_ROUTES("ISRC1INT2", "ISRC1INT2"),
 	TACNA_MUX_ROUTES("ISRC1INT3", "ISRC1INT3"),
@@ -1266,6 +1278,24 @@ static const struct snd_soc_dapm_route clsic_dapm_routes[] = {
 	{ "DRC2 Activity Output", "Switch", "DRC2L" },
 	{ "DRC2 Activity Output", "Switch", "DRC2R" },
 }; /* end of clsic_dapm_routes */
+
+static const struct snd_soc_dapm_route clsic_dapm_routes_dsp2_visible[] = {
+	TACNA_DSP_ROUTES_1_8("DSP2"),
+
+	{ "DSP Trigger Out", NULL, "DSP2 Trigger Output" },
+	{ "DSP2 Trigger Output", "Switch", "DSP2" },
+};
+
+static const struct snd_soc_dapm_route clsic_dapm_routes_dsp2_hidden[] = {
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX1"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX2"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX3"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX4"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX5"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX6"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX7"),
+	TACNA_MIXER_ROUTES("DSP2", "DSP2RX8"),
+};
 
 static struct snd_soc_dai_driver clsic_dai[] = {
 	{
@@ -1437,7 +1467,54 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 			"%s() ret: %d; Failed to add DSP rate ctls.\n",
 			__func__, ret);
 
-	wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec, false);
+	if (clsic_codec->host_controls_dsp2) {
+		ret = snd_soc_add_codec_controls(codec,
+			clsic_snd_controls_dsp2_visible,
+			ARRAY_SIZE(clsic_snd_controls_dsp2_visible));
+
+		if (ret != 0)
+			dev_err(codec->dev,
+				"%s():%u Failed to add DSP2 controls: %d\n",
+				__func__, __LINE__, ret);
+
+		ret = snd_soc_dapm_new_controls(clsic_codec->core.tacna->dapm,
+			clsic_dapm_widgets_dsp2_visible,
+			ARRAY_SIZE(clsic_dapm_widgets_dsp2_visible));
+
+		if (ret != 0)
+			dev_err(codec->dev,
+				"%s():%u Failed to add DSP2 dapm controls: %d\n"
+				, __func__, __LINE__, ret);
+
+		ret = snd_soc_dapm_add_routes(clsic_codec->core.tacna->dapm,
+			clsic_dapm_routes_dsp2_visible,
+			ARRAY_SIZE(clsic_dapm_routes_dsp2_visible));
+
+		if (ret != 0)
+			dev_err(codec->dev,
+				"%s():%u Failed to add DSP2 routes: %d\n",
+				__func__, __LINE__, ret);
+
+		wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec, false);
+	} else {
+		ret = snd_soc_dapm_new_controls(clsic_codec->core.tacna->dapm,
+			clsic_dapm_widgets_dsp2_hidden,
+			ARRAY_SIZE(clsic_dapm_widgets_dsp2_hidden));
+
+		if (ret != 0)
+			dev_err(codec->dev,
+				"%s():%u Failed to add DSP2 dapm controls: %d\n"
+				, __func__, __LINE__, ret);
+
+		ret = snd_soc_dapm_add_routes(clsic_codec->core.tacna->dapm,
+			clsic_dapm_routes_dsp2_hidden,
+			ARRAY_SIZE(clsic_dapm_routes_dsp2_hidden));
+
+		if (ret != 0)
+			dev_err(codec->dev,
+				"%s():%u Failed to add DSP2 routes: %d\n",
+				__func__, __LINE__, ret);
+	}
 
 	return ret;
 }
@@ -1452,7 +1529,8 @@ static int clsic_codec_remove(struct snd_soc_codec *codec)
 
 	tacna->dapm = NULL;
 
-	wm_adsp2_codec_remove(&clsic_codec->core.dsp[1], codec);
+	if (clsic_codec->host_controls_dsp2)
+		wm_adsp2_codec_remove(&clsic_codec->core.dsp[1], codec);
 
 	return 0;
 }
@@ -1547,6 +1625,10 @@ static int clsic_probe(struct platform_device *pdev)
 
 	clsic_codec->clsic = clsic;
 
+	clsic_codec->host_controls_dsp2 = of_property_read_bool(
+							clsic->dev->of_node,
+							"host_controls_dsp2");
+
 	clsic_codec->core.tacna = tacna;
 	clsic_codec->core.dev = &pdev->dev;
 	clsic_codec->core.num_inputs = 8;
@@ -1567,18 +1649,21 @@ static int clsic_probe(struct platform_device *pdev)
 
 	/* TODO: initialise dsp2 MPU error interrupt */
 	dsp = &clsic_codec->core.dsp[1];
-	dsp->part = "clsic";
-	dsp->num = 2;
-	dsp->suffix = "";
-	dsp->type = WMFW_HALO;
-	dsp->rev = 0;
-	dsp->dev = clsic_codec->core.tacna->dev;
-	dsp->regmap = clsic_codec->core.tacna->regmap;
 
-	dsp->base = TACNA_DSP2_CLOCK_FREQ;
-	dsp->base_sysinfo = TACNA_DSP2_SYS_INFO_ID;
-	dsp->mem = clsic_dsp2_regions;
-	dsp->num_mems = ARRAY_SIZE(clsic_dsp2_regions);
+	if (clsic_codec->host_controls_dsp2) {
+		dsp->part = "clsic";
+		dsp->num = 2;
+		dsp->suffix = "";
+		dsp->type = WMFW_HALO;
+		dsp->rev = 0;
+		dsp->dev = clsic_codec->core.tacna->dev;
+		dsp->regmap = clsic_codec->core.tacna->regmap;
+
+		dsp->base = TACNA_DSP2_CLOCK_FREQ;
+		dsp->base_sysinfo = TACNA_DSP2_SYS_INFO_ID;
+		dsp->mem = clsic_dsp2_regions;
+		dsp->num_mems = ARRAY_SIZE(clsic_dsp2_regions);
+	}
 
 	dsp->n_rx_channels = CLSIC_DSP2_N_RX_CHANNELS;
 	dsp->n_tx_channels = CLSIC_DSP2_N_TX_CHANNELS;
@@ -1634,7 +1719,8 @@ static int clsic_remove(struct platform_device *pdev)
 	snd_soc_unregister_codec(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
-	wm_adsp2_remove(&clsic_codec->core.dsp[1]);
+	if (clsic_codec->host_controls_dsp2)
+		wm_adsp2_remove(&clsic_codec->core.dsp[1]);
 
 	tacna_core_destroy(&clsic_codec->core);
 
