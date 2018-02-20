@@ -752,7 +752,7 @@ static int cs47l96_ao_component_probe(struct snd_soc_component *comp)
 	if (ret)
 		return ret;
 
-	wm_adsp2_component_probe(&cs47l96_ao->core.dsp[0], comp, true);
+	wm_adsp2_component_probe(&cs47l96_ao->core.dsp[0], comp);
 
 	return 0;
 }
@@ -872,6 +872,7 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 	dsp->rev = 0;
 	dsp->dev = tacna->dev;
 	dsp->regmap = tacna->dsp_regmap[1];
+	dsp->ao_dsp = true;
 
 	dsp->base = TACNA_DSP2_CLOCK_FREQ;
 	dsp->base_sysinfo = TACNA_DSP2_SYS_INFO_ID;

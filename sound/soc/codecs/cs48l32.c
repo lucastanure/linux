@@ -1100,7 +1100,7 @@ static int cs48l32_component_probe(struct snd_soc_component *comp)
 	if (ret)
 		return ret;
 
-	wm_adsp2_component_probe(&cs48l32->core.dsp[0], comp, false);
+	wm_adsp2_component_probe(&cs48l32->core.dsp[0], comp);
 
 	return 0;
 }
