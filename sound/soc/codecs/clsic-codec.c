@@ -1495,7 +1495,7 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 				"%s():%u Failed to add DSP2 routes: %d\n",
 				__func__, __LINE__, ret);
 
-		wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec, false);
+		wm_adsp2_codec_probe(&clsic_codec->core.dsp[1], codec);
 	} else {
 		ret = snd_soc_dapm_new_controls(clsic_codec->core.tacna->dapm,
 			clsic_dapm_widgets_dsp2_hidden,
