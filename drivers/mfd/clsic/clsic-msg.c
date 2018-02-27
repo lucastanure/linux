@@ -861,7 +861,6 @@ void clsic_shutdown_message_interface(struct clsic *clsic)
 	flush_workqueue(clsic->message_worker_queue);
 	destroy_workqueue(clsic->message_worker_queue);
 	mutex_lock(&clsic->message_lock);
-	clsic_purge_message_queues(clsic);
 
 	/*
 	 * kmem_cache_destroy() demands that all objects in the cache have been
@@ -875,13 +874,36 @@ void clsic_shutdown_message_interface(struct clsic *clsic)
 	 * asynchronous callbacks - iterate the list and dump the message
 	 * details and forcefully release any that are outstanding.
 	 */
+
+	if (!list_empty(&clsic->waiting_to_send)) {
+		list_for_each_entry_safe(tmp_msg,
+					 next_msg,
+					 &clsic->waiting_to_send,
+					 private_link) {
+			clsic_dump_message(clsic, tmp_msg,
+					   "Force release (WTS)");
+			clsic_release_msg(clsic, tmp_msg);
+		}
+	}
+
+	if (!list_empty(&clsic->waiting_for_response)) {
+		list_for_each_entry_safe(tmp_msg,
+					 next_msg,
+					 &clsic->waiting_for_response,
+					 private_link) {
+			clsic_dump_message(clsic, tmp_msg,
+					   "Force release (WFR)");
+			clsic_release_msg(clsic, tmp_msg);
+		}
+	}
+
 	if (!list_empty(&clsic->completed_messages)) {
 		list_for_each_entry_safe(tmp_msg,
 					 next_msg,
 					 &clsic->completed_messages,
 					 private_link) {
 			clsic_dump_message(clsic, tmp_msg,
-					   "Force release");
+					   "Force release (Completed)");
 			clsic_release_msg(clsic, tmp_msg);
 		}
 	}
