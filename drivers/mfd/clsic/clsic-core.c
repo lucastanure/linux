@@ -480,21 +480,15 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
  * service enumeration task and sending the bootloader any data it requires to
  * start or upgrade the device.
  *
- * If the device state is inactive then the driver is in a first touch
- * situation, reset then enumerate the device.
- *
- * If the state is panic then the driver will stay halted
- *
- * If the device is starting or active then do nothing as no work is required,
- * either it is already running or the driver will receive a further
- * notification indicating what action is required.
- *
  * If the device is in one of the bootloader states then call the bootloader
  * service handler to progress the system booting.  The bootloader end state
  * signals that the bootloader service has successfully downloaded software to
  * the device.  This is separated out into a different logical state as at this
  * point some devices will be reset whilst on others the driver should attempt
  * service enumeration.
+ *
+ * If the device state is resuming then the driver is in a first touch
+ * situation and should enumerate the device.
  */
 void clsic_maintenance(struct work_struct *data)
 {
@@ -505,20 +499,21 @@ void clsic_maintenance(struct work_struct *data)
 		   clsic_state_to_string(clsic->state),
 		   clsic->blrequest, clsic->enumeration_required);
 
+	if (clsic->blrequest != CLSIC_BL_IDLE) {
+		clsic_bootsrv_state_handler(clsic);
+		return;
+	}
+
 	if ((clsic->state != CLSIC_STATE_RESUMING) &&
 	    (clsic->state != CLSIC_STATE_DEBUGCONTROL_REQUESTED))
 		return;
 
-	if (clsic->blrequest != CLSIC_BL_IDLE)
-		clsic_bootsrv_state_handler(clsic);
-	else {
-		if (clsic_system_service_enumerate(clsic) == 0) {
-			clsic_state_set(clsic,
-					CLSIC_STATE_ON,
-					CLSIC_STATE_CHANGE_LOCKNOTHELD);
+	if (clsic_system_service_enumerate(clsic) == 0) {
+		clsic_state_set(clsic,
+				CLSIC_STATE_ON,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
 
-			clsic_pm_service_transition(clsic, PM_EVENT_RESUME);
-		}
+		clsic_pm_service_transition(clsic, PM_EVENT_RESUME);
 	}
 
 	/*

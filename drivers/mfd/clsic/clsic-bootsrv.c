@@ -393,10 +393,9 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 	case CLSIC_BL_MSG_N_NO_BOOTABLE_COMP:
 	case CLSIC_BL_MSG_N_FAILED_FLASH_AUTH:
 	case CLSIC_BL_MSG_N_FLASH_CORRUPTED:
-		clsic_dbg(clsic, "CSLIC boot fail %d\n", msgid);
-
-		clsic->blrequest = CLSIC_BL_IDLE;
-		clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
+		clsic_err(clsic, "CSLIC boot fail: %d : %s %d %d\n",
+			  msgid, clsic_state_to_string(clsic->state),
+			  clsic->blrequest, clsic->enumeration_required);
 		break;
 	default:
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
@@ -513,6 +512,7 @@ static ssize_t clsic_store_device_fw_version(struct device *dev,
 
 		pm_runtime_suspend(clsic->dev);
 		clsic_pm_wake(clsic);
+		schedule_work(&clsic->maintenance_handler);
 	}
 
 	return count;
