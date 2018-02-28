@@ -667,9 +667,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		wake_up_process(asr_stream->wait_for_trigger);
 
-		mutex_lock(&vox->mgmt_mode_lock);
 		vox->asr_strm_mode = VOX_ASR_MODE_STREAMING;
-		mutex_unlock(&vox->mgmt_mode_lock);
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -689,9 +687,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		if (ret)
 			return -EIO;
 
-		mutex_lock(&vox->mgmt_mode_lock);
 		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
-		mutex_unlock(&vox->mgmt_mode_lock);
 
 		break;
 	default:
@@ -897,11 +893,7 @@ void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
 	if (set_clsic_to_idle)
 		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 
-	mutex_lock(&vox->mgmt_mode_lock);
-
 	vox->mgmt_mode = mgmt_mode;
-
-	mutex_unlock(&vox->mgmt_mode_lock);
 
 	snd_ctl_notify(vox->codec->component.card->snd_card,
 		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
