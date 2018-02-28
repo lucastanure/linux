@@ -483,6 +483,30 @@ DEFINE_EVENT(clsic_vox_generic, clsic_vox_stop_bio_results,
 	TP_ARGS(dummy)
 );
 
+TRACE_EVENT(clsic_vox_new_auth_result,
+	TP_PROTO(union clsic_vox_msg *msg),
+	TP_ARGS(msg),
+	TP_STRUCT__entry(
+			__field(int32_t, total_frames_processed)
+			__array(uint8_t, user_id_detected,
+						CLSIC_VOX_SECURITY_LVL_COUNT)
+			),
+	TP_fast_assign(
+			__entry->total_frames_processed =
+				msg->nty_new_auth_result.total_frames_processed;
+			memcpy(__entry->user_id_detected,
+			       msg->nty_new_auth_result.userid,
+			       CLSIC_VOX_SECURITY_LVL_COUNT);
+		),
+	TP_printk(
+			"total frames: %d, LOW: user %d, MEDIUM: user %d, HIGH: user %d",
+			__entry->total_frames_processed,
+			__entry->user_id_detected[CLSIC_VOX_SECURITY_LOW],
+			__entry->user_id_detected[CLSIC_VOX_SECURITY_MEDIUM],
+			__entry->user_id_detected[CLSIC_VOX_SECURITY_HIGH]
+			)
+);
+
 TRACE_EVENT(clsic_dev_panic,
 	TP_PROTO(enum clsic_states state),
 	TP_ARGS(state),

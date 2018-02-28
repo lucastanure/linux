@@ -42,6 +42,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_perform_enrol_rep);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_complete_enrolment);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_get_bio_results);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_stop_bio_results);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_new_auth_result);
 EXPORT_TRACEPOINT_SYMBOL(clsic_dev_panic);
 EXPORT_TRACEPOINT_SYMBOL(clsic_ras_simplewrite);
 EXPORT_TRACEPOINT_SYMBOL(clsic_ras_simpleread);

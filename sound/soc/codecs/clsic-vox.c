@@ -2152,6 +2152,13 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
+		/*
+		 * It is expected that the host tracks these messages and when
+		 * the desired number of audio frames are processed by the
+		 * CLSIC, the host gets the results from the CLSIC.
+		 */
+		trace_clsic_vox_new_auth_result(msg_nty);
+
 		vox->auth_error = msg_nty->nty_new_auth_result.auth_stop_reason;
 
 		complete(&vox->new_bio_results_completion);
