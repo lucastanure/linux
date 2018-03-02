@@ -77,6 +77,7 @@ struct clsic_asr_stream {
 	bool listen_error;
 
 	bool error;
+	bool asr_block_pending;
 
 	struct task_struct *wait_for_trigger;
 	struct completion trigger_heard;
@@ -370,6 +371,7 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 
 	asr_stream->copied_total = 0;
 	asr_stream->stream = NULL;
+	asr_stream->listen_error = true;
 	complete(&asr_stream->trigger_heard);
 
 	return 0;
@@ -480,6 +482,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	size_t read_idx, write_idx;
 	u32 payload_sz;
 
+	asr_stream->asr_block_pending = false;
 	complete(&asr_stream->asr_block_completion);
 
 	if (!asr_stream->stream) {
@@ -582,7 +585,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
 
 	reinit_completion(&asr_stream->asr_block_completion);
-
+	asr_stream->asr_block_pending = true;
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -592,6 +595,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	if (ret) {
 		clsic_err(clsic, "Error sending msg: %d\n", ret);
 		/* force compressed fw to notice error */
+		asr_stream->asr_block_pending = false;
 		asr_stream->error = true;
 		asr_stream->copied_total += 1;
 		snd_compr_fragment_elapsed(asr_stream->stream);
@@ -670,6 +674,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 					  msg_cmd.cmd_listen_start.trgr_domain);
 
 		vox->asr_stream.listen_error = false;
+		asr_stream->asr_block_pending = false;
 
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
@@ -682,7 +687,12 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		wait_for_completion(&asr_stream->asr_block_completion);
+		if (asr_stream->asr_block_pending)
+			/*
+			 * Force a wait until the current block has completed
+			 * before finishing up otherwise CLSIC complains.
+			 */
+			wait_for_completion(&asr_stream->asr_block_completion);
 
 		mutex_lock(&vox->mgmt_mode_lock);
 		if ((vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) &&
@@ -780,7 +790,7 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
 
 	reinit_completion(&asr_stream->asr_block_completion);
-
+	asr_stream->asr_block_pending = true;
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -788,6 +798,7 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 				   0,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
+		asr_stream->asr_block_pending = false;
 		clsic_err(clsic, "Error sending msg: %d\n", ret);
 		return -EIO;
 	}
