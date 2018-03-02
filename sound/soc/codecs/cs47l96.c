@@ -246,7 +246,7 @@ static int cs47l96_outh_ev(struct snd_soc_dapm_widget *w,
 			dev_warn(comp->dev,
 				 "Failed to set OUTHR volume to default: %d\n",
 				 ret);
-		break;
+		return 0;
 	default:
 		return 0;
 	}
