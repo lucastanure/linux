@@ -415,8 +415,13 @@ int clsic_dev_init(struct clsic *clsic)
 		clsic_pm_wake(clsic);
 
 	/*
-	 * At this point the device is NOT fully setup - initialisation will
-	 * continue after the device raises an interrupt.
+	 * At this point the device is NOT fully setup - the device will block
+	 * until runtime resume has completed (device state is resuming), the
+	 * device reaches the "ON" state after enumeration has been completed
+	 * by the maintenance thread.
+	 *
+	 * If a conclusive decision on failed/succeeded is required then the
+	 * device state should be tested here until it reaches HALTED or ON.
 	 */
 
 	return 0;
