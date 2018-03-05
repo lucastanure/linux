@@ -1,7 +1,7 @@
 /*
  * clsic-vox.c -- ALSA SoC CLSIC VOX
  *
- * Copyright 2017 CirrusLogic, Inc.
+ * Copyright 2018 CirrusLogic, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -43,7 +43,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	14
+#define VOX_NUM_NEW_KCONTROLS	15
 
 #define CLSIC_BPB_SIZE_ALIGNMENT	4
 
@@ -118,11 +118,13 @@ struct clsic_vox {
 	 * vox biometric operations.
 	 */
 	int asr_strm_mode;
+	unsigned int barge_in_status;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
 	struct soc_enum soc_enum_sec_level;
 	struct soc_enum soc_enum_bio_res_type;
+	struct soc_enum soc_enum_barge_in;
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
 	struct soc_mixer_control duration_mixer_ctrl;
@@ -253,6 +255,16 @@ static const char *vox_sec_level_text[VOX_NUM_SEC_LEVEL] = {
 	[VOX_SEC_LEVEL_HIGH]		= "High",
 };
 
+#define VOX_NUM_BARGE_IN		2
+
+#define VOX_BARGE_IN_DISABLED		0
+#define VOX_BARGE_IN_ENABLED		1
+
+static const char *vox_barge_in_text[VOX_NUM_BARGE_IN] = {
+	[VOX_BARGE_IN_DISABLED]		= "Loudspeaker Disabled",
+	[VOX_BARGE_IN_ENABLED]		= "Loudspeaker Enabled",
+};
+
 /* Present method of phrase installation uses a fixed list of files. */
 static struct {
 	const char *file;
@@ -276,6 +288,7 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 }
 
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
+static int vox_update_barge_in(struct clsic_vox *vox);
 
 /*
  * This lookup function is necessary because the CLSIC error codes are not
@@ -620,6 +633,8 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			mutex_unlock(&vox->mgmt_mode_lock);
 			return -EIO;
 		}
+
+		vox_update_barge_in(vox);
 
 		ret = vox_set_mode(vox, CLSIC_VOX_MODE_LISTEN);
 		if (ret)
@@ -1294,6 +1309,8 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		goto exit;
 	}
 
+	vox_update_barge_in(vox);
+
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN);
@@ -1437,7 +1454,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 		ret = -EIO;
 		break;
 	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
-		clsic_err(vox->clsic, "barge in must be disabled.\n");
+		clsic_err(vox->clsic, "barge-in must be disabled.\n");
 		vox->error_info = VOX_ERROR_DISABLE_BARGE_IN;
 		ret = -EIO;
 		break;
@@ -1569,6 +1586,10 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_NO_USER_IDENTIFIED:
 		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
 			vox->error_info = VOX_ERROR_NO_USERS;
+			break;
+		case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
+		case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
+			vox->error_info = VOX_ERROR_DISABLE_BARGE_IN;
 			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_CANCELLED:
@@ -1821,6 +1842,65 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/*
+ * This needs to be called when going into a management mode going into either
+ * enrolment or trigger listening as these are the only 2 situations affected
+ * by barge in.
+ */
+static int vox_update_barge_in(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int msgid;
+	int ret;
+
+	if (vox->barge_in_status == VOX_BARGE_IN_ENABLED)
+		msgid = CLSIC_VOX_MSG_CR_BARGE_IN_ENA;
+	else
+		msgid = CLSIC_VOX_MSG_CR_BARGE_IN_DIS;
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance, msgid);
+
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		return -EIO;
+	}
+
+	/* rsp_barge_in_ena and rsp_barge_in_dis are identical. */
+	switch (msg_rsp.rsp_barge_in_ena.hdr.err) {
+	case CLSIC_ERR_NONE:
+		return 0;
+	default:
+		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
+			  msg_rsp.rsp_barge_in_ena.hdr.err,
+			  clsic_error_string(msg_rsp.rsp_barge_in_ena.hdr.err));
+		return -EIO;
+	}
+}
+
+static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(e, struct clsic_vox, soc_enum_barge_in);
+
+	vox->barge_in_status = ucontrol->value.enumerated.item[0];
+
+	/* Only set barge-in now if CLSIC is already doing something. */
+	if ((vox->mgmt_mode != VOX_MGMT_MODE_NEUTRAL) ||
+	    (vox->asr_strm_mode != VOX_ASR_MODE_INACTIVE))
+		return vox_update_barge_in(vox);
+
+	return 0;
+}
+
 static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -1950,6 +2030,9 @@ static int vox_notification_handler(struct clsic *clsic,
 		switch (msg_nty->nty_rep_complete.err) {
 		case CLSIC_ERR_NONE:
 			vox->error_info = VOX_ERROR_SUCCESS;
+			break;
+		case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
+			vox->error_info = VOX_ERROR_DISABLE_BARGE_IN;
 			break;
 		case CLSIC_ERR_REP_TRGR_TIMEOUT:
 			vox->error_info = VOX_ERROR_TIMEOUT;
@@ -2249,6 +2332,22 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 				(unsigned long)(&(vox->s_bytes_bio_pub_key));
 	vox->kcontrol_new[13].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
 				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->barge_in_status = VOX_BARGE_IN_DISABLED;
+
+	vox->kcontrol_new[14].name = "Vox Barge-In";
+	vox->kcontrol_new[14].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[14].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[14].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[14].put = vox_ctrl_barge_in_put;
+	vox->soc_enum_barge_in.items = VOX_NUM_BARGE_IN;
+	vox->soc_enum_barge_in.texts = vox_barge_in_text;
+	vox->soc_enum_barge_in.dobj.private = &vox->barge_in_status;
+	vox->kcontrol_new[14].private_value =
+				(unsigned long)(&(vox->soc_enum_barge_in));
+	vox->kcontrol_new[14].access = SNDRV_CTL_ELEM_ACCESS_READ |
+				       SNDRV_CTL_ELEM_ACCESS_WRITE |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
