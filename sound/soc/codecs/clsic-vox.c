@@ -166,7 +166,7 @@ static const struct {
 #define VOX_ASR_MODE_STREAMING			2
 #define VOX_ASR_MODE_STOPPING			3
 
-#define VOX_NUM_MGMT_MODES			18
+#define VOX_NUM_MGMT_MODES			20
 
 #define VOX_MGMT_MODE_NEUTRAL			0
 #define VOX_MGMT_MODE_INSTALL_PHRASE		1
@@ -182,10 +182,12 @@ static const struct {
 #define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
 #define VOX_MGMT_MODE_COMPLETE_ENROL		12
 #define VOX_MGMT_MODE_COMPLETING_ENROL		13
-#define VOX_MGMT_MODE_GET_BIO_RESULTS		14
-#define VOX_MGMT_MODE_GETTING_BIO_RESULTS	15
-#define VOX_MGMT_MODE_STOP_BIO_RESULTS		16
-#define VOX_MGMT_MODE_STOPPING_BIO_RESULTS	17
+#define VOX_MGMT_MODE_TERMINATE_ENROL		14
+#define VOX_MGMT_MODE_TERMINATING_ENROL		15
+#define VOX_MGMT_MODE_GET_BIO_RESULTS		16
+#define VOX_MGMT_MODE_GETTING_BIO_RESULTS	17
+#define VOX_MGMT_MODE_STOP_BIO_RESULTS		18
+#define VOX_MGMT_MODE_STOPPING_BIO_RESULTS	19
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -203,6 +205,8 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 					    "Performing Enrolment Repetition",
 	[VOX_MGMT_MODE_COMPLETE_ENROL]		= "Complete User Enrolment",
 	[VOX_MGMT_MODE_COMPLETING_ENROL]	= "Completing User Enrolment",
+	[VOX_MGMT_MODE_TERMINATE_ENROL]		= "Terminate User Enrolment",
+	[VOX_MGMT_MODE_TERMINATING_ENROL]	= "Terminating User Enrolment",
 	[VOX_MGMT_MODE_GET_BIO_RESULTS]		= "Get Biometric Results",
 	[VOX_MGMT_MODE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
 	[VOX_MGMT_MODE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
@@ -1696,6 +1700,10 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 			clsic_err(vox->clsic,
 				  "vox_complete_enrolment ret %d.\n", ret);
 		break;
+	case VOX_MGMT_MODE_TERMINATING_ENROL:
+		vox->error_info = VOX_ERROR_SUCCESS;
+		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+		break;
 	case VOX_MGMT_MODE_GETTING_BIO_RESULTS:
 		ret = vox_get_bio_results(vox);
 		if (ret)
@@ -1995,6 +2003,7 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			break;
 		case VOX_MGMT_MODE_PERFORM_ENROL_REP:
 		case VOX_MGMT_MODE_COMPLETE_ENROL:
+		case VOX_MGMT_MODE_TERMINATE_ENROL:
 			if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
 				vox->mgmt_mode =
 					ucontrol->value.enumerated.item[0] + 1;
