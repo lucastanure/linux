@@ -36,17 +36,11 @@
  *
  * It is expected that the bootloader will send a series of notifications, in
  * the form "give me X ... (driver satisfies request by sending X) ... give me
- * Y ... (driver satisfies request by sending Y)" and when the final bootloader
- * state is encountered then the driver is set back to the INACTIVE state and
- * the maintenance thread is scheduled again - this will cause the device to be
- * reset and enumerated, resulting in the combined system entering the ACTIVE
- * state.
+ * Y ... (driver satisfies request by sending Y)"
  *
- * The bootloader may also send notifications when it cannot boot the device
- * from flash. The driver responds to these requests by initiating a firmware
- * update reset - the bootloader will then cycle through the normal firmware
- * download message exchange that should rewrite the flash on the device and
- * restore it to a working state.
+ * Normally the bootloader cycle will finish when the MAB file is successfully
+ * sent to the device; the response to that message indicates whether the
+ * device should then be reset or whether it is ready for use.
  */
 
 /*
@@ -72,26 +66,17 @@ struct clsic_fwheader {
 	uint32_t version;
 } PACKED;
 
-#define CLSIC_FWMAGIC               0x42554c43UL
-#define CLSIC_FWMAGIC_WIPE          0x45504957UL
 
 /* The firmware type magic numbers for different files */
-#define CLSIC_FWTYPE_KGN            0x204e474bUL
+#define CLSIC_FWMAGIC               0x42554c43UL
 #define CLSIC_FWTYPE_FWU            0x20555746UL
 #define CLSIC_FWTYPE_CPK            0x204b5043UL
 #define CLSIC_FWTYPE_MAB            0x2042414dUL
-#define CLSIC_FWTYPE_CAB            0x20424143UL
-#define CLSIC_FWTYPE_BPB            0x20425042UL
-#define CLSIC_FWTYPE_FAK            0x204b4146UL
 
 /* Strings used for describing firmware types */
-static const char CLSIC_KGN[] = "KGN";
 static const char CLSIC_FWU[] = "FWU";
 static const char CLSIC_CPK[] = "CPK";
 static const char CLSIC_MAB[] = "MAB";
-static const char CLSIC_CAB[] = "CAB";
-static const char CLSIC_BPB[] = "BPB";
-static const char CLSIC_FAK[] = "FAK";
 
 /*
  * Utility function to convert between an integer file type and a three letter
@@ -103,9 +88,6 @@ static const char *clsic_fwtype2string(uint32_t type)
 
 	/* recognised firmware types */
 	switch (type) {
-	case CLSIC_FWTYPE_KGN:
-		ret_string = CLSIC_KGN;
-		break;
 	case CLSIC_FWTYPE_FWU:
 		ret_string = CLSIC_FWU;
 		break;
@@ -114,15 +96,6 @@ static const char *clsic_fwtype2string(uint32_t type)
 		break;
 	case CLSIC_FWTYPE_MAB:
 		ret_string = CLSIC_MAB;
-		break;
-	case CLSIC_FWTYPE_CAB:
-		ret_string = CLSIC_CAB;
-		break;
-	case CLSIC_FWTYPE_BPB:
-		ret_string = CLSIC_BPB;
-		break;
-	case CLSIC_FWTYPE_FAK:
-		ret_string = CLSIC_FAK;
 		break;
 	default:
 		/* unrecognised */
@@ -356,7 +329,7 @@ release_exit:
 }
 
 /*
- * Called by the messaging layer in response to receiving a NOTIFICATION
+ * Called by the messaging layer in response to receiving a notification
  * message
  */
 static int clsic_bootsrv_msghandler(struct clsic *clsic,
