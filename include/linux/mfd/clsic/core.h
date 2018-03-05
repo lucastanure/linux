@@ -25,12 +25,6 @@
 #endif
 #include <linux/mfd/clsic/clsicmessagedefines.h>
 
-/*
- * XXX enable DEBUG  in the kernel headers - in particular this globally
- * enables clsic_dbg() messages
- */
-#define DEBUG
-
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
