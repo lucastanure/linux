@@ -37,7 +37,7 @@
 /* TODO: may require tuning */
 #define VOX_ASR_MIN_FRAGMENT_SZ	0
 #define VOX_ASR_MAX_FRAGMENT_SZ	307200
-#define VOX_ASR_MIN_FRAGMENTS	4
+#define VOX_ASR_MIN_FRAGMENTS	1
 #define VOX_ASR_MAX_FRAGMENTS	256
 
 #define VOX_MAX_USERS		3
