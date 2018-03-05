@@ -65,28 +65,6 @@ static void clsic_disable_hard_reset(struct clsic *clsic)
 	}
 }
 
-/* Backported from 4.9 kernel regmap_read_poll_timeout, taken from tacna */
-#define clsic_read_poll_timeout(map, addr, val, cond, sleep_us, timeout_us) \
-({ \
-	ktime_t timeout = ktime_add_us(ktime_get(), timeout_us); \
-	int pollret; \
-	might_sleep_if(sleep_us); \
-	for (;;) { \
-		pollret = regmap_read((map), (addr), &(val)); \
-		if (pollret) \
-			break; \
-		if (cond) \
-			break; \
-		if (timeout_us && ktime_compare(ktime_get(), timeout) > 0) { \
-			pollret = regmap_read((map), (addr), &(val)); \
-			break; \
-		} \
-		if (sleep_us) \
-			usleep_range((sleep_us >> 2) + 1, sleep_us); \
-	} \
-	pollret ?: ((cond) ? 0 : -ETIMEDOUT); \
-})
-
 /*
  * NOTE: These are quite large timeouts whilst we are in development
  */
@@ -98,10 +76,10 @@ static bool clsic_wait_for_boot_done(struct clsic *clsic)
 	unsigned int val;
 	int ret;
 
-	ret = clsic_read_poll_timeout(clsic->regmap, TACNA_IRQ1_EINT_2, val,
-				      (val & TACNA_BOOT_DONE_EINT1_MASK),
-				      CLSIC_BOOT_POLL_MICROSECONDS,
-				      CLSIC_BOOT_TIMEOUT_MICROSECONDS);
+	ret = regmap_read_poll_timeout(clsic->regmap, TACNA_IRQ1_EINT_2, val,
+				       (val & TACNA_BOOT_DONE_EINT1_MASK),
+				       CLSIC_BOOT_POLL_MICROSECONDS,
+				       CLSIC_BOOT_TIMEOUT_MICROSECONDS);
 	if (ret) {
 		clsic_err(clsic, "Failed to get BOOT_DONE: %d\n", ret);
 		return false;
