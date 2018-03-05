@@ -14,9 +14,9 @@
 #define CIRRUS_CLSIC_DEBUGCONTROL_H
 
 /**
- * These constants are intended to be shared between the core driver and Cirrus
- * Logic tools infrastructure to control the operation of the debugcontrol
- * mechanism.
+ * These constants are intended to be shared between the core driver and
+ * Cirrus Logic tools infrastructure to control the operation of the
+ * debugcontrol mechanism.
  *
  * This mechanism provides a method for Cirrus Logic tooling to gain exclusive
  * access to a device without normal driver operations occurring, such as
@@ -31,14 +31,12 @@
  * driver state.
  *
  * It is legal for the tooling to write to this file to request that the driver
- * disable normal access (writing CLSIC_DEBUGCONTROL_REQUESTED) and to
- * attempt to re-enable normal access (CLSIC_DEBUGCONTROL_RELEASED).
+ * disable normal access (writing CLSIC_DEBUGCONTROL_REQUESTED) and to attempt
+ * to re-enable normal access (CLSIC_DEBUGCONTROL_RELEASED).
  *
- * Re-enabling normal device operation (CLSIC_DEBUGCONTROL_RELEASED) is usually
- * prevented as it is possible that software state no-longer matches the
- * hardware and it is safest to reboot the device. In development situations
- * this restriction can be relaxed by adding a device tree entry for this clsic
- * instance: debugcontrol-release-enable
+ * Re-enabling normal device operation (using CLSIC_DEBUGCONTROL_RELEASED) is
+ * permitted, but as it is possible that software state no-longer matches the
+ * hardware it is safest to reboot the device.
  *
  * The write method will return when the request has been completed and the
  * return errno for the write will indicate general success or failure, however
