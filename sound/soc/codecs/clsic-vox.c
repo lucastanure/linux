@@ -363,8 +363,6 @@ EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_free);
 static int clsic_vox_asr_stream_block_sz(u32 block_size)
 {
 	switch (block_size) {
-	case 0:
-		return CLSIC_VOX_ASR_BLK_SZ_0;
 	case 192:
 		return CLSIC_VOX_ASR_BLK_SZ_192;
 	case 384:
