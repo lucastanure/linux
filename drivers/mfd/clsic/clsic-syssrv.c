@@ -147,12 +147,6 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 	}
 
 	/*
-	 * TODO: think about whether this clsic_pm wrapper around the send
-	 * message is still required
-	 */
-	clsic_pm_use(clsic);
-
-	/*
 	 * The "first touch" message that wakes the device may generate a
 	 * bootloader notification so this message may fail message with
 	 * CLSIC_MSG_INTERRUPTED.
@@ -169,7 +163,6 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
-	clsic_pm_release(clsic);
 	if (ret != 0) {
 		clsic_err(clsic, "Sysinfo ret %d\n", ret);
 		if (ret == -ETIMEDOUT) {
