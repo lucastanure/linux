@@ -17,6 +17,50 @@
 
 #include <linux/mfd/clsic/core.h>
 
+/**
+ * This extension to clsicmessagedefines.h is used for handling and
+ * identifying messages
+ */
+union t_clsic_generic_message {
+	uint8_t raw[CLSIC_FIXED_MSG_SZ];
+
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint8_t payload[10];
+	} __packed cmd;
+
+	struct {
+		struct clsic_blkcmd_hdr hdr;
+		uint8_t payload[6];
+	} __packed bulk_cmd;
+
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint8_t payload[9];
+	} __packed rsp;
+
+	struct {
+		struct clsic_blkrsp_hdr hdr;
+		uint8_t payload[5];
+	} __packed bulk_rsp;
+
+	struct {
+		struct clsic_ack_hdr hdr;
+		uint8_t payload[10];
+	} __packed ack;
+
+	struct {
+		struct clsic_nty_hdr hdr;
+		uint8_t payload[10];
+	} __packed notif;
+
+	struct {
+		struct clsic_blknty_hdr hdr;
+		uint8_t payload[6];
+	} __packed bulk_notif;
+} PACKED;
+
+
 enum clsic_message_states {
 	CLSIC_MSG_INITIAL,	/* Allocated */
 	CLSIC_MSG_WAITING,	/* Waiting to send */
