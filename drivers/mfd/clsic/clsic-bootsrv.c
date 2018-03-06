@@ -335,9 +335,7 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 	if (ret != 0) {
 		clsic_info(clsic, "Failed to send: %d\n", ret);
 		ret = -EIO;
-	}
-
-	if (msg_rsp->rsp_set_mab.hdr.err != 0) {
+	} else if (msg_rsp->rsp_set_mab.hdr.err != 0) {
 		err = msg_rsp->rsp_set_mab.hdr.err;
 		clsic_info(clsic, "Response error_code 0x%x : '%s'\n",
 			   err, clsic_bootsrv_err_to_string(err));
@@ -396,6 +394,8 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 		clsic_err(clsic, "CSLIC boot fail: %d : %s %d %d\n",
 			  msgid, clsic_state_to_string(clsic->state),
 			  clsic->blrequest, clsic->enumeration_required);
+		clsic_state_set(clsic, CLSIC_STATE_HALTED,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
 		break;
 	default:
 		clsic_dump_message(clsic, msg, "clsic_bootsrv_msghandler");
@@ -508,10 +508,33 @@ static ssize_t clsic_store_device_fw_version(struct device *dev,
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
 			return -EPERM;
 
+		/*
+		 * If the device previously failed clear that state so it can
+		 * be powered on (pm resume is prevented in the HALTED state).
+		 */
+		if (clsic->state == CLSIC_STATE_HALTED)
+			clsic_state_set(clsic, CLSIC_STATE_OFF,
+					CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
 		clsic->blrequest = CLSIC_BL_UPDATE;
 
 		pm_runtime_suspend(clsic->dev);
 		clsic_pm_wake(clsic);
+
+		/*
+		 * If the device is failing to boot, the device state may have
+		 * been set to HALTED by a boot failure notification as it
+		 * powered on; change the state to RESUMING so the bootloader
+		 * can send messages to update it.
+		 */
+		if (clsic->state == CLSIC_STATE_HALTED)
+			clsic_state_set(clsic, CLSIC_STATE_RESUMING,
+					CLSIC_STATE_CHANGE_LOCKNOTHELD);
+
+		/*
+		 * The bootloader state will be progressed in the maintenance
+		 * thread
+		 */
 		schedule_work(&clsic->maintenance_handler);
 	}
 
