@@ -2278,10 +2278,10 @@ static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int vox_ctrl_asset_installed_put(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_dummy(struct snd_kcontrol *kcontrol,
+			  struct snd_ctl_elem_value *ucontrol)
 {
-	return 0;
+       return 0;
 }
 
 static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
@@ -2603,8 +2603,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->soc_enum_mode.dobj.private = &vox->mgmt_mode;
 	vox->kcontrol_new[0].private_value =
 					(unsigned long) &vox->soc_enum_mode;
-	vox->kcontrol_new[0].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[0].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->error_info = VOX_ERROR_CLEARED;
@@ -2619,8 +2618,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->soc_enum_error_info.dobj.private = &vox->error_info;
 	vox->kcontrol_new[1].private_value =
 				(unsigned long)(&(vox->soc_enum_error_info));
-	vox->kcontrol_new[1].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[1].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->phrase_id = CLSIC_VOX_PHRASE_VDT1;
@@ -2638,8 +2636,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[2].put = vox_ctrl_int_put;
 	vox->kcontrol_new[2].private_value =
 		(unsigned long)(&(vox->phrase_id_mixer_ctrl));
-	vox->kcontrol_new[2].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[2].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -2654,9 +2651,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[3].info = snd_soc_info_bool_ext;
 	vox->kcontrol_new[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	vox->kcontrol_new[3].get = vox_ctrl_asset_installed_get;
-	vox->kcontrol_new[3].put = vox_ctrl_asset_installed_put;
+	vox->kcontrol_new[3].put = vox_ctrl_dummy;
 	vox->kcontrol_new[3].private_value = (unsigned long)vox;
-	vox->kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READ |
+	vox->kcontrol_new[3].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->user_id = CLSIC_VOX_USER1;
@@ -2673,8 +2670,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[4].put = vox_ctrl_int_put;
 	vox->kcontrol_new[4].private_value =
 		(unsigned long)(&(vox->user_id_mixer_ctrl));
-	vox->kcontrol_new[4].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[4].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = vox_update_user_status(vox, CLSIC_VOX_PHRASE_VDT1,
@@ -2686,9 +2682,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[5].info = snd_soc_info_bool_ext;
 	vox->kcontrol_new[5].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	vox->kcontrol_new[5].get = vox_ctrl_user_installed_get;
+	vox->kcontrol_new[5].put = vox_ctrl_dummy;
 	vox->kcontrol_new[5].private_value = (unsigned long)vox;
-	vox->kcontrol_new[5].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[5].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->duration = VOX_DEFAULT_DURATION;
@@ -2705,8 +2701,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[6].put = vox_ctrl_int_put;
 	vox->kcontrol_new[6].private_value =
 		(unsigned long)(&(vox->duration_mixer_ctrl));
-	vox->kcontrol_new[6].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[6].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->timeout = VOX_DEFAULT_TIMEOUT;
@@ -2723,8 +2718,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[7].put = vox_ctrl_int_put;
 	vox->kcontrol_new[7].private_value =
 		(unsigned long)(&(vox->timeout_mixer_ctrl));
-	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[7].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->number_of_reps = VOX_DEFAULT_NUM_REPS;
@@ -2741,8 +2735,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[8].put = vox_ctrl_int_put;
 	vox->kcontrol_new[8].private_value =
 		(unsigned long)(&(vox->reps_mixer_ctrl));
-	vox->kcontrol_new[8].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[8].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->security_level = VOX_SEC_LEVEL_LOW;
@@ -2757,8 +2750,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->soc_enum_sec_level.dobj.private = &vox->security_level;
 	vox->kcontrol_new[9].private_value =
 				(unsigned long)(&(vox->soc_enum_sec_level));
-	vox->kcontrol_new[9].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				      SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[9].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				      SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	vox->bio_results_format = VOX_BIO_RESULTS_CLASSIC;
@@ -2773,8 +2765,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->soc_enum_bio_res_type.dobj.private = &vox->bio_results_format;
 	vox->kcontrol_new[10].private_value =
 				(unsigned long)(&(vox->soc_enum_bio_res_type));
-	vox->kcontrol_new[10].access = SNDRV_CTL_ELEM_ACCESS_READ |
-				       SNDRV_CTL_ELEM_ACCESS_WRITE |
+	vox->kcontrol_new[10].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	memset(&vox->challenge, 0, sizeof(struct clsic_vox_auth_challenge));
@@ -2799,7 +2790,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[12].tlv.c = vox_ctrl_bio_res_blob;
 	vox->kcontrol_new[12].private_value =
 				(unsigned long)(&(vox->s_bytes_bio_res));
-	vox->kcontrol_new[12].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+	vox->kcontrol_new[12].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
 				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
@@ -2815,7 +2806,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[13].tlv.c = vox_ctrl_bio_pub_key;
 	vox->kcontrol_new[13].private_value =
 				(unsigned long)(&(vox->s_bytes_bio_pub_key));
-	vox->kcontrol_new[13].access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+	vox->kcontrol_new[13].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
 				       SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
