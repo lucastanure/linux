@@ -764,7 +764,6 @@ static void cs47l96_ao_component_remove(struct snd_soc_component *comp)
 	struct tacna *tacna = cs47l96_ao->core.tacna;
 
 	wm_adsp2_component_remove(&cs47l96_ao->core.dsp[0], comp);
-	/* TODO: destroy error irq */
 
 	tacna->dapm = NULL;
 }
