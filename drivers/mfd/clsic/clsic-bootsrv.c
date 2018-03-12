@@ -50,11 +50,7 @@ static const char CLSIC_FWFILE_MAB[] = "clsic-mab.bin";
 static const char CLSIC_FWFILE_CPK[] = "clsic-cpk.bin";
 static const char CLSIC_FWFILE_FWU[] = "clsic-fwu.bin";
 
-/*
- * Constants describing datafile structures - the Linux host is only interested
- * in a few fields in the header of the firmware file, the remaining portions
- * of the structure are obscured.
- */
+/* Constants describing datafile structures and constants */
 #define SIZEOF_PADDING_IN_BYTES		76
 #define SIZEOF_PADDING2_IN_BYTES	12
 
@@ -66,8 +62,6 @@ struct clsic_fwheader {
 	uint32_t version;
 } PACKED;
 
-
-/* The firmware type magic numbers for different files */
 #define CLSIC_FWMAGIC               0x42554c43UL
 #define CLSIC_FWTYPE_FWU            0x20555746UL
 #define CLSIC_FWTYPE_CPK            0x204b5043UL
@@ -84,24 +78,17 @@ static const char CLSIC_MAB[] = "MAB";
  */
 static const char *clsic_fwtype2string(uint32_t type)
 {
-	const char *ret_string;
-
 	/* recognised firmware types */
 	switch (type) {
 	case CLSIC_FWTYPE_FWU:
-		ret_string = CLSIC_FWU;
-		break;
+		return CLSIC_FWU;
 	case CLSIC_FWTYPE_CPK:
-		ret_string = CLSIC_CPK;
-		break;
+		return CLSIC_CPK;
 	case CLSIC_FWTYPE_MAB:
-		ret_string = CLSIC_MAB;
-		break;
+		return CLSIC_MAB;
 	default:
-		/* unrecognised */
-		ret_string = NULL;
+		return NULL;
 	}
-	return ret_string;
 }
 
 static inline const char *clsic_bootsrv_err_to_string(uint8_t err)
