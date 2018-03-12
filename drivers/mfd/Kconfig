@@ -1901,32 +1901,6 @@ config RAVE_SP_CORE
 
 endmenu
 
-config MFD_CLSIC_TACNA
-	bool
-
-config MFD_CLSIC
-	select REGMAP
-	select REGMAP_IRQ
-	select MFD_CORE
-	select MFD_CLSIC_TACNA
-	tristate
-
-config MFD_CLSIC_FPGA
-	bool "Cirrus Logic CLSIC FPGA"
-	depends on MFD_CLSIC
-	help
-	Support for Cirrus Logic CLSIC FPGA
-
-config MFD_CLSIC_SPI
-	tristate "Cirrus Logic CLSIC SPI"
-	select MFD_CLSIC
-	select REGMAP_SPI
-	depends on SPI_MASTER
-	help
-	  Support for the Cirrus Logic CLSIC SoC core functionality
-	  controlled via SPI.
-
-	  This driver can be built as a module. If built as a module it will be
-	  called "cs48lx50-spi"
+source "drivers/mfd/clsic/Kconfig"
 
 endif
