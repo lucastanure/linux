@@ -156,7 +156,7 @@ int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		return ret;
 	default:
 		return 0;
-	};
+	}
 
 error:
 	regmap_write(dsp->regmap, CLSIC_DSP2_PWR_CTRL,
