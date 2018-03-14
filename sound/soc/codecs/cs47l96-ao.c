@@ -782,6 +782,20 @@ static int cs47l96_ao_set_fll(struct snd_soc_component *comp, int fll_id,
 	return tacna_fllhj_set_refclk(&cs47l96_ao->fll, source, fref, fout);
 }
 
+static int cs47l96_ao_set_sysclk(struct snd_soc_component *comp, int clk_id,
+				 int source, unsigned int freq, int dir)
+{
+	struct cs47l96_ao *cs47l96_ao = snd_soc_component_get_drvdata(comp);
+
+	switch (clk_id) {
+	case TACNA_CLK_SYSCLKAO:
+		return tacna_set_sysclk(comp, clk_id, source, freq, dir);
+	default:
+		dev_err(cs47l96_ao->core.dev, "Unknown clock id %u\n", clk_id);
+		return -EINVAL;
+	}
+}
+
 static const struct snd_compr_ops cs47l96_ao_compr_ops = {
 	.open = cs47l96_ao_compr_open,
 	.free = wm_adsp_compr_free,
@@ -800,7 +814,7 @@ static struct snd_soc_component_driver soc_component_dev_cs47l96_ao = {
 	.idle_bias_on = false,
 	.name		= DRV_NAME,
 
-	.set_sysclk = tacna_set_sysclk,
+	.set_sysclk = cs47l96_ao_set_sysclk,
 	.set_pll = cs47l96_ao_set_fll,
 
 	.controls = cs47l96_ao_snd_controls,

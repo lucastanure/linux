@@ -2659,6 +2659,21 @@ static int cs47l96_set_fll(struct snd_soc_component *comp, int fll_id, int sourc
 	return tacna_fllhj_set_refclk(&cs47l96->fll[idx], source, fref, fout);
 }
 
+static int cs47l96_set_sysclk(struct snd_soc_component *comp, int clk_id,
+			      int source, unsigned int freq, int dir)
+{
+	struct cs47l96 *cs47l96 = snd_soc_component_get_drvdata(comp);
+
+	switch (clk_id) {
+	case TACNA_CLK_SYSCLKAO:
+		dev_err(cs47l96->core.dev,
+			"SYSCLKAO must be set through cs47l96-ao codec\n");
+		return -EINVAL;
+	default:
+		return tacna_set_sysclk(comp, clk_id, source, freq, dir);
+	}
+}
+
 static const struct snd_compr_ops cs47l96_compr_ops = {
 	.open = cs47l96_compr_open,
 	.free = wm_adsp_compr_free,
@@ -2677,7 +2692,7 @@ static struct snd_soc_component_driver soc_component_dev_cs47l96 = {
 	.idle_bias_on = false,
 	.name 	= DRV_NAME,
 
-	.set_sysclk = tacna_set_sysclk,
+	.set_sysclk = cs47l96_set_sysclk,
 	.set_pll = cs47l96_set_fll,
 
 	.controls = cs47l96_snd_controls,
