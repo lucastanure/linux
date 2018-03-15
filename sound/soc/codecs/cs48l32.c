@@ -1148,6 +1148,8 @@ static const struct snd_soc_dapm_route cs48l32_dapm_routes[] = {
 	{ "IN1R PGA", NULL, "VOUT_MIC" },
 
 	{ "IN2L PGA", NULL, "IN2_PDMCLK" },
+	{ "IN2R PGA", NULL, "IN2_PDMCLK" },
+	{ "IN2L PGA", NULL, "IN2_PDMDATA" },
 	{ "IN2R PGA", NULL, "IN2_PDMDATA" },
 
 	{ "IN2L PGA", NULL, "VOUT_MIC" },
