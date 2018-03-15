@@ -98,7 +98,7 @@ static inline const char *clsic_message_state_to_string(uint8_t state)
 	case CLSIC_MSG_BULKRX:
 		return "BULKRX";
 	case CLSIC_MSG_SUCCESS:
-		return "SUCCEDED";
+		return "SUCCEEDED";
 	case CLSIC_MSG_FAILED:
 		return "FAILED";
 	case CLSIC_MSG_INTERRUPTED:
