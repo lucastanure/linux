@@ -170,8 +170,8 @@ void clsic_release_msg(struct clsic *clsic, struct clsic_message *msg)
  * The clsic->message_lock is expected to be held when calling this function
  * once the message has been submitted to the messaging layer for processing.
  */
-inline void clsic_set_msgstate(struct clsic_message *msg,
-			       const enum clsic_message_states newstate)
+static inline void clsic_set_msgstate(struct clsic_message *msg,
+				      const enum clsic_message_states newstate)
 {
 	msg->state = newstate;
 	trace_clsic_msg_statechange(msg);
