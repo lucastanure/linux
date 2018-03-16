@@ -735,10 +735,71 @@ DEFINE_SIMPLE_ATTRIBUTE(clsic_debugcontrol_fops,
 			clsic_debugcontrol_write, "%llu\n");
 #endif
 
+/**
+ * This allows services to mark themselves as using the secure processor.
+ *
+ * This bitfield is checked in the timer callback, if if any service is marked
+ * as busy then automatic shutdown of the secure processor is prevented.
+ *
+ * When all services release their marks then this function will restart the
+ * secure processor shutdown timer.
+ *
+ * It is not a reference counted feature and services are expected to track
+ * their own usage.
+ *
+ * This function does NOT ensure that the device remains powered; the normal
+ * Linux runtime power management handles that task. (E.g. a complete DAPM
+ * graph causing pm_get on a clsic-codec device, which then propagates to the
+ * clsic-core parent device driver).
+ */
+void clsic_msgproc_use(struct clsic *clsic, uint8_t service_instance)
+{
+	uint8_t bit_val = (1 << service_instance);
+
+	if (!test_and_set_bit(bit_val, clsic->clsic_services_state))
+		clsic_msgproc_shutdown_cancel(clsic, true);
+	else
+		clsic_info(clsic, "double use %d", service_instance);
+
+}
+EXPORT_SYMBOL_GPL(clsic_msgproc_use);
+
+void clsic_msgproc_release(struct clsic *clsic, uint8_t service_instance)
+{
+	uint8_t bit_val = (1 << service_instance);
+
+	if (test_and_clear_bit(bit_val, clsic->clsic_services_state)) {
+		mutex_lock(&clsic->message_lock);
+		if (list_empty(&clsic->waiting_to_send) &&
+		    list_empty(&clsic->waiting_for_response))
+			clsic_msgproc_shutdown_schedule(clsic);
+		mutex_unlock(&clsic->message_lock);
+	} else
+		clsic_info(clsic, "double release %d", service_instance);
+}
+EXPORT_SYMBOL_GPL(clsic_msgproc_release);
+
+/*
+ * Check the services bitmap
+ * If at least one service is active (= 1), return false
+ * If all registered services are idle (= 0), return true
+ */
+static bool clsic_msgproc_services_active(struct clsic *clsic)
+{
+	return !bitmap_empty(clsic->clsic_services_state, CLSIC_SERVICE_COUNT);
+}
+
+/**
+ * Callback function for clsic_msgproc_shutdown_work delayed work queue (that
+ * just attempts to issue a shutdown command)
+ */
 static void clsic_msgproc_shutdown_fn(struct work_struct *data)
 {
 	struct clsic *clsic = container_of(data, struct clsic,
 					   clsic_msgproc_shutdown_work.work);
+
+	if (clsic_msgproc_services_active(clsic))
+		return;
 
 	clsic_send_shutdown_cmd(clsic);
 }
@@ -751,7 +812,7 @@ void clsic_msgproc_shutdown_schedule(struct clsic *clsic)
 {
 	int ret;
 
-	if (clsic_pm_services_active(clsic))
+	if (clsic_msgproc_services_active(clsic))
 		return;
 
 	ret = schedule_delayed_work(&clsic->clsic_msgproc_shutdown_work,

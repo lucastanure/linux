@@ -434,6 +434,8 @@ int clsic_fifo_readbulk_payload(struct clsic *clsic,
 
 void clsic_msgproc_shutdown_schedule(struct clsic *clsic);
 bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync);
+void clsic_msgproc_use(struct clsic *clsic, uint8_t service_instance);
+void clsic_msgproc_release(struct clsic *clsic, uint8_t service_instance);
 
 static inline void clsic_init_message(union t_clsic_generic_message *msg,
 				      const uint8_t service_instance,

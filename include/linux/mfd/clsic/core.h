@@ -334,10 +334,6 @@ static inline const char *clsic_pm_rpm_to_string(int event)
 	}
 }
 
-void clsic_pm_service_mark(struct clsic *clsic, uint8_t service_instance,
-			   bool mark_active);
-bool clsic_pm_services_active(struct clsic *clsic);
-
 /*
  * The clsic_pm functions make it straightforward to introduce instrumentation
  */
