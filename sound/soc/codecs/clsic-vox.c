@@ -1848,7 +1848,10 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+	if (ret)
+		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+	else
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
 
 	return ret;
 }
