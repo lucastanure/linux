@@ -42,7 +42,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	17
+#define VOX_NUM_NEW_KCONTROLS	20
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT	4
 
@@ -108,6 +108,7 @@ struct clsic_vox {
 	unsigned int phrase_id;
 	unsigned int user_id;
 	unsigned int bin_id;
+	unsigned int file_id;	/* For filename determination. */
 	unsigned int duration;
 	unsigned int timeout;
 	unsigned int number_of_reps;
@@ -125,6 +126,8 @@ struct clsic_vox {
 	 */
 	int asr_strm_mode;
 	unsigned int barge_in_status;
+	int trigger_phrase_id;
+	int trigger_engine_id;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
@@ -132,6 +135,8 @@ struct clsic_vox {
 	struct soc_enum soc_enum_bio_res_type;
 	struct soc_enum soc_enum_barge_in;
 	struct soc_enum soc_enum_asset_type;
+	struct soc_enum soc_enum_trgr_phr;
+	struct soc_enum soc_enum_trgr_eng;
 
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
@@ -139,6 +144,7 @@ struct clsic_vox {
 	struct soc_mixer_control timeout_mixer_ctrl;
 	struct soc_mixer_control reps_mixer_ctrl;
 	struct soc_mixer_control bin_id_mixer_ctrl;
+	struct soc_mixer_control file_id_mixer_ctrl;
 
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
@@ -283,35 +289,51 @@ static const char *vox_barge_in_text[VOX_NUM_BARGE_IN] = {
 };
 
 #define VOX_NUM_ASSET_TYPES_MVP2	1
-#define VOX_NUM_ASSET_TYPES_MVP		3
+#define VOX_NUM_ASSET_TYPES_MVP		4
 
 #define VOX_ASSET_TYPE_PHRASE		0
-#define VOX_ASSET_TYPE_BIN		1
-#define VOX_ASSET_TYPE_BIO_VTE_MAP	2
+#define VOX_ASSET_TYPE_BIN_VTE		1
+#define VOX_ASSET_TYPE_BIN_SSF		2
+#define VOX_ASSET_TYPE_BIO_VTE_MAP	3
 
 static const char *vox_asset_type_text_mvp[VOX_NUM_ASSET_TYPES_MVP] = {
 	[VOX_ASSET_TYPE_PHRASE]		= "Biometric Phrase",
-	[VOX_ASSET_TYPE_BIN]		= "Voice Trigger Engine Phrase",
+	[VOX_ASSET_TYPE_BIN_VTE]	= "Voice Trigger Engine Bin",
+	[VOX_ASSET_TYPE_BIN_SSF]	= "Start Stop Flagger Bin",
 	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "Biometric Voice Trigger Engine Map",
 };
 
-/* Present method of asset installation uses a fixed list of files. */
-static struct {
-	const char *file;
-} phrase_files[VOX_MAX_PHRASES]	= {
-	[CLSIC_VOX_PHRASE_VDT1]	= { .file = "bpb.p00" },
-	[CLSIC_VOX_PHRASE_TI]	= { .file = "bpb.p04" },
+/* Templates for asset filenames. */
+static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES_MVP] = {
+	[VOX_ASSET_TYPE_PHRASE]		= "bpb.p%02u",
+	[VOX_ASSET_TYPE_BIN_VTE]	= "vte%u.bin",
+	[VOX_ASSET_TYPE_BIN_SSF]	= "ssf%u.bin",
+	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "biovte%u.map",
+};
+#define VOX_ASSET_TYPE_NAME_MAX_LEN	21
+
+#define VOX_TRGR_INVALID		0
+
+#define VOX_NUM_TRGR_ENG		2
+
+#define VOX_TRGR_ENG_12			1
+#define VOX_TRGR_ENG_12_NUM		12
+
+static const char *vox_trgr_eng_text[VOX_NUM_TRGR_ENG] = {
+	[VOX_TRGR_INVALID]		= "Invalid",
+	[VOX_TRGR_ENG_12]		= "12",
 };
 
-static struct {
-	const char *file;
-} bin_files[VOX_MAX_PHRASES]	= {
-	[CLSIC_VOX_BIN_VTE1]	= { .file = "vte1.bin" },
-	[CLSIC_VOX_BIN_VTE2]	= { .file = "vte2.bin" },
-	[CLSIC_VOX_BIN_SSF]	= { .file = "ssf.bin" },
-};
+#define VOX_NUM_TRGR_PHR		3
 
-static const char vox_bio_vte_map_file[] = "biovte.map";
+#define VOX_TRGR_PHR_1			1
+#define VOX_TRGR_PHR_2			2
+
+static const char *vox_trgr_phr_text[VOX_NUM_TRGR_PHR] = {
+	[VOX_TRGR_INVALID]		= "Invalid",
+	[VOX_TRGR_PHR_1]		= "1",
+	[VOX_TRGR_PHR_2]		= "2",
+};
 
 static inline int size_of_bio_results(uint8_t bio_results_format)
 {
@@ -595,6 +617,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		container_of(asr_stream, struct clsic_vox, asr_stream);
 	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	struct clsic_vox_trgr_info trgr_info;
 	int ret = 0;
 
 	ret = wait_for_completion_interruptible(&asr_stream->trigger_heard);
@@ -614,6 +638,58 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		return 0;
 
 	trace_clsic_vox_asr_stream_data_start(asr_stream->copied_total);
+
+	/* Fill in the trigger information. */
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_GET_TRGR_INFO);
+	ret = clsic_send_msg_sync(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  (uint8_t *) &trgr_info,
+				  sizeof(struct clsic_vox_trgr_info));
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		asr_stream->error = true;
+		return 0;
+	}
+
+	/* Response is either bulk in case of success, or not. */
+	if (!clsic_get_bulk_bit(msg_rsp.rsp_get_trgr_info.hdr.sbc))
+		switch (msg_rsp.rsp_get_trgr_info.hdr.err) {
+		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
+		case CLSIC_ERR_INPUT_PATH:
+			clsic_err(vox->clsic, "failure %s.\n",
+			 clsic_error_string(msg_rsp.rsp_get_trgr_info.hdr.err));
+			asr_stream->error = true;
+			return 0;
+		default:
+			clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
+				  msg_rsp.rsp_get_trgr_info.hdr.err);
+			asr_stream->error = true;
+			return 0;
+		}
+
+	if (trgr_info.engineid == VOX_TRGR_ENG_12_NUM)
+		vox->trigger_engine_id = VOX_TRGR_ENG_12;
+	else {
+		clsic_err(vox->clsic, "unsupported trigger engine ID %d.\n",
+			  trgr_info.engineid);
+			asr_stream->error = true;
+			return 0;
+	}
+
+	if ((trgr_info.phraseid == VOX_TRGR_PHR_1) ||
+	    (trgr_info.phraseid == VOX_TRGR_PHR_2))
+		/* 1 to 1 mapping of engine ID and enum index. */
+		vox->trigger_phrase_id = trgr_info.phraseid;
+	else {
+		clsic_err(vox->clsic, "unsupported trigger engine ID %d.\n",
+			  trgr_info.phraseid);
+		asr_stream->error = true;
+		return 0;
+	}
 
 	/* queue up the first read */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -729,6 +805,9 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 			 * before finishing up otherwise CLSIC complains.
 			 */
 			wait_for_completion(&asr_stream->asr_block_completion);
+
+		vox->trigger_phrase_id = VOX_TRGR_INVALID;
+		vox->trigger_engine_id = VOX_TRGR_INVALID;
 
 		mutex_lock(&vox->mgmt_mode_lock);
 		if ((vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) &&
@@ -973,8 +1052,8 @@ static int vox_update_phrases(struct clsic_vox *vox)
 	/* Phrases. */
 	for (phr = 0; phr < VOX_MAX_PHRASES; phr++) {
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
+				   vox->service->service_instance,
+				   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
 		msg_cmd.cmd_is_phrase_installed.phraseid = phr;
 
 		ret = clsic_send_msg_sync(
@@ -1228,7 +1307,8 @@ static int vox_install_asset(struct clsic_vox *vox)
 	const struct firmware *fw;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
-	const char *file = NULL;
+	char file[VOX_ASSET_TYPE_NAME_MAX_LEN];
+	int id = -1;
 	int ret;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1238,25 +1318,19 @@ static int vox_install_asset(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	switch (vox->asset_type) {
-	case VOX_ASSET_TYPE_PHRASE:
-		trace_clsic_vox_install_phrase(vox->phrase_id);
-		file = phrase_files[vox->phrase_id].file;
-		break;
-	case VOX_ASSET_TYPE_BIN:
-		trace_clsic_vox_install_bin(vox->bin_id);
-		file = bin_files[vox->bin_id].file;
-		break;
-	case VOX_ASSET_TYPE_BIO_VTE_MAP:
-		trace_clsic_vox_install_bio_vte_map(0);
-		file = vox_bio_vte_map_file;
-		break;
-	}
+	/* vox->asset_type is auto-bounded by ALSA enum control. */
+	sprintf(file, vox_asset_filenames[vox->asset_type], vox->file_id);
+	if (vox->asset_type == VOX_ASSET_TYPE_PHRASE)
+		id = vox->phrase_id;
+	else if (vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP)
+		id = vox->bin_id;
+
+	trace_clsic_vox_install_asset(file, id);
 
 	ret = request_firmware(&fw, file, vox->clsic->dev);
 	if (ret) {
 		clsic_err(vox->clsic, "request_firmware failed for %s.\n",
-			  phrase_files[vox->phrase_id].file);
+			  file);
 		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
 	}
@@ -1264,8 +1338,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	if (fw->size % CLSIC_ASSET_SIZE_ALIGNMENT) {
 		clsic_err(vox->clsic,
 			  "firmware file %s size %d is not a multiple of %d.\n",
-			  phrase_files[vox->phrase_id].file, fw->size,
-			  CLSIC_ASSET_SIZE_ALIGNMENT);
+			  file, fw->size, CLSIC_ASSET_SIZE_ALIGNMENT);
 		release_firmware(fw);
 		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
@@ -1279,7 +1352,8 @@ static int vox_install_asset(struct clsic_vox *vox)
 		msg_cmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
 		msg_cmd.cmd_install_phrase.phraseid = vox->phrase_id;
 		break;
-	case VOX_ASSET_TYPE_BIN:
+	case VOX_ASSET_TYPE_BIN_VTE:
+	case VOX_ASSET_TYPE_BIN_SSF:
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_INSTALL_BIN);
@@ -1301,9 +1375,9 @@ static int vox_install_asset(struct clsic_vox *vox)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	release_firmware(fw);
-
 	if (ret)
 		goto exit;
+
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
 		switch (msg_rsp.rsp_install_phrase.hdr.err) {
@@ -1355,7 +1429,8 @@ static int vox_install_asset(struct clsic_vox *vox)
 			vox->error_info = VOX_ERROR_LIBRARY;
 		}
 		break;
-	case VOX_ASSET_TYPE_BIN:
+	case VOX_ASSET_TYPE_BIN_VTE:
+	case VOX_ASSET_TYPE_BIN_SSF:
 		/* TODO: check these are all the error codes possible. */
 		switch (msg_rsp.rsp_install_bin.hdr.err) {
 		case CLSIC_ERR_NONE:
@@ -1458,7 +1533,8 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 				   CLSIC_VOX_MSG_CR_REMOVE_PHRASE);
 		msg_cmd.cmd_remove_phrase.phraseid = vox->phrase_id;
 		break;
-	case VOX_ASSET_TYPE_BIN:
+	case VOX_ASSET_TYPE_BIN_VTE:
+	case VOX_ASSET_TYPE_BIN_SSF:
 		trace_clsic_vox_uninstall_bin(vox->bin_id);
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
@@ -1527,7 +1603,8 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			break;
 		}
 		break;
-	case VOX_ASSET_TYPE_BIN:
+	case VOX_ASSET_TYPE_BIN_VTE:
+	case VOX_ASSET_TYPE_BIN_SSF:
 		/* TODO: check these are all the error codes possible. */
 		switch (msg_rsp.rsp_remove_bin.hdr.err) {
 		case CLSIC_ERR_NONE:
@@ -2227,7 +2304,8 @@ static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[0] =
 					vox->phrase_installed[vox->phrase_id];
 		break;
-	case VOX_ASSET_TYPE_BIN:
+	case VOX_ASSET_TYPE_BIN_VTE:
+	case VOX_ASSET_TYPE_BIN_SSF:
 		ucontrol->value.integer.value[0] =
 					vox->bin_installed[vox->bin_id];
 		break;
@@ -2829,6 +2907,53 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[16].private_value =
 				(unsigned long) &vox->soc_enum_asset_type;
 	vox->kcontrol_new[16].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->file_id = 0;
+
+	memset(&vox->file_id_mixer_ctrl, 0, sizeof(vox->file_id_mixer_ctrl));
+	vox->file_id_mixer_ctrl.min = 0;
+	vox->file_id_mixer_ctrl.max = UINT_MAX;
+	vox->file_id_mixer_ctrl.platform_max = UINT_MAX;
+	vox->file_id_mixer_ctrl.dobj.private = &vox->file_id;
+	vox->kcontrol_new[17].name = "Vox Asset Filename ID";
+	vox->kcontrol_new[17].info = snd_soc_info_volsw;
+	vox->kcontrol_new[17].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[17].get = vox_ctrl_int_get;
+	vox->kcontrol_new[17].put = vox_ctrl_int_put;
+	vox->kcontrol_new[17].private_value =
+		(unsigned long)(&(vox->file_id_mixer_ctrl));
+	vox->kcontrol_new[17].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->trigger_phrase_id = VOX_TRGR_INVALID;
+
+	vox->kcontrol_new[18].name = "Vox Trigger Phrase ID";
+	vox->kcontrol_new[18].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[18].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[18].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[18].put = vox_ctrl_enum_put;
+	vox->soc_enum_trgr_phr.items = VOX_NUM_TRGR_PHR;
+	vox->soc_enum_trgr_phr.texts = vox_trgr_phr_text;
+	vox->soc_enum_trgr_phr.dobj.private = &vox->trigger_phrase_id;
+	vox->kcontrol_new[18].private_value =
+				(unsigned long)(&(vox->soc_enum_trgr_phr));
+	vox->kcontrol_new[18].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	vox->trigger_engine_id = VOX_TRGR_INVALID;
+
+	vox->kcontrol_new[19].name = "Vox Trigger Engine ID";
+	vox->kcontrol_new[19].info = snd_soc_info_enum_double;
+	vox->kcontrol_new[19].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[19].get = vox_ctrl_enum_get;
+	vox->kcontrol_new[19].put = vox_ctrl_enum_put;
+	vox->soc_enum_trgr_eng.items = VOX_NUM_TRGR_ENG;
+	vox->soc_enum_trgr_eng.texts = vox_trgr_eng_text;
+	vox->soc_enum_trgr_eng.dobj.private = &vox->trigger_engine_id;
+	vox->kcontrol_new[19].private_value =
+				(unsigned long)(&(vox->soc_enum_trgr_eng));
+	vox->kcontrol_new[19].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				       SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,

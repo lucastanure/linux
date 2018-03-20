@@ -385,28 +385,6 @@ TRACE_EVENT(clsic_vox_set_mode,
 		)
 );
 
-DECLARE_EVENT_CLASS(clsic_vox_phrase_id,
-	TP_PROTO(uint8_t phrase_id),
-	TP_ARGS(phrase_id),
-	TP_STRUCT__entry(
-			__field(uint8_t, phrase_id)
-			),
-	TP_fast_assign(
-			__entry->phrase_id = phrase_id;
-		),
-	TP_printk("phrase ID %d", __entry->phrase_id)
-);
-
-DEFINE_EVENT(clsic_vox_phrase_id, clsic_vox_install_phrase,
-	TP_PROTO(uint8_t phrase_id),
-	TP_ARGS(phrase_id)
-);
-
-DEFINE_EVENT(clsic_vox_phrase_id, clsic_vox_uninstall_phrase,
-	TP_PROTO(uint8_t phrase_id),
-	TP_ARGS(phrase_id)
-);
-
 TRACE_EVENT(clsic_vox_remove_user,
 	TP_PROTO(uint8_t user_id, uint8_t phrase_id),
 	TP_ARGS(user_id, phrase_id),
@@ -507,17 +485,37 @@ TRACE_EVENT(clsic_vox_new_auth_result,
 			)
 );
 
-DEFINE_EVENT(clsic_vox_generic, clsic_vox_install_bio_vte_map,
-	TP_PROTO(uint8_t dummy),
-	TP_ARGS(dummy)
+TRACE_EVENT(clsic_vox_install_asset,
+	TP_PROTO(char *filename, int assetid),
+	TP_ARGS(filename, assetid),
+	TP_STRUCT__entry(
+			__array(char, file, 32)
+			__field(int, id)
+			),
+	TP_fast_assign(
+			strcpy(__entry->file, filename);
+			__entry->id = assetid;
+		),
+	TP_printk(
+			"install asset file %s with CLSIC slot ID %d",
+			__entry->file,
+			__entry->id
+			)
 );
 
-DEFINE_EVENT(clsic_vox_generic, clsic_vox_uninstall_bio_vte_map,
-	TP_PROTO(uint8_t dummy),
-	TP_ARGS(dummy)
+TRACE_EVENT(clsic_vox_uninstall_phrase,
+	TP_PROTO(uint8_t phrase_id),
+	TP_ARGS(phrase_id),
+	TP_STRUCT__entry(
+			__field(uint8_t, phrase_id)
+			),
+	TP_fast_assign(
+			__entry->phrase_id = phrase_id;
+		),
+	TP_printk("phrase ID %d", __entry->phrase_id)
 );
 
-DECLARE_EVENT_CLASS(clsic_vox_bin_id,
+TRACE_EVENT(clsic_vox_uninstall_bin,
 	TP_PROTO(uint8_t bin_id),
 	TP_ARGS(bin_id),
 	TP_STRUCT__entry(
@@ -529,14 +527,9 @@ DECLARE_EVENT_CLASS(clsic_vox_bin_id,
 	TP_printk("bin ID %d", __entry->bin_id)
 );
 
-DEFINE_EVENT(clsic_vox_bin_id, clsic_vox_install_bin,
-	TP_PROTO(uint8_t bin_id),
-	TP_ARGS(bin_id)
-);
-
-DEFINE_EVENT(clsic_vox_bin_id, clsic_vox_uninstall_bin,
-	TP_PROTO(uint8_t bin_id),
-	TP_ARGS(bin_id)
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_uninstall_bio_vte_map,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
 );
 
 TRACE_EVENT(clsic_dev_panic,
