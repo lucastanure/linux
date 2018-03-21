@@ -1990,14 +1990,15 @@ static int clsic_probe(struct platform_device *pdev)
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to initialise DSP2.\n");
 
-	for (i = 0 ; i < CLSIC_N_FLL ; ++i)
-		tacna_init_fll(&clsic_codec->core,
-			       i + 1,
-			       TACNA_FLL1_CONTROL1 + i * 0x100,
-			       CLSIC_IRQ2_STS6,
-			       CLSIC_FLL1_LOCK_STS2_MASK << (2 * i),
-			       &clsic_codec->fll[i]);
-
+	for (i = 0 ; i < CLSIC_N_FLL ; ++i) {
+		clsic_codec->fll[i].tacna_priv = &clsic_codec->core;
+		clsic_codec->fll[i].id = i + 1;
+		clsic_codec->fll[i].base = TACNA_FLL1_CONTROL1 + i * 0x100;
+		clsic_codec->fll[i].sts_addr = CLSIC_IRQ2_STS6;
+		clsic_codec->fll[i].sts_mask =
+			CLSIC_FLL1_LOCK_STS2_MASK << (2 * i);
+		tacna_init_fll(&clsic_codec->fll[i]);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(clsic_dai); i++)
 		tacna_init_dai(&clsic_codec->core, i);
