@@ -418,7 +418,6 @@ extern const struct soc_enum tacna_sample_rate[];
 extern const struct soc_enum tacna_sample_rate_async[];
 
 extern const struct snd_kcontrol_new tacna_inmux[];
-extern const struct snd_kcontrol_new tacna_inmode_switch[];
 extern const struct snd_kcontrol_new tacna_dmode_mux[];
 
 extern const char * const tacna_us_freq_texts[TACNA_US_FREQ_ENUM_SIZE];
