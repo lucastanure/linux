@@ -146,6 +146,12 @@ enum clsic_msgproc_states {
 	CLSIC_MSGPROC_ON,
 };
 
+enum clsic_service_states {
+	CLSIC_ENUMERATION_REQUIRED = 0,
+	CLSIC_REENUMERATION_REQUIRED, /* check enumeration or service states ? */
+	CLSIC_ENUMERATED,
+};
+
 struct clsic {
 	struct regmap *regmap;
 
@@ -232,7 +238,7 @@ struct clsic {
 	 * Service enumeration is only required once per boot or if the
 	 * firmware changes
 	 */
-	bool enumeration_required;
+	enum clsic_service_states service_states;
 
 	/* Array of pointers to service handlers */
 	struct clsic_service *service_handlers[CLSIC_SERVICE_COUNT];
@@ -287,6 +293,7 @@ struct clsic_service {
 			struct clsic_service *handler,
 			struct clsic_message *msg);
 
+	int (*start)(struct clsic *clsic, struct clsic_service *handler);
 	void (*stop)(struct clsic *clsic, struct clsic_service *handler);
 
 	uint8_t service_instance;

@@ -1369,7 +1369,7 @@ static int clsic_send_message_core(struct clsic *clsic,
 			clsic_info(clsic, "Can't send: %s %d %d %d\n",
 				   clsic_state_to_string(clsic->state),
 				   clsic->blrequest,
-				   clsic->enumeration_required,
+				   clsic->service_states,
 				   clsic->msgproc_state);
 			return -EBUSY;
 		}

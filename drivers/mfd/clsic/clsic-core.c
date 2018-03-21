@@ -381,7 +381,7 @@ int clsic_dev_init(struct clsic *clsic)
 	if (ret != 0)
 		goto bootloader_service_start_failed;
 
-	clsic->enumeration_required = true;
+	clsic->service_states = CLSIC_ENUMERATION_REQUIRED;
 
 	pm_runtime_set_suspended(clsic->dev);
 	pm_runtime_mark_last_busy(clsic->dev);
@@ -478,9 +478,9 @@ void clsic_maintenance(struct work_struct *data)
 	struct clsic *clsic = container_of(data, struct clsic,
 					   maintenance_handler);
 
-	clsic_info(clsic, "States: %s %d %d\n",
+	clsic_info(clsic, "States: %s %d %d %d\n",
 		   clsic_state_to_string(clsic->state),
-		   clsic->blrequest, clsic->enumeration_required);
+		   clsic->blrequest, clsic->service_states, UINT_MAX);
 
 	if (clsic->blrequest != CLSIC_BL_IDLE) {
 		clsic_bootsrv_state_handler(clsic);
@@ -491,7 +491,9 @@ void clsic_maintenance(struct work_struct *data)
 	    (clsic->state != CLSIC_STATE_DEBUGCONTROL_REQUESTED))
 		return;
 
+
 	if (clsic_system_service_enumerate(clsic) == 0) {
+		clsic->service_states = CLSIC_ENUMERATED;
 		clsic_state_set(clsic,
 				CLSIC_STATE_ON,
 				CLSIC_STATE_CHANGE_LOCKNOTHELD);
@@ -674,6 +676,7 @@ int clsic_register_service_handler(struct clsic *clsic,
 			goto reterror;
 		}
 
+		tmp_handler->start = start;
 		tmp_handler->service_instance = service_instance;
 		tmp_handler->service_type = service_type;
 		tmp_handler->callback = &clsic_noservice_handler;
@@ -683,8 +686,7 @@ int clsic_register_service_handler(struct clsic *clsic,
 	mutex_unlock(&clsic->service_lock);
 
 	if (start != NULL)
-		ret = (start) (clsic,
-			       clsic->service_handlers[service_instance]);
+		ret = (start) (clsic, tmp_handler);
 
 reterror:
 	return ret;
@@ -1020,7 +1022,7 @@ static ssize_t clsic_store_state(struct device *dev,
 		pm_runtime_suspend(clsic->dev);
 
 		mutex_lock(&clsic->message_lock);
-		clsic->enumeration_required = true;
+		clsic->service_states = CLSIC_REENUMERATION_REQUIRED;
 		clsic_purge_message_queues(clsic);
 		mutex_unlock(&clsic->message_lock);
 

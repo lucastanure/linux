@@ -26,6 +26,5 @@ int clsic_system_service_start(struct clsic *clsic,
 			       struct clsic_service *handler);
 
 int clsic_system_service_enumerate(struct clsic *clsic);
-
 int clsic_send_shutdown_cmd(struct clsic *clsic);
 #endif

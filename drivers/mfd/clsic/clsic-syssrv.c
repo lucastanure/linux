@@ -107,6 +107,13 @@ int clsic_system_service_start(struct clsic *clsic,
 	 */
 	if ((handler->stop == &clsic_system_service_stop) &&
 	    (handler->data != NULL)) {
+		clsic_info(clsic, "System service fw version %d.%d.%d",
+			   (handler->service_version & CLSIC_SVCVER_MAJ_MASK) >>
+			   CLSIC_SVCVER_MAJ_SHIFT,
+			   (handler->service_version & CLSIC_SVCVER_MIN_MASK) >>
+			   CLSIC_SVCVER_MIN_SHIFT,
+			   (handler->service_version & CLSIC_SVCVER_BLD_MASK) >>
+			   CLSIC_SVCVER_BLD_SHIFT);
 		return 0;
 	}
 
@@ -120,6 +127,84 @@ int clsic_system_service_start(struct clsic *clsic,
 	handler->callback = &clsic_system_service_handler;
 	handler->stop = &clsic_system_service_stop;
 	handler->data = syssrv;
+
+	return 0;
+}
+
+/**
+ *
+ * Compare the type of all the driver service handlers with that reported by
+ * the device looking for differences (except the bootloader service handler
+ * that isn't part of a running system). If the service type matches then the
+ * service version is updated with that read from the device.
+ *
+ * If no services have changed type, notify the service handlers of a
+ * reenumeration so they may update their state (and perhaps check their
+ * discovered service version is supported).
+ */
+static int clsic_system_service_reenumerate(struct clsic *clsic)
+{
+	union clsic_sys_msg msg_cmd;
+	union clsic_sys_msg msg_rsp;
+	uint16_t read_service_type;
+	uint16_t handler_service_type;
+	uint8_t tmp_instance;
+	struct clsic_service *tmp_handler;
+	int ret;
+
+	for (tmp_instance = 0;
+	     tmp_instance < CLSIC_SRV_INST_BLD;
+	     tmp_instance++) {
+		read_service_type = 0x0;
+		tmp_handler = clsic->service_handlers[tmp_instance];
+		if (tmp_handler != NULL)
+			handler_service_type = tmp_handler->service_type;
+		else
+			handler_service_type = 0x0;
+
+		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
+				   CLSIC_SRV_INST_SYS,
+				   CLSIC_SYS_MSG_CR_SRV_INFO);
+		msg_cmd.cmd_srv_info.srv_inst = tmp_instance;
+		ret = clsic_send_msg_sync(clsic,
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+		if ((ret == 0) &&
+		    (msg_rsp.rsp_srv_info.hdr.err == CLSIC_ERR_NONE))
+			read_service_type = msg_rsp.rsp_srv_info.srv_type;
+
+		if (handler_service_type != read_service_type) {
+			clsic_err(clsic,
+				  "id %d %p type read 0x%x != handler 0x%x",
+				  tmp_instance, tmp_handler, read_service_type,
+				  handler_service_type);
+			clsic_err(clsic, "Service configuration changed\n");
+			clsic_device_error(clsic,
+					   CLSIC_DEVICE_ERROR_LOCKNOTHELD);
+			return -EINVAL;
+		}
+
+		/* Update the version of read services */
+		if (tmp_handler != NULL)
+			tmp_handler->service_version =
+				msg_rsp.rsp_srv_info.srv_ver;
+	}
+
+	/* Services have not changed, notify all services of a restart */
+	for (tmp_instance = 0;
+	     tmp_instance < CLSIC_SRV_INST_BLD;
+	     tmp_instance++) {
+		tmp_handler = clsic->service_handlers[tmp_instance];
+		if (tmp_handler != NULL &&
+		    tmp_handler->start != NULL) {
+			clsic_dbg(clsic, "%d: %pF",
+				  tmp_instance, tmp_handler->start);
+			tmp_handler->start(clsic, tmp_handler);
+		}
+	}
 
 	return 0;
 }
@@ -184,10 +269,10 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		return ret;
 	}
 
-	if (!clsic->enumeration_required)
+	if (clsic->service_states == CLSIC_ENUMERATED)
 		return 0;
-
-	clsic->enumeration_required = false;
+	else if (clsic->service_states == CLSIC_REENUMERATION_REQUIRED)
+		return clsic_system_service_reenumerate(clsic);
 
 	clsic_dbg(clsic, "Sysinfo ret 0x%x 0x%x 0x%x\n",
 		  msg_rsp.rsp_sys_info.hdr.sbc,
@@ -359,6 +444,7 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 	clsic_dbg(clsic, "Enumerate found %d services (error: %d)",
 		  services_found, ret);
 
+	clsic->service_states = CLSIC_ENUMERATED;
 	return 0;
 }
 

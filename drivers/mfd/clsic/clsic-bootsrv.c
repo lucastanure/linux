@@ -353,7 +353,7 @@ static int clsic_bootsrv_msghandler(struct clsic *clsic,
 	case CLSIC_BL_MSG_N_FLASH_CORRUPTED:
 		clsic_err(clsic, "CSLIC boot fail: %d : %s %d %d\n",
 			  msgid, clsic_state_to_string(clsic->state),
-			  clsic->blrequest, clsic->enumeration_required);
+			  clsic->blrequest, clsic->service_states);
 		clsic_state_set(clsic, CLSIC_STATE_HALTED,
 				CLSIC_STATE_CHANGE_LOCKNOTHELD);
 		break;
@@ -428,7 +428,9 @@ void clsic_bootsrv_state_handler(struct clsic *clsic)
 		break;
 	case CLSIC_BL_UPDATE:
 		mutex_lock(&clsic->message_lock);
-		clsic->enumeration_required = true;
+		/* If services have been discovered, reenumerate them */
+		if (clsic->service_states == CLSIC_ENUMERATED)
+			clsic->service_states = CLSIC_REENUMERATION_REQUIRED;
 		clsic_fwupdate_reset(clsic);
 		mutex_unlock(&clsic->message_lock);
 		break;
