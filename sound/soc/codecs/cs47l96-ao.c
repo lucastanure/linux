@@ -864,6 +864,14 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 		goto error_dsp1ao_irq;
 	}
 
+	ret = tacna_request_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR,
+				"DSP1AO MPU", wm_halo_bus_error,
+				&cs47l96_ao->core.dsp[0]);
+	if (ret) {
+		dev_warn(&pdev->dev, "Failed to get DSP1AO MPU IRQ: %d\n", ret);
+		goto error_mpu_irq;
+	}
+
 	dsp = &cs47l96_ao->core.dsp[0];
 	dsp->part = "cs47l96_ao";
 	dsp->num = 1;
@@ -913,6 +921,8 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 error_dsp:
 	wm_adsp2_remove(&cs47l96_ao->core.dsp[0]);
 error_core:
+	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR, cs47l96_ao);
+error_mpu_irq:
 	tacna_free_irq(tacna, TACNA_IRQ_DSP2_IRQ0, cs47l96_ao);
 error_dsp1ao_irq:
 	tacna_core_destroy(&cs47l96_ao->core);
@@ -927,6 +937,7 @@ static int cs47l96_ao_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
+	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR, cs47l96_ao);
 	tacna_free_irq(tacna, TACNA_IRQ_DSP2_IRQ0, cs47l96_ao);
 
 	wm_adsp2_remove(&cs47l96_ao->core.dsp[0]);
