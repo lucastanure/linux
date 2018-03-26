@@ -27,7 +27,7 @@
  * For this reason the regmap configuration is extremely limited, all volatile
  * and cacheless.
  */
-bool clsic_spi_regmap_readable(struct device *dev, unsigned int reg)
+static bool clsic_spi_regmap_readable(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
 	case TACNA_DEVID:

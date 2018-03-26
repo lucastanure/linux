@@ -153,7 +153,7 @@ void clsic_release_msg(struct clsic *clsic, struct clsic_message *msg)
 	 */
 	if (!list_empty(&msg->client_link)) {
 		clsic_err(clsic, "Warning: message %p client_link set", msg);
-		clsic_dump_message(clsic, msg, "clsic_release_msg()");
+		clsic_dump_message(clsic, msg, "client_link set");
 	}
 
 	/* if the bulk rx buffer was dynamically allocated free it too */
@@ -885,21 +885,17 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	clsic->msgproc_state = CLSIC_MSGPROC_OFF;
 
 #ifdef CONFIG_DEBUG_FS
-	debugfs_create_file("messages", S_IRUSR | S_IRGRP | S_IROTH,
-			    clsic->debugfs_root, clsic, &clsic_messages_fops);
+	debugfs_create_file("messages", 0444, clsic->debugfs_root, clsic,
+			    &clsic_messages_fops);
 
-	debugfs_create_file("send_message",
-			    S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
-			    clsic->debugfs_root,
-			    clsic, &clsic_custom_message_fops);
+	debugfs_create_file("send_message", 0660, clsic->debugfs_root, clsic,
+			    &clsic_custom_message_fops);
 
-	debugfs_create_file("debugcontrol", S_IWUSR | S_IWGRP,
-			    clsic->debugfs_root,
-			    clsic, &clsic_debugcontrol_fops);
+	debugfs_create_file("debugcontrol", 0220, clsic->debugfs_root, clsic,
+			    &clsic_debugcontrol_fops);
 
-	debugfs_create_file("triggerworker", S_IWUSR | S_IWGRP,
-			    clsic->debugfs_root,
-			    clsic, &clsic_triggerworker_fops);
+	debugfs_create_file("triggerworker", 0220, clsic->debugfs_root, clsic,
+			    &clsic_triggerworker_fops);
 #endif
 
 	return ret;

@@ -457,7 +457,7 @@ static ssize_t clsic_show_file_fw_version(struct device *dev,
 		       (file_version & CLSIC_SVCVER_BLD_MASK) >>
 		       CLSIC_SVCVER_BLD_SHIFT);
 }
-static DEVICE_ATTR(file_fw_version, S_IRUGO, clsic_show_file_fw_version, NULL);
+static DEVICE_ATTR(file_fw_version, 0444, clsic_show_file_fw_version, NULL);
 
 static ssize_t clsic_store_device_fw_version(struct device *dev,
 				 struct device_attribute *attr,
@@ -519,8 +519,8 @@ static ssize_t clsic_show_device_fw_version(struct device *dev,
 		       (device_version & CLSIC_SVCVER_BLD_MASK) >>
 		       CLSIC_SVCVER_BLD_SHIFT);
 }
-static DEVICE_ATTR(device_fw_version, S_IRUGO | S_IWUSR,
-		   clsic_show_device_fw_version, clsic_store_device_fw_version);
+static DEVICE_ATTR(device_fw_version, 0644, clsic_show_device_fw_version,
+		   clsic_store_device_fw_version);
 
 static void clsic_bootsrv_service_stop(struct clsic *clsic,
 				      struct clsic_service *handler)

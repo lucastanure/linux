@@ -40,7 +40,7 @@ static const char * const clsic_core_supplies[] = {
 };
 
 static bool clsic_bootonload = true;
-module_param(clsic_bootonload, bool, 0);
+module_param(clsic_bootonload, bool, 0000);
 MODULE_PARM_DESC(clsic_bootonload,
 		 "Whether to boot the device when the module is loaded");
 
@@ -173,8 +173,7 @@ static int clsic_shutdown_notifier_cb(struct notifier_block *this,
 	struct clsic *clsic = container_of(this, struct clsic,
 					   clsic_shutdown_notifier);
 
-	pr_devel("clsic_shutdown_notifier_cb() clsic %p code %ld\n",
-		 clsic, code);
+	pr_devel("%s() clsic %p code %ld\n", __func__, clsic, code);
 
 	if ((code == SYS_DOWN) || (code == SYS_HALT))
 		/* signal the device is shutting down - halt the CLSIC device */
@@ -438,7 +437,7 @@ void clsic_dev_panic(struct clsic *clsic, struct clsic_message *msg)
 	int ret;
 
 	trace_clsic_dev_panic(clsic->state);
-	clsic_dump_message(clsic, msg, "clsic_dev_panic() Panic Notification");
+	clsic_dump_message(clsic, msg, "Panic Notification");
 	memcpy(&clsic->last_panic.msg, &msg->fsm, CLSIC_FIXED_MSG_SZ);
 
 	ret = clsic_fifo_readbulk_payload(clsic, msg, (uint8_t *)
@@ -969,16 +968,14 @@ void clsic_init_debugfs(struct clsic *clsic)
 		return;
 	}
 
-	debugfs_create_file("bootdone",
-			    S_IWUSR | S_IWGRP,
-			    clsic->debugfs_root, clsic, &clsic_bootdone_fops);
+	debugfs_create_file("bootdone", 0220, clsic->debugfs_root, clsic,
+			    &clsic_bootdone_fops);
 
-	debugfs_create_file("services", S_IRUSR | S_IRGRP | S_IROTH,
-			    clsic->debugfs_root, clsic, &clsic_services_fops);
+	debugfs_create_file("services", 0444, clsic->debugfs_root, clsic,
+			    &clsic_services_fops);
 
-	debugfs_create_file("last_panic",
-			    S_IRUSR | S_IRGRP,
-			    clsic->debugfs_root, clsic, &clsic_panic_fops);
+	debugfs_create_file("last_panic", 0440, clsic->debugfs_root, clsic,
+			    &clsic_panic_fops);
 }
 
 void clsic_deinit_debugfs(struct clsic *clsic)
@@ -1064,7 +1061,7 @@ static ssize_t clsic_show_state(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%s\n",
 			clsic_state_to_string(clsic->state));
 }
-static DEVICE_ATTR(state, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(state, 0644,
 		   clsic_show_state, clsic_store_state);
 
 static ssize_t clsic_show_devid(struct device *dev,
@@ -1074,7 +1071,7 @@ static ssize_t clsic_show_devid(struct device *dev,
 
 	return snprintf(buf, PAGE_SIZE, "0x%x\n", clsic->devid);
 }
-static DEVICE_ATTR(devid, S_IRUGO, clsic_show_devid, NULL);
+static DEVICE_ATTR(devid, 0444, clsic_show_devid, NULL);
 
 static void clsic_init_sysfs(struct clsic *clsic)
 {

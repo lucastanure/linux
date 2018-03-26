@@ -162,8 +162,8 @@ int clsic_irq_init(struct clsic *clsic)
 	clsic->simirq_timer.data = (unsigned long) clsic;
 
 	INIT_WORK(&clsic->simirq_work, clsic_simirq);
-	debugfs_create_file("triggerirq", S_IWUSR | S_IWGRP,
-			    clsic->debugfs_root, clsic, &clsic_simirq_fops);
+	debugfs_create_file("triggerirq", 0220, clsic->debugfs_root, clsic,
+			    &clsic_simirq_fops);
 #endif
 
 	return ret;
