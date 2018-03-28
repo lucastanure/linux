@@ -1009,9 +1009,13 @@ static ssize_t clsic_store_state(struct device *dev,
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
 			return -EPERM;
 
-		if (clsic->state == CLSIC_STATE_HALTED)
+		clsic_info(clsic, "Reset requested\n");
+
+		if (clsic->state == CLSIC_STATE_HALTED) {
+			clsic_info(clsic, "Released from HALTED state\n");
 			clsic_state_set(clsic, CLSIC_STATE_OFF,
 					CLSIC_STATE_CHANGE_LOCKNOTHELD);
+		}
 
 		pm_runtime_suspend(clsic->dev);
 

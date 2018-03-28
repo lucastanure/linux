@@ -35,6 +35,16 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
 		if (ret != 0)
 			return IRQ_NONE;
 
+		if ((reg & CLSIC_PVT_TS_SD_RISE_EINT1_MASK) != 0 ||
+		    (reg & CLSIC_PVT_TS_WARN_FALL_EINT1_MASK) != 0) {
+			clsic_err(clsic,
+				  "Device HALTED due to thermal event: 0x%x\n",
+				  reg);
+			clsic_device_error(clsic,
+					   CLSIC_DEVICE_ERROR_LOCKNOTHELD);
+			return IRQ_HANDLED;
+		}
+
 		if ((reg & TACNA_CPF1_IRQ_EXT_EINT1_MASK) != 0)
 			clsic_handle_incoming_messages(clsic);
 
