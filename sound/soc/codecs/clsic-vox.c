@@ -226,7 +226,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
 };
 
-#define VOX_NUM_ERRORS			11
+#define VOX_NUM_ERRORS			10
 
 #define VOX_ERROR_SUCCESS		0
 #define VOX_ERROR_LIBRARY		1
@@ -237,8 +237,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 #define VOX_ERROR_TOO_LOUD		6
 #define VOX_ERROR_TOO_NOISY		7
 #define VOX_ERROR_NO_USERS		8
-#define VOX_ERROR_BIO_TIME_EXCEEDED	9
-#define VOX_ERROR_CLEARED		10
+#define VOX_ERROR_CLEARED		9
 
 static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_SUCCESS]		= "Success",
@@ -250,7 +249,6 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_TOO_LOUD]		= "Too Loud",
 	[VOX_ERROR_TOO_NOISY]		= "Too Noisy",
 	[VOX_ERROR_NO_USERS]		= "No Users Identified",
-	[VOX_ERROR_BIO_TIME_EXCEEDED]	= "Maximum Voice ID Duration Exceeded",
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
@@ -1953,15 +1951,16 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 
 	switch (vox->auth_error) {
 	case CLSIC_ERR_NONE:
+	case CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED:
+		/*
+		 * For CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED, the maximum amount of
+		 * audio has been processed however biometric results can still
+		 * be obtained.
+		 */
 		break;
 	case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
 		vox->error_info = VOX_ERROR_NO_USERS;
 		ret = 0;
-		goto exit;
-	case CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED:
-		/* The maximum amount of audio has been processed.*/
-		vox->error_info = VOX_ERROR_BIO_TIME_EXCEEDED;
-		ret = -EIO;
 		goto exit;
 	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 		/* i.e. BPB not installed. */
