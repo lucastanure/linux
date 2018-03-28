@@ -1862,6 +1862,9 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	}
 
 exit:
+	if (ret)
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+
 	return ret;
 }
 
