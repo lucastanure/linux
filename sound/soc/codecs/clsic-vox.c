@@ -637,24 +637,28 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 			return 0;
 		}
 
-	if (trgr_info.engineid == VOX_TRGR_ENG_12_NUM)
-		vox->trigger_engine_id = VOX_TRGR_ENG_12;
-	else {
-		clsic_err(vox->clsic, "unsupported trigger engine ID %d.\n",
-			  trgr_info.engineid);
+	if (vox->service->service_version > CLSIC_VOX_SRV_VERSION_MVP2) {
+		if (trgr_info.engineid == VOX_TRGR_ENG_12_NUM)
+			vox->trigger_engine_id = VOX_TRGR_ENG_12;
+		else {
+			clsic_err(vox->clsic,
+				  "unsupported trigger engine ID %d.\n",
+				  trgr_info.engineid);
+				asr_stream->error = true;
+				return 0;
+		}
+
+		if ((trgr_info.phraseid == VOX_TRGR_PHR_1) ||
+		    (trgr_info.phraseid == VOX_TRGR_PHR_2))
+			/* 1 to 1 mapping of engine ID and enum index. */
+			vox->trigger_phrase_id = trgr_info.phraseid;
+		else {
+			clsic_err(vox->clsic,
+				  "unsupported trigger engine ID %d.\n",
+				  trgr_info.phraseid);
 			asr_stream->error = true;
 			return 0;
-	}
-
-	if ((trgr_info.phraseid == VOX_TRGR_PHR_1) ||
-	    (trgr_info.phraseid == VOX_TRGR_PHR_2))
-		/* 1 to 1 mapping of engine ID and enum index. */
-		vox->trigger_phrase_id = trgr_info.phraseid;
-	else {
-		clsic_err(vox->clsic, "unsupported trigger engine ID %d.\n",
-			  trgr_info.phraseid);
-		asr_stream->error = true;
-		return 0;
+		}
 	}
 
 	/* queue up the first read */
