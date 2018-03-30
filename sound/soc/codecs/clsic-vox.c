@@ -1142,15 +1142,13 @@ static int vox_update_map(struct clsic_vox *vox)
 
 static int vox_update_assets_status(struct clsic_vox *vox)
 {
-	struct clsic_service *handler =
-		clsic_find_first_service(vox->clsic, CLSIC_SRV_TYPE_VOX);
 	int ret;
 
 	ret = vox_update_phrases(vox);
 	if (ret)
 		return ret;
 
-	if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
+	if (vox->service->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
 		/* MVP2.0 nothing else to update. */
 		return 0;
 
