@@ -575,8 +575,8 @@ static int clsic_triggerworker_write(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(clsic_triggerworker_fops, NULL,
-			clsic_triggerworker_write, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(clsic_triggerworker_fops, NULL,
+			 clsic_triggerworker_write, "%llu\n");
 
 /*
  * The debug control interface is an interface intended to be used by Cirrus
@@ -731,9 +731,9 @@ static int clsic_debugcontrol_read(void *data, u64 *val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(clsic_debugcontrol_fops,
-			clsic_debugcontrol_read,
-			clsic_debugcontrol_write, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(clsic_debugcontrol_fops,
+			 clsic_debugcontrol_read,
+			 clsic_debugcontrol_write, "%llu\n");
 #endif
 
 /**

@@ -858,8 +858,8 @@ static int clsic_bootdone_write(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(clsic_bootdone_fops, NULL,
-			clsic_bootdone_write, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(clsic_bootdone_fops, NULL,
+			 clsic_bootdone_write, "%llu\n");
 
 static ssize_t clsic_services_read_file(struct file *file,
 					char __user *user_buf,

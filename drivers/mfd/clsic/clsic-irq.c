@@ -123,8 +123,8 @@ static int clsic_simirq_write(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(clsic_simirq_fops, clsic_simirq_read,
-			clsic_simirq_write, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(clsic_simirq_fops, clsic_simirq_read,
+			 clsic_simirq_write, "%llu\n");
 #endif
 
 int clsic_irq_init(struct clsic *clsic)
