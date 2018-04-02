@@ -22,12 +22,12 @@
 static bool clsic_is_dsp_memory(unsigned int reg)
 {
 	switch (reg) {
-	case 0x2b80000 ... 0x2b805d8:	/* DSP1 rate registers */
 	case 0x4000000 ... 0x401dff0:	/* DSP2 XM packed */
 	case 0x4400000 ... 0x4413ff8:	/* DSP2 XM unpacked32 */
 	case 0x45e0000 ... 0x45e413c:	/* DSP2 system info registers */
 	case 0x4800000 ... 0x4827ff4:	/* DSP2 XM unpacked24 */
-	case 0x4b80000 ... 0x4b805d8:	/* DSP2 control registers */
+	case 0x4b80000 ... 0x4b80050:	/* DSP2 control registers */
+	case 0x4b805c0 ... 0x4b805d0:	/* DSP2 scratch registers */
 	case 0x4bc1000 ... 0x4bcd020:	/* DSP2 control registers */
 	case 0x4c00000 ... 0x4c17ff0:	/* DSP2 YM packed */
 	case 0x5000000 ... 0x500fff8:	/* DSP2 YM unpacked32 */
@@ -83,24 +83,6 @@ bool clsic_volatile_register(struct device *dev, unsigned int reg)
 	case TACNA_CPF1_TX_GPR_STATUS1:
 	case TACNA_CPF1_TX_RDDATA1:
 	case TACNA_CPF1_TX_RDDATA2:
-	case TACNA_DSP1_SAMPLE_RATE_RX1:
-	case TACNA_DSP1_SAMPLE_RATE_RX2:
-	case TACNA_DSP1_SAMPLE_RATE_RX3:
-	case TACNA_DSP1_SAMPLE_RATE_RX4:
-	case TACNA_DSP1_SAMPLE_RATE_RX5:
-	case TACNA_DSP1_SAMPLE_RATE_RX6:
-	case TACNA_DSP1_SAMPLE_RATE_RX7:
-	case TACNA_DSP1_SAMPLE_RATE_RX8:
-	case TACNA_DSP1_SAMPLE_RATE_RX9:
-	case TACNA_DSP1_SAMPLE_RATE_TX1:
-	case TACNA_DSP1_SAMPLE_RATE_TX2:
-	case TACNA_DSP1_SAMPLE_RATE_TX3:
-	case TACNA_DSP1_SAMPLE_RATE_TX4:
-	case TACNA_DSP1_SAMPLE_RATE_TX5:
-	case TACNA_DSP1_SAMPLE_RATE_TX6:
-	case TACNA_DSP1_SAMPLE_RATE_TX7:
-	case TACNA_DSP1_SAMPLE_RATE_TX8:
-	case TACNA_DSP1_SAMPLE_RATE_TX9:
 		return true;
 	default:
 		return clsic_is_dsp_memory(reg);
@@ -796,6 +778,22 @@ bool clsic_readable_register(struct device *dev, unsigned int reg)
 	case TACNA_DSP1_SAMPLE_RATE_TX7:
 	case TACNA_DSP1_SAMPLE_RATE_TX8:
 	case TACNA_DSP1_SAMPLE_RATE_TX9:
+	case TACNA_DSP2_SAMPLE_RATE_RX1:
+	case TACNA_DSP2_SAMPLE_RATE_RX2:
+	case TACNA_DSP2_SAMPLE_RATE_RX3:
+	case TACNA_DSP2_SAMPLE_RATE_RX4:
+	case TACNA_DSP2_SAMPLE_RATE_RX5:
+	case TACNA_DSP2_SAMPLE_RATE_RX6:
+	case TACNA_DSP2_SAMPLE_RATE_RX7:
+	case TACNA_DSP2_SAMPLE_RATE_RX8:
+	case TACNA_DSP2_SAMPLE_RATE_TX1:
+	case TACNA_DSP2_SAMPLE_RATE_TX2:
+	case TACNA_DSP2_SAMPLE_RATE_TX3:
+	case TACNA_DSP2_SAMPLE_RATE_TX4:
+	case TACNA_DSP2_SAMPLE_RATE_TX5:
+	case TACNA_DSP2_SAMPLE_RATE_TX6:
+	case TACNA_DSP2_SAMPLE_RATE_TX7:
+	case TACNA_DSP2_SAMPLE_RATE_TX8:
 		return true;
 	default:
 		return clsic_is_dsp_memory(reg);
