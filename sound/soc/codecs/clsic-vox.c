@@ -1328,8 +1328,11 @@ static int vox_install_asset(struct clsic_vox *vox)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	release_firmware(fw);
-	if (ret)
+
+	if (ret) {
+		vox->error_info = VOX_ERROR_LIBRARY;
 		goto exit;
+	}
 
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
