@@ -413,7 +413,7 @@ static struct regmap_config regmap_config_ras = {
 	.lock = &clsic_ras_regmap_lock,
 	.unlock = &clsic_ras_regmap_unlock,
 
-	.max_register = CLSIC_TOP_REGISTER,
+	.max_register = TACNA_DSP2_PMEM_0,
 
 	.readable_reg = &clsic_readable_register,
 	.volatile_reg = &clsic_volatile_register,

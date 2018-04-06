@@ -75,10 +75,8 @@ bool clsic_volatile_register(struct device *dev, unsigned int reg)
 	case TACNA_IRQ1_STATUS:
 	case TACNA_IRQ1_EINT_2:
 	case TACNA_IRQ1_STS_2:
-	case CLSIC_IRQ2_STS1 ... CLSIC_IRQ2_STS17:
+	case CLSIC_IRQ2_STS6:
 	case TACNA_SLIMBUS_BULK_STATUS:
-		/* range required for writing the keys into pram */
-	case CLSIC_MCU_PRAM0 ... CLSIC_MCU_PRAM4095:
 		/* used by clsic core */
 	case CLSIC_FW_UPDATE_REG:
 	case TACNA_CPF1_RX_WRDATA:
@@ -749,19 +747,7 @@ bool clsic_readable_register(struct device *dev, unsigned int reg)
 	case TACNA_IRQ1_EINT_2:
 	case TACNA_IRQ1_STS_2:
 	case TACNA_IRQ1_MASK_2:
-	case CLSIC_IRQ2_STS1:
-	case CLSIC_IRQ2_STS2:
-	case CLSIC_IRQ2_STS5:
 	case CLSIC_IRQ2_STS6:
-	case CLSIC_IRQ2_STS7:
-	case CLSIC_IRQ2_STS9:
-	case CLSIC_IRQ2_STS10:
-	case CLSIC_IRQ2_STS11:
-	case CLSIC_IRQ2_STS12:
-	case CLSIC_IRQ2_STS13:
-	case CLSIC_IRQ2_STS14:
-	case CLSIC_IRQ2_STS15:
-	case CLSIC_IRQ2_STS17:
 	case TACNA_SLIMBUS_BULK_STATUS:
 	case CLSIC_SLIMBUS_RX9_START_ADDR:
 	case CLSIC_SLIMBUS_RX9_PORTS:
@@ -781,8 +767,6 @@ bool clsic_readable_register(struct device *dev, unsigned int reg)
 	case CLSIC_SLIMBUS_TX11_START_ADDR:
 	case CLSIC_SLIMBUS_TX11_PORTS:
 	case CLSIC_SLIMBUS_TX11_PORT_STATUS:
-		/* range required for writing the keys into pram */
-	case CLSIC_MCU_PRAM0 ... CLSIC_MCU_PRAM4095:
 		/* These permit the EQ tunings to be read as a range */
 	case TACNA_EQ1_BAND5_COEFF1 + 4:
 	case TACNA_EQ2_BAND5_COEFF1 + 4:
