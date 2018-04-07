@@ -2629,7 +2629,7 @@ static int cs47l96_component_probe(struct snd_soc_component *comp)
 	if (ret)
 		return ret;
 
-	snd_soc_dapm_disable_pin(tacna->dapm, "HAPTICS");
+	snd_soc_component_disable_pin(comp, "HAPTICS");
 
 	ret = tacna_dsp_add_component_controls(comp, CS47L96_NUM_DSP);
 	if (ret)
