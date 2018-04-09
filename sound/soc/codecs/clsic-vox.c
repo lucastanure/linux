@@ -2031,6 +2031,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_SECURITY_FAIL:
 		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
 		case CLSIC_ERR_AUTH_BIOM_DISABLED:
+		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
 			clsic_err(vox->clsic, "%s.\n",
 				clsic_error_string(
 				    msg_rsp.rsp_auth_user.hdr.err));
