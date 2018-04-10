@@ -211,6 +211,7 @@ enum clsic_err {
 	CLSIC_ERR_BIOVTE_MAP_SZ_INVALID 	= 83,
 	CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED	= 84,
 	CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST = 85,
+	CLSIC_ERR_IOCTL_EXT_CODEC		= 86,
 	CLSIC_ERR_BL_AUTH_FAILED		= 200,
 	CLSIC_ERR_BL_INVAL_VERSION		= 201,
 	CLSIC_ERR_BL_FLASH_WRITE_FAILED		= 202,
@@ -358,6 +359,15 @@ enum clsic_sys_msg_id {
 	CLSIC_SYS_MSG_CR_GET_KEY_VAL		= 8,
 	CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT	= 9,
 	CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT	= 10,
+	CLSIC_SYS_MSG_CR_IOCTL			= 11,
+};
+
+/**
+ *  System Service ioctl id's.
+ */
+enum clsic_sys_ioctl {
+	CLSIC_SYS_IOCTL_EXT_CODEC_COMMS_HALT	= 0,
+	CLSIC_SYS_IOCTL_EXT_CODEC_COMMS_RESUME	= 1,
 };
 
 /**
@@ -539,6 +549,28 @@ union clsic_sys_msg {
 	struct {
 		struct clsic_rsp_hdr hdr;
 	} PACKED rsp_get_key_val;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_IOCTL command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+		uint8_t id;
+		union {
+			uint8_t raw_payload[9];
+		} PACKED args;
+	} PACKED cmd_ioctl;
+
+	/**
+	 *  CLSIC_SYS_MSG_CR_IOCTL response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+		uint8_t id;
+		union {
+			uint8_t raw_payload[8];
+		} PACKED args;
+	} PACKED rsp_ioctl;
 } PACKED;
 
 /**
@@ -831,7 +863,6 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_IS_USER_INSTALLED	= 23,
 	CLSIC_VOX_MSG_CR_REMOVE_USER		= 24,
 	CLSIC_VOX_MSG_CR_GET_AUTH_KEY		= 25,
-
 	CLSIC_VOX_MSG_CR_INSTALL_BIN		= 30,
 	CLSIC_VOX_MSG_CR_REMOVE_BIN		= 31,
 	CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED	= 32,
