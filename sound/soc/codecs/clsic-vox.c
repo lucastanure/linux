@@ -34,6 +34,13 @@
 
 #include "clsic-vox.h"
 
+/**
+ * size_of_bio_results() - get the size of the biometric results struct in use
+ * @bio_results_format:	The format of biometric results struct whose size is
+ *			being queried.
+ *
+ * Return: The size of the struct corresponding to the passed-in format.
+ */
 static inline int size_of_bio_results(uint8_t bio_results_format)
 {
 	switch (bio_results_format) {
@@ -51,9 +58,15 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
 
-/*
+/**
+ * clsic_error_string() - get a string description of the requested error code
+ * @error_index:	The CLSIC error code as described in
+ *			clsicmessagedefines.h.
+ *
  * This lookup function is necessary because the CLSIC error codes are not
  * sequential. i.e. the error code is not necessarily equal to the array offset.
+ *
+ * Return: A pointer to the string corresponding to error_index.
  */
 static const char *clsic_vox_error_string(int error_index)
 {
@@ -68,6 +81,14 @@ static const char *clsic_vox_error_string(int error_index)
 	return "Unrecognised CLSIC error code";
 }
 
+/**
+ * clsic_vox_asr_stream_open() - open the ASR stream
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ *
+ * Standard .open function - see struct snd_compr_ops for more details.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
@@ -102,6 +123,14 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	return 0;
 }
 
+/**
+ * clsic_vox_asr_stream_free() - close the ASR stream
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ *
+ * Standard .free function - see struct snd_compr_ops for more details.
+ *
+ * Return: 0 always.
+ */
 static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
@@ -122,6 +151,15 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	return 0;
 }
 
+/**
+ * clsic_vox_asr_stream_block_sz() - close the ASR stream
+ * @block_size:	size of the ASR block in bytes.
+ *
+ * Convert an actual ASR block size in bytes into the enumeration used by the
+ * CLSIC messaging protocol.
+ *
+ * Return: CLSIC enumerated code representing block size.
+ */
 static int clsic_vox_asr_stream_block_sz(u32 block_size)
 {
 	switch (block_size) {
@@ -144,6 +182,15 @@ static int clsic_vox_asr_stream_block_sz(u32 block_size)
 
 #define PCM_S16_LE_BYTES_PER_SAMPLE 2
 
+/**
+ * clsic_vox_asr_stream_set_params() - set up internal ASR parameters
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ * @params:	Standard parameter as used by compressed stream infrastructure.
+ *
+ * Standard .set_params function - see struct snd_compr_ops for more details.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 					   struct snd_compr_params *params)
 {
@@ -262,7 +309,15 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	return CLSIC_MSG_RELEASED;
 }
 
-/* Wait for initial keyphrase trigger from CLSIC. */
+/**
+ * clsic_vox_asr_stream_wait_for_trigger() - wait for initial CLSIC trigger
+ * @data:	struct clsic_asr_stream data.
+ *
+ * CLSIC will notify this driver when a trigger has occurred and the aim here is
+ * to react to this trigger by starting to get ASR blocks from CLSIC.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 {
 	struct clsic_asr_stream *asr_stream = data;
@@ -377,6 +432,18 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	return 0;
 }
 
+/**
+ * clsic_vox_asr_stream_trigger() - respond to userspace
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ * @cmd:	A start or stop flag for compressed audio streaming.
+ *
+ * Standard .trigger function - see struct snd_compr_ops for more details. When
+ * userspace (crec) starts reading an active compressed stream of audio, this
+ * function is called with a relevant command regarding whether the stream has
+ * just started or just stopped.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 					int cmd)
 {
@@ -500,6 +567,16 @@ exit:
 	return ret;
 }
 
+/**
+ * clsic_vox_asr_stream_pointer() - get timestamp information about the
+ *					ASR stream
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ * @tstamp:	Standard parameter as used by compressed stream infrastructure.
+ *
+ * Standard .pointer function - see struct snd_compr_ops for more details.
+ *
+ * Return: 0 always.
+ */
 static int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 					struct snd_compr_tstamp *tstamp)
 {
@@ -511,6 +588,17 @@ static int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 	return 0;
 }
 
+/**
+ * clsic_vox_asr_stream_copy() - copy ASR data to userspace buffer
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ * @buf:	Userspace buffer to copy compressed data to.
+ * @count:	How many bytes to copy to userspace.
+ *
+ * Standard .copy function - see struct snd_compr_ops for more details.
+ * Basically starts another read of a block of ASR data from CLSIC.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 				     char __user *buf,
 				     size_t count)
@@ -562,6 +650,15 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 	return count;
 }
 
+/**
+ * clsic_vox_asr_stream_get_caps() - copy ASR data to userspace buffer
+ * @stream:	Standard parameter as used by compressed stream infrastructure.
+ * @caps:	Standard parameter as used by compressed stream infrastructure.
+ *
+ * Standard .get_caps function - see struct snd_compr_ops for more details.
+ *
+ * Return: 0 always.
+ */
 static int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
 					 struct snd_compr_caps *caps)
 {
@@ -613,6 +710,17 @@ static struct snd_soc_platform_driver clsic_vox_compr_platform = {
 	.compr_ops = &clsic_vox_compr_ops,
 };
 
+/**
+ * vox_set_mode() - set mode on CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @new_mode:	New CLSIC mode to change to.
+ *
+ * Set the mode on CLSIC. Includes inter-operation with the power management
+ * infrastructure to provide hints as to when CLSIC should power down based on
+ * the new mode demanded.
+ *
+ * Return: errno.
+ */
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 {
 	union clsic_vox_msg msg_cmd;
@@ -664,6 +772,19 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	}
 }
 
+/**
+ * vox_set_idle_and_mode() - set CLSIC to IDLE mode and set driver management
+ *			     mode
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @set_clsic_to_idle:	Whether to set CLSIC to IDLE mode or not.
+ * @mgmt_mode:	New vox driver management mode to change to.
+ *
+ * This function incorporates the 3 commonly performed tasks of setting CLSIC to
+ * IDLE mode, setting the internal driver management mode and then notifying
+ * userspace (i.e. waking the poll) that something has changed (usually meant to
+ * imply that the error control node has changed value).
+ *
+ */
 void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
 			   int mgmt_mode)
 {
@@ -676,6 +797,15 @@ void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
 		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
 }
 
+/**
+ * vox_update_phrases() - update internal cache of biometric phrase
+ *			  installation states
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Query CLSIC to find out which biometric phrases are installed.
+ *
+ * Return: errno.
+ */
 static int vox_update_phrases(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -724,6 +854,14 @@ static int vox_update_phrases(struct clsic_vox *vox)
 	return 0;
 }
 
+/**
+ * vox_update_bins() - update internal cache of VTE/SSF bin installation states
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Query CLSIC to find out which VTE/SSF bin files are installed.
+ *
+ * Return: errno.
+ */
 static int vox_update_bins(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -774,6 +912,14 @@ static int vox_update_bins(struct clsic_vox *vox)
 	return 0;
 }
 
+/**
+ * vox_update_map() - update internal cache of map installation state
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Query CLSIC to find out whether a map file is installed.
+ *
+ * Return: errno.
+ */
 static int vox_update_map(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -819,6 +965,14 @@ static int vox_update_map(struct clsic_vox *vox)
 	return 0;
 }
 
+/**
+ * vox_update_assets_status() - update all internal asset states
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Update the cached states of all assets.
+ *
+ * Return: errno.
+ */
 static int vox_update_assets_status(struct clsic_vox *vox)
 {
 	int ret;
@@ -838,6 +992,17 @@ static int vox_update_assets_status(struct clsic_vox *vox)
 	return vox_update_map(vox);
 }
 
+/**
+ * vox_update_user_status() - update internally cached user enrolment states
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @start_phr:	Start biometric phrase ID.
+ * @end_phr:	End biometric phrase ID.
+ *
+ * Find out which users are enrolled and cache this internally for all phrases
+ * starting at start_phr and going up to and including end_phr.
+ *
+ * Return: errno.
+ */
 static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 				  uint8_t end_phr)
 {
@@ -895,6 +1060,15 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 	return 0;
 }
 
+/**
+ * vox_update_bio_pub_key() - update internally cached biometric public key for
+ *			      this particular CLSIC device
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Query CLSIC to get its biometric public key and cache it internally.
+ *
+ * Return: errno.
+ */
 static int vox_update_bio_pub_key(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -934,6 +1108,15 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	}
 }
 
+/**
+ * vox_install_asset() - install an asset to CLSIC from the filesystem
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Based on the value of various ALSA controls, install an asset (either map,
+ * VTE/SSF bin, or biometric phrase) to CLSIC.
+ *
+ * Return: errno.
+ */
 static int vox_install_asset(struct clsic_vox *vox)
 {
 	const struct firmware *fw;
@@ -1148,6 +1331,15 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_uninstall_asset() - uninstall an asset from CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Based on the value of various ALSA controls, uninstall an asset (either map,
+ * VTE/SSF bin, or biometric phrase) from CLSIC.
+ *
+ * Return: errno.
+ */
 static int vox_uninstall_asset(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1309,6 +1501,15 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_remove_user() - remove an enrolled user from CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Remove (or de-enrol) a particular user for a particular biometric phrase
+ * based on the value of relevant ALSA controls set from userspace.
+ *
+ * Return: errno.
+ */
 static int vox_remove_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1375,6 +1576,15 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_start_enrol_user() - start the enrolment process on CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Start enrolling a user by gathering information from various ALSA controls
+ * then sending the appropriate message to CLSIC.
+ *
+ * Return: errno.
+ */
 static int vox_start_enrol_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1495,6 +1705,14 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_perform_enrol_rep() - perform an enrolment rep
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Tell CLSIC that we are about to perform an enrolment repetition.
+ *
+ * Return: errno.
+ */
 static int vox_perform_enrol_rep(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1558,6 +1776,15 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_complete_enrolment() - complete an enrolment
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Tell CLSIC that we are ready to complete an enrolment, having started
+ * enrolment and performed reps.
+ *
+ * Return: errno.
+ */
 static int vox_complete_enrolment(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1619,6 +1846,14 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_get_bio_results() - get biometric results from CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Request biometric results from CLSIC. This function will be called once
+ *
+ * Return: errno.
+ */
 static int vox_get_bio_results(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -1745,6 +1980,17 @@ exit:
 	return ret;
 }
 
+/**
+ * vox_stop_bio_results() - no longer get biometric results from CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Tell CLSIC that we will no longer be requesting any biometric results - this
+ * is necessary to ensure that CLSIC switches to IDLE mode in preparation for
+ * the next operation. Obviously it will not be possible to get biometric
+ * results any more after calling this.
+ *
+ * Return: errno.
+ */
 static void vox_stop_bio_results(struct clsic_vox *vox)
 {
 	vox->error_info = VOX_ERROR_SUCCESS;
@@ -1754,9 +2000,16 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
 	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
 }
 
-/*
+/**
+ * vox_mgmt_mode_handler() - handle userspace commands from the management mode
+ *				control
+ * @data:	Used to obtain the main instance of struct clsic_vox used in
+ *		this driver in which this is contained.
+ *
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
+ *
+ * Return: errno.
  */
 static void vox_mgmt_mode_handler(struct work_struct *data)
 {
@@ -1819,6 +2072,16 @@ static void vox_mgmt_mode_handler(struct work_struct *data)
 	}
 }
 
+/**
+ * vox_ctrl_error_info_put() - clear the error info control
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Allow the user to clear the error info ALSA control by writing the
+ * appropriate value to it.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
@@ -1834,7 +2097,17 @@ static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-/* Handle getting of all INT kcontrols. */
+/**
+ * vox_ctrl_int_get() - handle getting of all INT kcontrols
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * By using dobj->private_value as set at control creation time, we can use this
+ * generic function to allow userspace to get the relevant internal variable
+ * existing in the driver vox struct.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
@@ -1846,7 +2119,17 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-/* Handle setting of all INT kcontrols. */
+/**
+ * vox_ctrl_int_put() - handle putting of all INT kcontrols
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * By using dobj->private_value as set at control creation time, we can use this
+ * generic function to allow userspace to set the relevant internal variable
+ * existing in the driver vox struct.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
@@ -1858,7 +2141,17 @@ static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-/* Handle getting of all ENUM kcontrols. */
+/**
+ * vox_ctrl_enum_get() - handle getting of all ENUM kcontrols
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * By using dobj->private_value as set at control creation time, we can use this
+ * generic function to allow userspace to get the relevant internal variable
+ * existing in the driver vox struct.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_enum_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -1869,7 +2162,17 @@ static int vox_ctrl_enum_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-/* Handle setting of all ENUM kcontrols. */
+/**
+ * vox_ctrl_enum_put() - handle putting of all ENUM kcontrols
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * By using dobj->private_value as set at control creation time, we can use this
+ * generic function to allow userspace to set the relevant internal variable
+ * existing in the driver vox struct.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -1880,6 +2183,19 @@ static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_challenge() - read or write the challenge bytes for biometric
+ *			authentication
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @op_flag:	SNDRV_CTL_TLV_OP_READ or SNDRV_CTL_TLV_OP_WRITE.
+ * @size:	Size of data being written to set the challenge bytes.
+ * @tlv:	ALSA TLV data, effectively a byte buffer.
+ *
+ * Allow userspace to both get and set the bytes used as a cryptographic
+ * challenge to CLSIC when getting biometric authentication results.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
 			      int op_flag,
 			      unsigned int size,
@@ -1906,6 +2222,19 @@ static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_bio_res_blob() - move signed biometrics authentication results data
+ *			blob to userspace
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @op_flag:	Can only usefully be SNDRV_CTL_TLV_OP_READ.
+ * @size:	Unused.
+ * @tlv:	ALSA TLV data, effectively a byte buffer.
+ *
+ * Allow userspace to get the signed blob that contains the biometric
+ * authentication results that identify users and other information.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 				 int op_flag,
 				 unsigned int size,
@@ -1925,6 +2254,18 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_bio_pub_key() - obtain the public signing key of CLSIC
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @op_flag:	Can only usefully be SNDRV_CTL_TLV_OP_READ.
+ * @size:	Unused.
+ * @tlv:	ALSA TLV data, effectively a byte buffer.
+ *
+ * Allow userspace to get CLSIC's public key as used within the biometric
+ * results blob.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_bio_pub_key(struct snd_kcontrol *kcontrol,
 				int op_flag,
 				unsigned int size,
@@ -1944,6 +2285,16 @@ static int vox_ctrl_bio_pub_key(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_asset_installed_get() - find out if a particular asset is installed
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Depending on the asset type, return to userspace whether an asset is
+ * installed or not.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
@@ -1968,12 +2319,35 @@ static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_dummy() - dummy function for read/writing of INT controls
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure (unused).
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure
+ *		(unused).
+ *
+ * The ALSA sanity tests require that all controls are readable and writeable,
+ * so this dummy function performs the purpose of filling in when a control has
+ * no purpose to be either read or written.
+ *
+ * Return: 0 always.
+ */
 static int vox_ctrl_dummy(struct snd_kcontrol *kcontrol,
 			  struct snd_ctl_elem_value *ucontrol)
 {
 	return 0;
 }
 
+/**
+ * vox_ctrl_user_installed_get() - get user enrolment statuses
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure (unused).
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Allow userspace to see whether a user has been enrolled for a particular
+ * phrase or not. The user and phrase ID controls will also need to be set
+ * appropriately before reading this control.
+ *
+ * Return: 0 always.
+ */
 static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 				       struct snd_ctl_elem_value *ucontrol)
 {
@@ -1985,10 +2359,15 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-/*
- * This needs to be called when going into a management mode going into either
- * enrolment or trigger listening as these are the only 2 situations affected
- * by barge in.
+/**
+ * vox_update_barge_in() - tell CLSIC about enrolment state
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * This needs to be called just for safety when enrolment starts or when a
+ * trigger has occurred. Alternatively, it may be actively called during
+ * enrolment reps or biometric authentication.
+ *
+ * Return: errno.
  */
 static int vox_update_barge_in(struct clsic_vox *vox)
 {
@@ -2028,6 +2407,16 @@ static int vox_update_barge_in(struct clsic_vox *vox)
 	}
 }
 
+/**
+ * vox_ctrl_barge_in_put() - ALSA control put function for barge-in
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure (unused).
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Set the barge-in status on CLSIC, but only if it will have an immediate
+ * effect.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2045,6 +2434,19 @@ static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_mgmt_put() - userspace control tells CLSIC to perform a particular
+ *			action
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure (unused).
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Userspace can get the driver to perform particular actions by writing to the
+ * management mode ALSA control. The control then changes enumeration so that a
+ * read of the control from userspace provides information about the current
+ * action being undertaken.
+ *
+ * Return: errno.
+ */
 static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
@@ -2150,6 +2552,20 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+/**
+ * vox_notification_handler() - handle notifications destined for the vox
+ *				service
+ * @clsic:	The main shared instance of struct clsic used in the CLSIC
+ *		drivers.
+ * @handler:	The handler struct for vox service.
+ * @msg:	The message notification itself as received from CLSIC.
+ *
+ * This is a standard CLSIC function that will be called in the interrupt
+ * handler context in the core messaging driver to examine notifications for the
+ * vox service and react accordingly.
+ *
+ * Return: CLSIC_HANDLED or CLSIC_UNHANDLED.
+ */
 static int vox_notification_handler(struct clsic *clsic,
 				    struct clsic_service *handler,
 				    struct clsic_message *msg)
@@ -2288,6 +2704,16 @@ static void vox_enum_control_helper(struct snd_kcontrol_new *kc,
 		     SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 }
 
+/**
+ * clsic_vox_codec_probe() - probe function for the codec part of the driver
+ * @codec:	The main shared instance of struct snd_soc_codec used in
+ *		CLSIC.
+ *
+ * Create ALSA controls and call various update functions to cache information
+ * in the driver from CLSIC.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
@@ -2589,6 +3015,15 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	return ret;
 }
 
+/**
+ * clsic_vox_codec_remove() - remove function for the codec part of the driver
+ * @codec:	The main shared instance of struct snd_soc_codec used in
+ *		CLSIC.
+ *
+ * Cancel any schedule work.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 {
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
@@ -2605,6 +3040,14 @@ static struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
 	.remove = clsic_vox_codec_remove,
 };
 
+/**
+ * clsic_vox_probe() - probe function for the module
+ * @pdev:	Platform device struct.
+ *
+ * Standard module probe function.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_probe(struct platform_device *pdev)
 {
 	struct clsic *clsic = dev_get_drvdata(pdev->dev.parent);
@@ -2641,6 +3084,14 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	return ret;
 }
 
+/**
+ * clsic_vox_remove() - remove function for the module
+ * @pdev:	Platform device struct.
+ *
+ * Standard module remove function.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_remove(struct platform_device *pdev)
 {
 	struct clsic_vox *vox = platform_get_drvdata(pdev);

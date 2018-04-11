@@ -34,12 +34,45 @@
 
 #define CLSIC_VOX_SRV_VERSION_MVP2	0x00030002	/* 2.0.248 */
 
+/**
+ * struct clsic_asr_stream_buf - audio buffer descriptor for use in ASR
+ *				streaming operations
+ * @data:	Shared buffer for ping-ponging data.
+ * @size:	Size of the buffer.
+ * @frag_sz:	Fragment size.
+ *
+ * Information about the intermediate buffer used for copying ASR data from
+ * CLSIC to userspace.
+ */
 struct clsic_asr_stream_buf {
 	void *data;
 	size_t size;
 	size_t frag_sz;
 };
 
+/**
+ * struct clsic_asr_stream - struct for managing all ASR operations
+ * @buf:	Shared buffer for ping-ponging data.
+ * @stream:	From the compressed stream infrastructure.
+ * @block_sz:	Size of ASR block to obtain from CLSIC per message. A size of 0
+ *		means we do not intend to stream data.
+ * @copied_total:	Total ASR data copied in this stream.
+ * @sample_rate:	Sample rate in Hz of this stream.
+ * @listen_error:	In case of a failure to trigger, this error is set to
+ *			prevent streaming from occurring.
+ * @error:		If there is a problem in setting up the ASR stream
+ *			before or after trigger has occurred, this is set to
+ *			prevent further attempts to stream data.
+ * @asr_block_pending:	Set while we are waiting to receive an ASR block.
+ * @wait_for_trigger:	Thread to wait for the initial trigger.
+ * @trigger_heard:	Completion that is used in waiting for a trigger to
+ *			occur.
+ * @asr_block_completion:	Used with asr_block_pending if the stream is
+ *				closed mid ASR block copy.
+ *
+ * Information about the intermediate buffer used for copying ASR data from
+ * CLSIC to userspace.
+ */
 struct clsic_asr_stream {
 	struct clsic_asr_stream_buf buf;
 
@@ -59,12 +92,27 @@ struct clsic_asr_stream {
 	struct completion asr_block_completion;
 };
 
+/**
+ * union bio_results_u - union for containing the maximum size of biometric
+ *			results blob from CLSIC
+ * @result:	Results of biometric authentication in "classic" format.
+ * @result_ex:	Results of biometric authentication in "extended" format.
+ * @result_ex2:	Results of biometric authentication in "extended2" format.
+ *
+ * This is used as a safe maximum size container for managing biometric results.
+ */
 union bio_results_u {
 	struct clsic_vox_auth_result result;
 	struct clsic_vox_auth_result_ex result_ex;
 	struct clsic_vox_auth_result_ex2 result_ex2;
 };
 
+/**
+ * struct clsic_vox - the major struct used within the vox driver
+ *
+ * This struct is used everywhere within the vox driver to handle operations
+ * shared between functions.
+ */
 struct clsic_vox {
 	struct clsic *clsic;
 	struct clsic_service *service;
@@ -136,6 +184,7 @@ struct clsic_vox {
 
 	struct completion new_bio_results_completion;
 };
+
 static const struct {
 	u32 id;
 	struct snd_codec_desc desc;
@@ -309,8 +358,14 @@ static const char *vox_trgr_phr_text[VOX_NUM_TRGR_PHR] = {
 	[VOX_TRGR_PHR_2]		= "2",
 };
 
-/* Translation of CLSIC errors into strings. */
-
+/**
+ * struct clsic_response_codes_struct - the basic blah structure
+ * @name:	The text of the error code.
+ * @code:	The integer corresponding to the error code from CLSIC.
+ *
+ * This struct is used as an array element to provide a way to look up the
+ * textual meaning of CLSIC error codes for debugging purposes.
+ */
 struct clsic_response_codes_struct {
 	char name[64];
 	int code;
