@@ -855,6 +855,11 @@ static int cs47l96_ao_set_fll(struct snd_soc_component *comp, int fll_id,
 		return -EINVAL;
 	}
 
+	if (fout > 49152000) {
+		dev_err(comp->dev, "%u not supported for FLL1AO\n", fout);
+		return -EINVAL;
+	}
+
 	return tacna_fllhj_set_refclk(&cs47l96_ao->fll, source, fref, fout);
 }
 
@@ -865,6 +870,11 @@ static int cs47l96_ao_set_sysclk(struct snd_soc_component *comp, int clk_id,
 
 	switch (clk_id) {
 	case TACNA_CLK_SYSCLKAO:
+		if (freq > 49152000) {
+			dev_err(comp->dev, "%u not supported for SYSCLKAO\n",
+				freq);
+			return -EINVAL;
+		}
 		return tacna_set_sysclk(comp, clk_id, source, freq, dir);
 	default:
 		dev_err(cs47l96_ao->core.dev, "Unknown clock id %u\n", clk_id);
