@@ -889,13 +889,6 @@ int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
 }
 EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_get_caps);
 
-int clsic_vox_asr_stream_get_codec_caps(struct snd_compr_stream *stream,
-					struct snd_compr_codec_caps *codec)
-{
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_get_codec_caps);
-
 static struct snd_soc_dai_driver clsic_vox_dai[] = {
 	{
 		.name = "clsic-cpu-vox-asr",
