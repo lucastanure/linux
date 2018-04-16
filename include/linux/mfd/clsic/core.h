@@ -370,25 +370,6 @@ bool clsic_volatile_register(struct device *dev, unsigned int reg);
 extern const struct reg_default clsic_reg_defaults[];
 
 /*
- * Locates the first service handler instance for a service of the given type.
- */
-static inline struct clsic_service *clsic_find_first_service(
-							    struct clsic *clsic,
-							    u16 service_type)
-{
-	int i;
-
-	for (i = 0; i < CLSIC_SERVICE_COUNT; ++i)
-		if (clsic->service_handlers[i] &&
-		    clsic->service_handlers[i]->service_type == service_type)
-			return clsic->service_handlers[i];
-
-	return NULL;
-}
-
-
-
-/*
  * Simple utility function that pauses until the clsic->state becomes state, if
  * it doesn't become that state it returns true else it returns false.
  *
