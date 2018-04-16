@@ -16,12 +16,12 @@
 
 /* Translation of CLSIC errors into strings. */
 
-struct vega_response_codes_struct {
+struct clsic_response_codes_struct {
 	char name[64];
 	int code;
 };
 
-struct vega_response_codes_struct vega_response_codes[] = {
+struct clsic_response_codes_struct clsic_response_codes[] = {
 	{"CLSIC_ERR_NONE", CLSIC_ERR_NONE},
 	{"CLSIC_ERR_NO_MEM", CLSIC_ERR_NO_MEM},
 	{"CLSIC_ERR_INVAL_SI", CLSIC_ERR_INVAL_SI},

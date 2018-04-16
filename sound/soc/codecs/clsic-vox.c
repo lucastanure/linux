@@ -356,13 +356,13 @@ static int vox_update_barge_in(struct clsic_vox *vox);
  */
 static const char *clsic_error_string(int error_index)
 {
-	int array_size = sizeof(vega_response_codes) /
-			 sizeof(struct vega_response_codes_struct);
+	int array_size = sizeof(clsic_response_codes) /
+			 sizeof(struct clsic_response_codes_struct);
 	int i;
 
 	for (i = 0; i < array_size; i++)
-		if (vega_response_codes[i].code == error_index)
-			return vega_response_codes[i].name;
+		if (clsic_response_codes[i].code == error_index)
+			return clsic_response_codes[i].name;
 
 	return "Unrecognised CLSIC error code";
 }
