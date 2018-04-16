@@ -529,7 +529,8 @@ int clsic_dev_exit(struct clsic *clsic)
 
 	if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
 		/* this put matches the one on grant so the module can exit */
-		clsic_pm_release(clsic);
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
 		clsic_irq_enable(clsic);
 	}
 
@@ -538,13 +539,16 @@ int clsic_dev_exit(struct clsic *clsic)
 	 * a pm get on the device so the power is applied and then wait for the
 	 * state to become ON or HALTED.
 	 */
-	clsic_pm_use(clsic);
+	pm_runtime_get_sync(clsic->dev);
+
 	if (clsic_wait_for_state(clsic, CLSIC_STATE_ON,
 				 CLSIC_WAIT_FOR_STATE_MAX_CYCLES,
 				 CLSIC_WAIT_FOR_STATE_DELAY_MS))
 		clsic_info(clsic, "Warning: state is %s\n",
 			   clsic_state_to_string(clsic->state));
-	clsic_pm_release(clsic);
+
+	pm_runtime_mark_last_busy(clsic->dev);
+	pm_runtime_put_autosuspend(clsic->dev);
 
 	cancel_work_sync(&clsic->maintenance_handler);
 

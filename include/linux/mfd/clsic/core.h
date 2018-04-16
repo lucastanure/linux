@@ -341,24 +341,12 @@ static inline const char *clsic_pm_rpm_to_string(int event)
 	}
 }
 
-/*
- * The clsic_pm functions make it straightforward to introduce instrumentation
- */
-static inline void clsic_pm_use(struct clsic *clsic)
-{
-	pm_runtime_get_sync(clsic->dev);
-}
-static inline void clsic_pm_release(struct clsic *clsic)
-{
-	pm_runtime_mark_last_busy(clsic->dev);
-	pm_runtime_put_autosuspend(clsic->dev);
-}
-
 /* Cause the device to power up (until it auto suspends again) */
 static inline void clsic_pm_wake(struct clsic *clsic)
 {
-	clsic_pm_use(clsic);
-	clsic_pm_release(clsic);
+	pm_runtime_get_sync(clsic->dev);
+	pm_runtime_mark_last_busy(clsic->dev);
+	pm_runtime_put_autosuspend(clsic->dev);
 }
 
 void clsic_init_debugfs(struct clsic *clsic);

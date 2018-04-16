@@ -240,7 +240,8 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	    !isa_shutdown_message)
 		clsic_msgproc_shutdown_schedule(clsic);
 
-	clsic_pm_release(clsic);
+	pm_runtime_mark_last_busy(clsic->dev);
+	pm_runtime_put_autosuspend(clsic->dev);
 }
 
 /*
@@ -614,7 +615,9 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		}
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
 			/* this put matches the one on grant */
-			clsic_pm_release(clsic);
+			pm_runtime_mark_last_busy(clsic->dev);
+			pm_runtime_put_autosuspend(clsic->dev);
+
 			force_suspend = true;
 			clsic_irq_enable(clsic);
 		}
@@ -636,7 +639,7 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		 * is currenly powered OFF, if that occurs give this a chance to
 		 * complete.
 		 */
-		clsic_pm_use(clsic);
+		pm_runtime_get_sync(clsic->dev);
 		if (clsic_wait_for_state(clsic, CLSIC_STATE_ON,
 					 CLSIC_WAIT_FOR_STATE_MAX_CYCLES,
 					 CLSIC_WAIT_FOR_STATE_DELAY_MS))
@@ -698,8 +701,10 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 		 * If this context failed to obtain debug control - release the
 		 * power request
 		 */
-		if (ret != 0)
-			clsic_pm_release(clsic);
+		if (ret != 0) {
+			pm_runtime_mark_last_busy(clsic->dev);
+			pm_runtime_put_autosuspend(clsic->dev);
+		}
 
 		break;
 	default:
@@ -1350,7 +1355,7 @@ static int clsic_send_message_core(struct clsic *clsic,
 		break;
 	}
 
-	clsic_pm_use(clsic);
+	pm_runtime_get_sync(clsic->dev);
 
 	/* Check whether messaging is limited to the bootloader service */
 	if ((clsic->blrequest != CLSIC_BL_IDLE) &&
@@ -1360,7 +1365,8 @@ static int clsic_send_message_core(struct clsic *clsic,
 				msleep(CLSIC_WAIT_FOR_STATE_DELAY_MS);
 
 		if (clsic->blrequest != CLSIC_BL_IDLE) {
-			clsic_pm_release(clsic);
+			pm_runtime_mark_last_busy(clsic->dev);
+			pm_runtime_put_autosuspend(clsic->dev);
 			clsic_dump_message(clsic, msg, "Can't send");
 			clsic_info(clsic, "Can't send: %s %d %d %d\n",
 				   clsic_state_to_string(clsic->state),
@@ -1381,7 +1387,8 @@ static int clsic_send_message_core(struct clsic *clsic,
 	 * is completed.
 	 */
 	if (mutex_lock_interruptible(&clsic->message_lock)) {
-		clsic_pm_release(clsic);
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
 		return -EINTR;
 	}
 
@@ -1392,7 +1399,8 @@ static int clsic_send_message_core(struct clsic *clsic,
 	if (clsic_findmessage(clsic, clsic_get_srv_inst(msg->fsm.cmd.hdr.sbc),
 			      msg->fsm.cmd.hdr.msgid) != NULL) {
 		mutex_unlock(&clsic->message_lock);
-		clsic_pm_release(clsic);
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
 		return -EINVAL;
 	}
 
