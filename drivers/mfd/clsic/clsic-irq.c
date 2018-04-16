@@ -28,31 +28,26 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
 {
 	struct clsic *clsic = data;
 	uint32_t reg = 0;
-	int ret;
+	int ret = regmap_read(clsic->regmap, TACNA_IRQ1_EINT_2, &reg);
 
-	do {
-		ret = regmap_read(clsic->regmap, TACNA_IRQ1_EINT_2, &reg);
-		if (ret != 0)
-			return IRQ_NONE;
+	if (ret != 0)
+		return IRQ_NONE;
 
-		if ((reg & CLSIC_PVT_TS_SD_RISE_EINT1_MASK) != 0 ||
-		    (reg & CLSIC_PVT_TS_WARN_FALL_EINT1_MASK) != 0) {
-			clsic_err(clsic,
-				  "Device HALTED due to thermal event: 0x%x\n",
-				  reg);
-			clsic_device_error(clsic,
-					   CLSIC_DEVICE_ERROR_LOCKNOTHELD);
-			return IRQ_HANDLED;
-		}
+	if ((reg & CLSIC_PVT_TS_SD_RISE_EINT1_MASK) != 0 ||
+	    (reg & CLSIC_PVT_TS_WARN_FALL_EINT1_MASK) != 0) {
+		clsic_err(clsic, "Device HALTED due to thermal event: 0x%x\n",
+			  reg);
+		clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKNOTHELD);
+		return IRQ_HANDLED;
+	}
 
-		if ((reg & TACNA_CPF1_IRQ_EXT_EINT1_MASK) != 0)
-			clsic_handle_incoming_messages(clsic);
+	if ((reg & TACNA_CPF1_IRQ_EXT_EINT1_MASK) != 0)
+		clsic_handle_incoming_messages(clsic);
 
-		if ((reg & TACNA_BOOT_DONE_EINT1_MASK) != 0) {
-			regmap_write(clsic->regmap, TACNA_IRQ1_EINT_2,
-				     TACNA_BOOT_DONE_EINT1);
-		}
-	} while ((reg & TACNA_CPF1_IRQ_EXT_EINT1_MASK) != 0);
+	if ((reg & TACNA_BOOT_DONE_EINT1_MASK) != 0) {
+		regmap_write(clsic->regmap, TACNA_IRQ1_EINT_2,
+			     TACNA_BOOT_DONE_EINT1);
+	}
 
 	return IRQ_HANDLED;
 }
