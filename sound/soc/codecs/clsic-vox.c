@@ -441,10 +441,8 @@ static int clsic_vox_asr_stream_block_sz(u32 block_size)
 	case 9600:
 		return CLSIC_VOX_ASR_BLK_SZ_9600;
 	default:
-		break;
+		return -EINVAL;
 	}
-
-	return -EINVAL;
 }
 
 #define PCM_S16_LE_BYTES_PER_SAMPLE 2
