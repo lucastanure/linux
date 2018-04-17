@@ -416,7 +416,6 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_free);
 
 static int clsic_vox_asr_stream_block_sz(u32 block_size)
 {
@@ -499,7 +498,6 @@ int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_set_params);
 
 static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 						      struct clsic *clsic,
@@ -795,7 +793,6 @@ exit:
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_trigger);
 
 int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 				 struct snd_compr_tstamp *tstamp)
@@ -807,7 +804,6 @@ int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_pointer);
 
 int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 			      size_t count)
@@ -858,7 +854,6 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 
 	return count;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_copy);
 
 int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
 				  struct snd_compr_caps *caps)
@@ -872,7 +867,6 @@ int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_get_caps);
 
 static struct snd_soc_dai_driver clsic_vox_dai[] = {
 	{
