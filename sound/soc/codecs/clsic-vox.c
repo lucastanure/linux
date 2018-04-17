@@ -56,10 +56,6 @@
 
 struct clsic_asr_stream_buf {
 	void *data;
-
-	size_t read_idx;
-	size_t write_idx;
-
 	size_t size;
 	size_t frag_sz;
 };
@@ -413,9 +409,6 @@ int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
-	asr_stream->buf.read_idx = 0;
-	asr_stream->buf.write_idx = 0;
-
 	asr_stream->copied_total = 0;
 	asr_stream->stream = NULL;
 	asr_stream->listen_error = true;
