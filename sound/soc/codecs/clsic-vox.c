@@ -354,7 +354,7 @@ static int vox_update_barge_in(struct clsic_vox *vox);
  * This lookup function is necessary because the CLSIC error codes are not
  * sequential. i.e. the error code is not necessarily equal to the array offset.
  */
-static const char *clsic_error_string(int error_index)
+static const char *clsic_vox_error_string(int error_index)
 {
 	int array_size = sizeof(clsic_response_codes) /
 			 sizeof(struct clsic_response_codes_struct);
@@ -544,14 +544,14 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 		 * cancel the request for that ASR block.
 		 */
 		clsic_info(clsic, "response: %s\n",
-			   clsic_error_string(
+			   clsic_vox_error_string(
 				msg_rsp->rsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
 		return CLSIC_MSG_RELEASED;
 	} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
 		clsic_info(clsic, "bulk response: %s\n",
-			   clsic_error_string(
+			   clsic_vox_error_string(
 				msg_rsp->blkrsp_get_asr_block.hdr.err));
 		asr_stream->error = true;
 		snd_compr_fragment_elapsed(asr_stream->stream);
@@ -627,7 +627,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INPUT_PATH:
 			clsic_err(vox->clsic, "failure %s.\n",
-			 clsic_error_string(msg_rsp.rsp_get_trgr_info.hdr.err));
+				clsic_vox_error_string(
+					msg_rsp.rsp_get_trgr_info.hdr.err));
 			asr_stream->error = true;
 			return 0;
 		default:
@@ -746,7 +747,7 @@ int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
 		if (msg_rsp.rsp_listen_start.hdr.err) {
 			clsic_err(clsic,
 				  "Failed to start listening: %s\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_listen_start.hdr.err));
 			ret = -EIO;
 			goto exit;
@@ -968,12 +969,12 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	case CLSIC_ERR_INVAL_MODE_TRANSITION:
 	case CLSIC_ERR_INVAL_MODE:
 		clsic_err(vox->clsic, "%s.\n",
-			  clsic_error_string(msg_rsp.rsp_set_mode.hdr.err));
+			  clsic_vox_error_string(msg_rsp.rsp_set_mode.hdr.err));
 		return -EIO;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_set_mode.hdr.err,
-			  clsic_error_string(msg_rsp.rsp_set_mode.hdr.err));
+			  clsic_vox_error_string(msg_rsp.rsp_set_mode.hdr.err));
 		return -EIO;
 	}
 }
@@ -1024,7 +1025,7 @@ static int vox_update_phrases(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVAL_PHRASEID:
 			clsic_err(vox->clsic, "failure %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 				     msg_rsp.rsp_is_phrase_installed.hdr.err));
 			return -EIO;
 		default:
@@ -1074,7 +1075,7 @@ static int vox_update_bins(struct clsic_vox *vox)
 		case CLSIC_ERR_INVALID_BIN_DATA:
 			/* TODO: check these error codes are possible. */
 			clsic_err(vox->clsic, "failure %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_is_bin_installed.hdr.err));
 			return -EIO;
 		default:
@@ -1120,7 +1121,7 @@ static int vox_update_map(struct clsic_vox *vox)
 	case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
 		/* TODO: check these error codes are possible. */
 		clsic_err(vox->clsic, "failure %s.\n",
-			  clsic_error_string(
+			  clsic_vox_error_string(
 				msg_rsp.rsp_is_biovte_map_installed.hdr.err));
 		return -EIO;
 	default:
@@ -1194,7 +1195,7 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			case CLSIC_ERR_INVAL_USERID:
 			case CLSIC_ERR_INVAL_PHRASEID:
 				clsic_err(vox->clsic, "failure %s.\n",
-					  clsic_error_string(
+					  clsic_vox_error_string(
 				      msg_rsp.rsp_is_user_installed.hdr.err));
 				return -EIO;
 			default:
@@ -1238,7 +1239,8 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 	case CLSIC_ERR_KEY_NOT_FOUND:
 		clsic_err(vox->clsic, "failure %s.\n",
-			  clsic_error_string(msg_rsp.rsp_get_auth_key.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_get_auth_key.hdr.err));
 		return -EIO;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
@@ -1355,7 +1357,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_BPB_ASSET_INVAL_FLAGS:
 			clsic_err(vox->clsic,
 				  "phrase installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_phrase.hdr.err));
 			vox->error_info = VOX_ERROR_BAD_ASSET;
 			break;
@@ -1365,7 +1367,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_PHRASEID:
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic, "phrase installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_phrase.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
@@ -1373,7 +1375,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_install_phrase.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_phrase.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 		}
@@ -1392,7 +1394,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVALID_BIN_DATA:
 			clsic_err(vox->clsic,
 				  "bin installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_bin.hdr.err));
 			vox->error_info = VOX_ERROR_BAD_ASSET;
 			break;
@@ -1402,7 +1404,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic, "bin installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_bin.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
@@ -1410,7 +1412,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_install_bin.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_install_bin.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 		}
@@ -1430,7 +1432,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
 			clsic_err(vox->clsic,
 				  "biometric VTE installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 				       msg_rsp.rsp_install_biovte_map.hdr.err));
 			vox->error_info = VOX_ERROR_BAD_ASSET;
 			break;
@@ -1440,7 +1442,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic,
 				  "biometric VTE installation error %s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 				       msg_rsp.rsp_install_biovte_map.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
@@ -1448,7 +1450,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_install_biovte_map.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 				       msg_rsp.rsp_install_biovte_map.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 		}
@@ -1536,7 +1538,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_PHRASEID:
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic, "%s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_phrase.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1545,7 +1547,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_remove_phrase.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_phrase.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1568,7 +1570,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVALID_BIN_ID:
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic, "%s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_bin.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1577,7 +1579,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_remove_bin.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_bin.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1598,7 +1600,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_VOICEID:
 			clsic_err(vox->clsic, "%s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_biovte_map.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1607,7 +1609,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_remove_biovte_map.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_remove_biovte_map.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -1667,14 +1669,16 @@ static int vox_remove_user(struct clsic_vox *vox)
 	case CLSIC_ERR_INVAL_PHRASEID:
 	case CLSIC_ERR_VOICEID:
 		clsic_err(vox->clsic, "%s.\n",
-			  clsic_error_string(msg_rsp.rsp_remove_user.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_remove_user.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_remove_user.hdr.err,
-			  clsic_error_string(msg_rsp.rsp_remove_user.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_remove_user.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
@@ -1782,15 +1786,16 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		/* Could install the requisite phrase and try again? */
 	case CLSIC_ERR_USER_ALREADY_INSTALLED:
 		/* Could remove the user and try again? */
-		clsic_err(vox->clsic, "%s.\n",
-		    clsic_error_string(msg_rsp.rsp_install_user_begin.hdr.err));
+		clsic_err(vox->clsic, "%s.\n", clsic_vox_error_string(
+				msg_rsp.rsp_install_user_begin.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_install_user_begin.hdr.err,
-		    clsic_error_string(msg_rsp.rsp_install_user_begin.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_install_user_begin.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
@@ -1841,7 +1846,8 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	case CLSIC_ERR_INPUT_PATH:
 	case CLSIC_ERR_VOICEID:
 		clsic_err(vox->clsic, "%s.\n",
-			  clsic_error_string(msg_rsp.rsp_rep_start.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_rep_start.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
@@ -1853,7 +1859,8 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_rep_start.hdr.err,
-			  clsic_error_string(msg_rsp.rsp_rep_start.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_rep_start.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		break;
@@ -1906,7 +1913,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 	case CLSIC_ERR_VOICEID:
 	case CLSIC_ERR_FLASH:
 		clsic_err(vox->clsic, "%s.\n",
-		    clsic_error_string(
+			  clsic_vox_error_string(
 				msg_rsp.rsp_install_user_complete.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
@@ -1914,7 +1921,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_install_user_complete.hdr.err,
-			  clsic_error_string(
+			  clsic_vox_error_string(
 				msg_rsp.rsp_install_user_complete.hdr.err));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
@@ -1975,7 +1982,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		goto exit;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
-			  vox->auth_error, clsic_error_string(vox->auth_error));
+			  vox->auth_error,
+			  clsic_vox_error_string(vox->auth_error));
 		vox->error_info = VOX_ERROR_LIBRARY;
 		ret = -EIO;
 		goto exit;
@@ -2029,8 +2037,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_AUTH_BIOM_DISABLED:
 		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
 			clsic_err(vox->clsic, "%s.\n",
-				clsic_error_string(
-				    msg_rsp.rsp_auth_user.hdr.err));
+				  clsic_vox_error_string(
+					msg_rsp.rsp_auth_user.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
 			break;
@@ -2038,7 +2046,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d: %s.\n",
 				  msg_rsp.rsp_auth_user.hdr.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_rsp.rsp_auth_user.hdr.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			ret = -EIO;
@@ -2329,7 +2337,8 @@ static int vox_update_barge_in(struct clsic_vox *vox)
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 			  msg_rsp.rsp_barge_in_ena.hdr.err,
-			  clsic_error_string(msg_rsp.rsp_barge_in_ena.hdr.err));
+			  clsic_vox_error_string(
+				msg_rsp.rsp_barge_in_ena.hdr.err));
 		return -EIO;
 	}
 }
@@ -2479,7 +2488,7 @@ static int vox_notification_handler(struct clsic *clsic,
 			clsic_err(vox->clsic,
 				  "trigger detection error on CLSIC %d: %s.\n",
 				  msg_nty->nty_listen_err.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_nty->nty_listen_err.err));
 
 		vox->asr_stream.listen_error = true;
@@ -2528,14 +2537,14 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_PLOSIVE:
 		case CLSIC_ERR_REP_REWIND_OVF:
 			clsic_err(vox->clsic, "%s.\n",
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_nty->nty_rep_complete.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
 		default:
 			clsic_err(vox->clsic, "unexpected CLSIC error code %d: %s.\n",
 				  msg_nty->nty_rep_complete.err,
-				  clsic_error_string(
+				  clsic_vox_error_string(
 					msg_nty->nty_rep_complete.err));
 			vox->error_info = VOX_ERROR_LIBRARY;
 			break;
