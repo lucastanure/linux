@@ -27,4 +27,7 @@ int clsic_system_service_start(struct clsic *clsic,
 
 int clsic_system_service_enumerate(struct clsic *clsic);
 int clsic_send_shutdown_cmd(struct clsic *clsic);
+
+int clsic_system_service_ioctl(struct clsic *clsic, enum clsic_sys_ioctl ioctl);
+
 #endif
