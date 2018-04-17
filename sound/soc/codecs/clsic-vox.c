@@ -397,7 +397,7 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	return 0;
 }
 
-int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
+static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 
@@ -439,8 +439,8 @@ static int clsic_vox_asr_stream_block_sz(u32 block_size)
 
 #define PCM_S16_LE_BYTES_PER_SAMPLE 2
 
-int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
-				    struct snd_compr_params *params)
+static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
+					   struct snd_compr_params *params)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 	struct clsic_vox *vox =
@@ -672,7 +672,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	return 0;
 }
 
-int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream, int cmd)
+static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
+					int cmd)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 	struct clsic_vox *vox =
@@ -794,8 +795,8 @@ exit:
 	return ret;
 }
 
-int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
-				 struct snd_compr_tstamp *tstamp)
+static int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
+					struct snd_compr_tstamp *tstamp)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 
@@ -805,8 +806,9 @@ int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 	return 0;
 }
 
-int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
-			      size_t count)
+static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
+				     char __user *buf,
+				     size_t count)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 	struct clsic_vox *vox =
@@ -855,8 +857,8 @@ int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream, char __user *buf,
 	return count;
 }
 
-int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
-				  struct snd_compr_caps *caps)
+static int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
+					 struct snd_compr_caps *caps)
 {
 	caps->codecs[0] = clsic_asr_stream_caps.id;
 	caps->direction = SND_COMPRESS_CAPTURE;
