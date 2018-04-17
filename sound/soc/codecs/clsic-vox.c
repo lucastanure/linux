@@ -501,13 +501,6 @@ int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 }
 EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_set_params);
 
-int clsic_vox_asr_stream_get_params(struct snd_compr_stream *stream,
-				    struct snd_codec *params)
-{
-	return -ENOTSUPP;
-}
-EXPORT_SYMBOL_GPL(clsic_vox_asr_stream_get_params);
-
 static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 						      struct clsic *clsic,
 						      struct clsic_message *msg)
