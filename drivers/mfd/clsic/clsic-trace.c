@@ -54,3 +54,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_ras_pm_handler);
 EXPORT_TRACEPOINT_SYMBOL(clsic_pm);
 EXPORT_TRACEPOINT_SYMBOL(clsic_msgproc_shutdown_schedule);
 EXPORT_TRACEPOINT_SYMBOL(clsic_msgproc_shutdown_cancel);
+EXPORT_TRACEPOINT_SYMBOL(clsic_alg_simple_writeregister);
+EXPORT_TRACEPOINT_SYMBOL(clsic_alg_simple_readregister);
+EXPORT_TRACEPOINT_SYMBOL(clsic_alg_write);
+EXPORT_TRACEPOINT_SYMBOL(clsic_alg_read);
