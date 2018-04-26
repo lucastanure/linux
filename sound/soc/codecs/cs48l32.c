@@ -1152,7 +1152,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 		.capture = {
 			.stream_name = "Audio Trace CPU",
 			.channels_min = 1,
-			.channels_max = 6,
+			.channels_max = 8,
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
@@ -1163,7 +1163,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 		.capture = {
 			.stream_name = "Audio Trace DSP",
 			.channels_min = 1,
-			.channels_max = 6,
+			.channels_max = 8,
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
@@ -1173,7 +1173,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 		.capture = {
 			.stream_name = "Voice Ctrl CPU",
 			.channels_min = 1,
-			.channels_max = 2,
+			.channels_max = 8,
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
@@ -1184,7 +1184,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 		.capture = {
 			.stream_name = "Voice Ctrl DSP",
 			.channels_min = 1,
-			.channels_max = 2,
+			.channels_max = 8,
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
