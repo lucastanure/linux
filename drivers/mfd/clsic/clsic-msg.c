@@ -285,10 +285,13 @@ static ssize_t clsic_messages_read_file(struct file *file,
 
 	/* populate header */
 	len = snprintf(buf + ret, PAGE_SIZE - ret,
-		       "Sent: %d Received: %d (msgproc: %d)\nWaiting to send:\n",
+		       "Sent: %d Received: %d (msgproc: %d, state: %s : %d, usage_count: %d)\nWaiting to send:\n",
 		       clsic->messages_sent,
 		       clsic->messages_received,
-		       clsic->msgproc_state);
+		       clsic->msgproc_state,
+		       clsic_state_to_string(clsic->state),
+		       clsic->blrequest,
+		       atomic_read(&clsic->dev->power.usage_count));
 	if (len >= 0)
 		ret += len;
 
@@ -752,18 +755,16 @@ DEFINE_SIMPLE_ATTRIBUTE(clsic_debugcontrol_fops,
  * It is not a reference counted feature and services are expected to track
  * their own usage.
  *
- * This function does NOT ensure that the device remains powered; the normal
- * Linux runtime power management handles that task. (E.g. a complete DAPM
- * graph causing pm_get on a clsic-codec device, which then propagates to the
- * clsic-core parent device driver).
+ * This function also ensures that the device remains powered
  */
 void clsic_msgproc_use(struct clsic *clsic, uint8_t service_instance)
 {
 	uint8_t bit_val = (1 << service_instance);
 
-	if (!test_and_set_bit(bit_val, clsic->clsic_services_state))
+	if (!test_and_set_bit(bit_val, clsic->clsic_services_state)) {
 		clsic_msgproc_shutdown_cancel(clsic, true);
-	else
+		pm_runtime_get_sync(clsic->dev);
+	} else
 		clsic_info(clsic, "double use %d", service_instance);
 
 }
@@ -779,6 +780,8 @@ void clsic_msgproc_release(struct clsic *clsic, uint8_t service_instance)
 		    list_empty(&clsic->waiting_for_response))
 			clsic_msgproc_shutdown_schedule(clsic);
 		mutex_unlock(&clsic->message_lock);
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
 	} else
 		clsic_info(clsic, "double release %d", service_instance);
 }
@@ -912,11 +915,23 @@ void clsic_shutdown_message_interface(struct clsic *clsic)
 	struct clsic_message *next_msg;
 
 	/*
+	 * If any service has requested the messaging processor to remain on,
+	 * release that request.
+	 */
+	if (clsic_msgproc_services_active(clsic)) {
+		clsic_info(clsic, "info; a service was active\n");
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
+	}
+
+	/*
 	 * XXX check whether the put is required, which get does it match up
 	 * with?
 	 */
-	if (clsic_msgproc_shutdown_cancel(clsic, true))
+	if (clsic_msgproc_shutdown_cancel(clsic, true)) {
+		clsic_info(clsic, "info; msgproc timer cancelled\n");
 		pm_runtime_put_autosuspend(clsic->dev);
+	}
 
 	del_timer_sync(&clsic->workerthread_timer);
 

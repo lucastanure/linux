@@ -602,6 +602,11 @@ int clsic_dev_exit(struct clsic *clsic)
 				 CLSIC_WAIT_FOR_STATE_DELAY_MS))
 		clsic_info(clsic, "Warning: state is %s\n",
 			   clsic_state_to_string(clsic->state));
+
+	i = atomic_read(&clsic->dev->power.usage_count);
+	if (i != 0)
+		clsic_err(clsic, "Final power usage_count: %d\n", i);
+
 	pm_runtime_set_suspended(clsic->dev);
 	pm_runtime_disable(clsic->dev);
 
