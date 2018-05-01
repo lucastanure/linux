@@ -25,6 +25,6 @@ int clsic_regmap_service_start(struct clsic *clsic,
 			       struct clsic_service *handler);
 
 int clsic_ras_reg_write(void *context, unsigned int reg, unsigned int val);
-int clsic_ras_reg_read(void *context, unsigned int reg, unsigned *val);
+int clsic_ras_reg_read(void *context, unsigned int reg, unsigned int *val);
 
 #endif
