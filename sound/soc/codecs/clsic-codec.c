@@ -1684,8 +1684,9 @@ static const struct snd_kcontrol_new *clsic_dsp_tx_rate_controls[] = {
 };
 
 static void clsic_dsp_add_codec_controls(struct snd_soc_codec *codec,
-				 unsigned int dsp_index, unsigned n_rx_channels,
-				 unsigned n_tx_channels)
+					 unsigned int dsp_index,
+					 unsigned int n_rx_channels,
+					 unsigned int n_tx_channels)
 {
 	int ret;
 
