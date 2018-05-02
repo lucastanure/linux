@@ -40,6 +40,10 @@ struct clsic_alg {
 
 	struct regmap *regmap;
 	struct mutex regmap_mutex;
+
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *raw_msg_file;
+#endif
 };
 
 static int clsic_alg_simple_readregister(struct clsic_alg *alg,
@@ -385,6 +389,189 @@ static struct regmap_config regmap_config_alg = {
 
 };
 
+/*
+ * The algorithm service custom message interface in debugfs allows messages
+ * to be sent and responses to be received by test programs, it is not intended
+ * to be an interface used in production devices.
+ *
+ * Transfers are currently limited to at most PAGE_SIZE, for both the fixed
+ * size message and the payload.
+ */
+#ifdef CONFIG_DEBUG_FS
+#define CLSIC_ALG_CUSTOM_MESSAGE_MAX	PAGE_SIZE
+struct clsic_alg_custom_message_struct {
+	ssize_t len;
+	uint8_t buf[CLSIC_ALG_CUSTOM_MESSAGE_MAX];
+};
+
+static int clsic_alg_custom_message_open(struct inode *inode, struct file *file)
+{
+	if (file->private_data == NULL) {
+		file->private_data = kzalloc
+			(sizeof(struct clsic_alg_custom_message_struct),
+			 GFP_KERNEL);
+		if (file->private_data == NULL)
+			return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int clsic_alg_custom_message_release(struct inode *inode,
+					    struct file *file)
+{
+	kfree(file->private_data);
+	file->private_data = NULL;
+
+	return 0;
+}
+
+/* Let user space read back a message sent from the device to the host. */
+static ssize_t clsic_alg_custom_message_read(struct file *file,
+					 char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct clsic_alg *alg = file_inode(file)->i_private;
+	struct clsic *clsic = alg->clsic;
+	struct clsic_alg_custom_message_struct *custom_msg = file->private_data;
+	ssize_t ret;
+
+	if (custom_msg == NULL)
+		return -ENOMEM;
+
+	if (custom_msg->buf == NULL)
+		return -ENOMEM;
+
+	ret = simple_read_from_buffer(user_buf, count, ppos,
+				      custom_msg->buf, custom_msg->len);
+
+	if (ret < 0)
+		clsic_err(clsic, "simple_read_from_buffer error %zd", ret);
+
+	return ret;
+}
+
+/* Send a custom fixed size message from host user space to the device. */
+static ssize_t clsic_alg_custom_message_write(struct file *file,
+					  const char __user *user_buf,
+					  size_t count, loff_t *ppos)
+{
+	struct clsic_alg *alg = file_inode(file)->i_private;
+	struct clsic *clsic = alg->clsic;
+	struct clsic_alg_custom_message_struct *custom_msg = file->private_data;
+	char *buf;
+	ssize_t ret;
+	union t_clsic_generic_message *msg_p;
+	char *txbuf = NULL;
+	ssize_t txcount = 0;
+	char *rxbuf;
+	ssize_t rxcount;
+
+	if (custom_msg == NULL)
+		return -ENOMEM;
+
+	buf = custom_msg->buf;
+	if (buf == NULL)
+		return -ENOMEM;
+
+	/* The whole message must be written by the client in one go */
+	if (count > CLSIC_ALG_CUSTOM_MESSAGE_MAX) {
+		clsic_err(clsic, "Message too big: %zd (MAX %ld)\n",
+			  count, CLSIC_ALG_CUSTOM_MESSAGE_MAX);
+		return -EINVAL;
+	}
+
+	/* There must be at least one fixed size message to send */
+	if (count < CLSIC_FIXED_MSG_SZ) {
+		clsic_err(clsic, "Message too small: %zd (MIN %d)\n",
+			  count, CLSIC_FIXED_MSG_SZ);
+		return -EINVAL;
+	}
+
+	/* Copy in message from debugfs */
+	ret = simple_write_to_buffer(buf, CLSIC_ALG_CUSTOM_MESSAGE_MAX,
+				     ppos, user_buf, count);
+	if (ret < 0) {
+		clsic_err(clsic, "simple_write_to_buffer error %zd\n", ret);
+		return ret;
+	}
+
+	if (count != ret) {
+		clsic_err(clsic, "mismatch count %zd ret %zd\n", count, ret);
+		return ret;
+	}
+
+	/*
+	 * Populate the bulk receive parameters in case the FSM sent causes a
+	 * bulk response
+	 */
+	rxbuf = &buf[CLSIC_FIXED_MSG_SZ];
+	rxcount = CLSIC_ALG_CUSTOM_MESSAGE_MAX - CLSIC_FIXED_MSG_SZ;
+
+	if (count != CLSIC_FIXED_MSG_SZ) {
+		clsic_dbg(clsic, "%zd bytes in - bulk message.\n", count);
+		txbuf = &buf[CLSIC_FIXED_MSG_SZ];
+		txcount = count - CLSIC_FIXED_MSG_SZ;
+	} else {
+		clsic_dbg(clsic, "%zd bytes in - fsm.\n", count);
+	}
+
+	msg_p = (union t_clsic_generic_message *) buf;
+
+	if (clsic_get_srv_inst(msg_p->cmd.hdr.sbc) !=
+	    alg->service->service_instance) {
+		clsic_err(clsic, "Service instance %d not supported\n",
+			  clsic_get_srv_inst(msg_p->cmd.hdr.sbc));
+		return -EINVAL;
+	}
+#ifdef CONFIG_DEBUG_FS
+	mutex_lock(&alg->regmap_mutex);
+#endif
+	ret = clsic_send_msg_sync(clsic, msg_p, msg_p, txbuf, txcount,
+							    rxbuf, rxcount);
+#ifdef CONFIG_DEBUG_FS
+	mutex_unlock(&alg->regmap_mutex);
+#endif
+	/*
+	 * Response gets stored in private_data automatically but we need to
+	 * know the size of the response so that userspace can read it out. The
+	 * size will vary depending on whether it is a fsm or bulk response.
+	 */
+	if (clsic_get_bulk_bit(msg_p->rsp.hdr.sbc) == 1) {
+		clsic_dbg(clsic, "bulk ret %d err 0x%xp size 0x%x\n",
+			  ret, msg_p->bulk_rsp.hdr.err,
+			  msg_p->bulk_rsp.hdr.bulk_sz);
+		custom_msg->len = CLSIC_FIXED_MSG_SZ +
+			msg_p->bulk_rsp.hdr.bulk_sz;
+	} else {
+		clsic_dbg(clsic, "fsm ret %d err 0x%x\n",
+			  ret, msg_p->rsp.hdr.err);
+		custom_msg->len = CLSIC_FIXED_MSG_SZ;
+	}
+
+	/*
+	 * Propagate errors if there was a transfer error, otherwise the
+	 * function should return the length of data read from user space.
+	 *
+	 * It is the responsibility of the caller to examine the FSM portion of
+	 * the response to determine whether there was a failure at the
+	 * protocol level.
+	 */
+	if (ret != 0)
+		return ret;
+
+	return count;
+}
+
+static const struct file_operations clsic_alg_custom_message_fops = {
+	.read = &clsic_alg_custom_message_read,
+	.write = &clsic_alg_custom_message_write,
+	.release = &clsic_alg_custom_message_release,
+	.open = &clsic_alg_custom_message_open,
+	.llseek = &default_llseek,
+};
+#endif
+
 static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
@@ -428,6 +615,12 @@ static int clsic_alg_probe(struct platform_device *pdev)
 	/* Populate device specific data struct */
 	alg->clsic = clsic;
 	alg->service = clsic_service;
+
+#ifdef CONFIG_DEBUG_FS
+	alg->raw_msg_file = debugfs_create_file("alg_raw_message", 0600,
+						clsic->debugfs_root, alg,
+						&clsic_alg_custom_message_fops);
+#endif
 	mutex_init(&alg->regmap_mutex);
 	regmap_config_alg.lock_arg = alg;
 
@@ -461,6 +654,9 @@ static int clsic_alg_remove(struct platform_device *pdev)
 	dev_info(&pdev->dev, "%s() dev %p priv %p.\n",
 		 __func__, &pdev->dev, alg);
 
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove(alg->raw_msg_file);
+#endif
 	snd_soc_unregister_codec(&pdev->dev);
 
 	return 0;
