@@ -271,9 +271,6 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 
 	trace_clsic_vox_asr_stream_data_rcv_start(payload_sz);
 
-	/* Extract data from the response to an intermediate buffer. */
-	memcpy((uint8_t *) asr_stream->buf.data, msg->bulk_rxbuf, payload_sz);
-
 	asr_stream->copied_total += payload_sz;
 
 	/* Notify the compressed framework of available data. */
@@ -388,7 +385,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				   CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN,
+				   (uint8_t *) asr_stream->buf.data,
+				   asr_stream->buf.size,
 				   (uint64_t) (uintptr_t) vox,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
@@ -609,7 +607,8 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				   CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN,
+				   (uint8_t *) asr_stream->buf.data,
+				   asr_stream->buf.size,
 				   (uint64_t) (uintptr_t) vox,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
