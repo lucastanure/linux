@@ -12,6 +12,7 @@
 #include <linux/mfd/tacna/core.h>
 #include <linux/mfd/tacna/registers.h>
 #include "tacna.h"
+#include "wm_adsp.h"
 
 #include <linux/mfd/clsic/core.h>
 #include "../../../drivers/mfd/clsic/clsic-trace.h"
@@ -27,7 +28,9 @@
 /* Stride is the number of bytes per register address, typically this is 4  */
 #define CLSIC_ALG_STRIDE	(CLSIC_ALG_REG_BITS/BITS_PER_BYTE)
 
-#define ALGOSERV_BASEADDRESS        (0x20000000)
+static const struct wm_adsp_region clsic_alg_vpu_regions[] = {
+	{ .type = WMFW_VPU_DM, .base = 0x20000000 },
+};
 
 struct clsic_alg {
 	struct clsic *clsic;
@@ -44,6 +47,7 @@ struct clsic_alg {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *raw_msg_file;
 #endif
+	struct wm_adsp *vpu;
 };
 
 static int clsic_alg_simple_readregister(struct clsic_alg *alg,
@@ -582,6 +586,9 @@ static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 	alg->codec = codec;
 	handler->data = (void *)alg;
 
+	alg->vpu->codec = codec;
+	wm_adsp_queue_boot_work(alg->vpu);
+
 	return 0;
 }
 
@@ -634,6 +641,21 @@ static int clsic_alg_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to allocate register map: %d\n", ret);
 		return ret;
 	}
+
+	alg->vpu = devm_kzalloc(dev, sizeof(struct wm_adsp), GFP_KERNEL);
+	if (alg->vpu == NULL)
+		return -ENOMEM;
+
+	alg->vpu->part = "cs48lv40";
+	alg->vpu->type = WMFW_VPU;
+	alg->vpu->num = 1;
+	alg->vpu->dev = dev;
+	alg->vpu->mem = clsic_alg_vpu_regions;
+	alg->vpu->regmap = alg->regmap;
+	alg->vpu->suffix = "";
+	alg->vpu->running = true;
+	alg->vpu->num_mems = ARRAY_SIZE(clsic_alg_vpu_regions);
+	wm_vpu_init(alg->vpu);
 
 	/* Register codec with the ASoC core */
 	ret = snd_soc_register_codec(dev, &soc_codec_clsic_alg, NULL, 0);
