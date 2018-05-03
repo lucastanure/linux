@@ -93,6 +93,11 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 
 	stream->runtime->private_data = &vox->asr_stream;
 
+	init_completion(&vox->asr_stream.trigger_heard);
+	init_completion(&vox->asr_stream.asr_block_completion);
+
+	vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
+
 	trace_clsic_vox_asr_stream_open(stream->direction);
 
 	return 0;
@@ -2620,15 +2625,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	vox->codec = codec;
 
-	init_completion(&vox->asr_stream.trigger_heard);
-
 	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 	if (ret != 0)
 		return ret;
-
-	vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
 
 	mutex_init(&vox->mgmt_mode_lock);
 
@@ -2908,8 +2909,6 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	vox->get_bio_results_early_exit = false;
 	init_completion(&vox->new_bio_results_completion);
-
-	init_completion(&vox->asr_stream.asr_block_completion);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 	if (ret != 0)
