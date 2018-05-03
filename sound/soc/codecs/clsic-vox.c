@@ -691,6 +691,31 @@ static struct snd_soc_platform_driver clsic_vox_compr_platform = {
 };
 
 /**
+ * vox_safely_set_mode_pm() - set power management options using the CLSIC mode
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @new_mode:	New CLSIC mode to change to.
+ *
+ * Mark CLSIC as in use dependent on what CLSIC mode transition is occurring.
+ *
+ * Return: void.
+ */
+static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
+					enum clsic_vox_mode new_mode)
+{
+	if ((new_mode == CLSIC_VOX_MODE_IDLE) ||
+	    (new_mode == CLSIC_VOX_MODE_LISTEN)) {
+		if ((vox->clsic_mode != CLSIC_VOX_MODE_IDLE) &&
+		    (vox->clsic_mode != CLSIC_VOX_MODE_LISTEN)) {
+			clsic_msgproc_release(vox->clsic,
+					vox->service->service_instance);
+		    }
+	} else {
+		clsic_msgproc_use(vox->clsic,
+				  vox->service->service_instance);
+	}
+}
+
+/**
  * vox_set_mode() - set mode on CLSIC
  * @vox:	The main instance of struct clsic_vox used in this driver.
  * @new_mode:	New CLSIC mode to change to.
@@ -707,6 +732,11 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
+	trace_clsic_vox_set_mode(new_mode);
+
+	if (vox->clsic_mode == new_mode)
+		return 0;
+
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_SET_MODE);
@@ -717,28 +747,17 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
-	trace_clsic_vox_set_mode(new_mode);
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 
-	/*
-	 * The VOX service handler should mark the secure processor as in use
-	 * when it sets the device to modes other than IDLE and LISTEN
-	 */
-	if ((new_mode == CLSIC_VOX_MODE_IDLE) ||
-	    (new_mode == CLSIC_VOX_MODE_LISTEN))
-		clsic_msgproc_release(vox->clsic,
-				      vox->service->service_instance);
-	else
-		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
-
 	switch (msg_rsp.rsp_set_mode.hdr.err) {
 	case CLSIC_ERR_NONE:
+		vox_set_pm_from_mode(vox, new_mode);
+		vox->clsic_mode = new_mode;
+
 		return 0;
 	case CLSIC_ERR_INVAL_MODE_TRANSITION:
 	case CLSIC_ERR_INVAL_MODE:
@@ -2515,7 +2534,11 @@ static int vox_notification_handler(struct clsic *clsic,
 		trace_clsic_vox_trigger_heard(true);
 
 		/* Normal trigger. */
+		vox->clsic_mode = CLSIC_VOX_MODE_STREAM;
 		vox->asr_stream.listen_error = false;
+
+		/* CLSIC transitions by itself from LISTEN to STREAM. */
+		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
 
 		if (vox->asr_stream.stream)
 			complete(&vox->asr_stream.trigger_heard);
@@ -2627,9 +2650,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
 
-	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-	if (ret != 0)
-		return ret;
+	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
 	mutex_init(&vox->mgmt_mode_lock);
 

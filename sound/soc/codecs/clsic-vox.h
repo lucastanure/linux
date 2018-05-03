@@ -125,6 +125,8 @@ struct clsic_vox {
 	struct mutex mgmt_mode_lock;
 	/* mgmt_mode refers to ongoing vox biometric operations only. */
 	unsigned int mgmt_mode;
+	/* Which mode CLSIC is in. */
+	enum clsic_vox_mode clsic_mode;
 	/* error_info for showing result of a top level control mode change. */
 	unsigned int error_info;
 	unsigned int asset_type;
