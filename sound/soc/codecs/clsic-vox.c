@@ -519,11 +519,11 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 			return -EIO;
 		}
 
+		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
+
 		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 		if (ret)
 			return -EIO;
-
-		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
 
 		break;
 	default:
