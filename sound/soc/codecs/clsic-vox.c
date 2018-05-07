@@ -90,8 +90,6 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	}
 
 	vox->asr_stream.stream = stream;
-	vox->asr_stream.error = false;
-	vox->asr_stream.copied_total = 0;
 
 	stream->runtime->private_data = &vox->asr_stream;
 
@@ -111,19 +109,22 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
+	struct clsic_vox *vox =
+		container_of(asr_stream, struct clsic_vox, asr_stream);
 
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
 
-	kfree(asr_stream->buf.data);
+	asr_stream->stream = NULL;
 
+	vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
+
+	complete(&asr_stream->trigger_heard);
+
+	kfree(asr_stream->buf.data);
 	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
-	asr_stream->copied_total = 0;
-	asr_stream->stream = NULL;
-	asr_stream->listen_error = true;
-	complete(&asr_stream->trigger_heard);
 
 	return 0;
 }
@@ -482,8 +483,10 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		trace_clsic_vox_asr_stream_listen(
 					  msg_cmd.cmd_listen_start.trgr_domain);
 
-		vox->asr_stream.listen_error = false;
+		asr_stream->listen_error = false;
 		asr_stream->asr_block_pending = false;
+		asr_stream->error = false;
+		asr_stream->copied_total = 0;
 
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
