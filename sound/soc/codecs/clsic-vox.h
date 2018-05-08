@@ -202,13 +202,7 @@ static const struct {
 	},
 };
 
-/* asr_strm_mode */
-#define VOX_ASR_MODE_INACTIVE			0
-#define VOX_ASR_MODE_STARTING			1
-#define VOX_ASR_MODE_STREAMING			2
-#define VOX_ASR_MODE_STOPPING			3
-
-#define VOX_NUM_MGMT_MODES			20
+#define VOX_NUM_MGMT_MODES			23
 
 #define VOX_MGMT_MODE_NEUTRAL			0
 #define VOX_MGMT_MODE_INSTALL_ASSET		1
@@ -230,6 +224,9 @@ static const struct {
 #define VOX_MGMT_MODE_GETTING_BIO_RESULTS	17
 #define VOX_MGMT_MODE_STOP_BIO_RESULTS		18
 #define VOX_MGMT_MODE_STOPPING_BIO_RESULTS	19
+#define VOX_MGMT_MODE_STARTING_LISTEN		20
+#define VOX_MGMT_MODE_LISTENING			21
+#define VOX_MGMT_MODE_STREAMING			22
 
 static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
@@ -253,6 +250,9 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
 	[VOX_MGMT_MODE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
 	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
+	[VOX_MGMT_MODE_STARTING_LISTEN]		= "Starting Listen For Trigger",
+	[VOX_MGMT_MODE_LISTENING]		= "Listening For Trigger",
+	[VOX_MGMT_MODE_STREAMING]		= "Streaming ASR Data",
 };
 
 #define VOX_NUM_ERRORS			4

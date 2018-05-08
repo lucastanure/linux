@@ -57,6 +57,8 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
+void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
+			   int mgmt_mode);
 
 /**
  * clsic_vox_asr_stream_open() - open the ASR stream
@@ -96,8 +98,6 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	init_completion(&vox->asr_stream.trigger_heard);
 	init_completion(&vox->asr_stream.asr_block_completion);
 
-	vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
-
 	trace_clsic_vox_asr_stream_open(stream->direction);
 
 	return 0;
@@ -114,19 +114,16 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
-	struct clsic_vox *vox =
-		container_of(asr_stream, struct clsic_vox, asr_stream);
 
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
 
 	asr_stream->stream = NULL;
 
-	vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
-
 	complete(&asr_stream->trigger_heard);
 
 	kfree(asr_stream->buf.data);
+
 	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
@@ -437,9 +434,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 	case SNDRV_PCM_TRIGGER_START:
 		/* Fail if any ongoing vox operations. */
 		mutex_lock(&vox->mgmt_mode_lock);
-		if ((vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) &&
-		    (vox->asr_strm_mode == VOX_ASR_MODE_INACTIVE)) {
-			vox->asr_strm_mode = VOX_ASR_MODE_STARTING;
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			vox->mgmt_mode = VOX_MGMT_MODE_STARTING_LISTEN;
 			mutex_unlock(&vox->mgmt_mode_lock);
 		} else {
 			mutex_unlock(&vox->mgmt_mode_lock);
@@ -465,7 +461,6 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		msg_cmd.cmd_listen_start.trgr_domain =
 						CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
-
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -486,13 +481,12 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		}
 
 		trace_clsic_vox_asr_stream_listen(
-					  msg_cmd.cmd_listen_start.trgr_domain);
+					msg_cmd.cmd_listen_start.trgr_domain);
 
 		asr_stream->listen_error = false;
 		asr_stream->asr_block_pending = false;
 		asr_stream->error = false;
 		asr_stream->copied_total = 0;
-
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
 				       asr_stream,
@@ -500,7 +494,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 		wake_up_process(asr_stream->wait_for_trigger);
 
-		vox->asr_strm_mode = VOX_ASR_MODE_STREAMING;
+		vox->mgmt_mode = VOX_MGMT_MODE_LISTENING;
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -514,21 +508,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		vox->trigger_phrase_id = VOX_TRGR_INVALID;
 		vox->trigger_engine_id = VOX_TRGR_INVALID;
 
-		mutex_lock(&vox->mgmt_mode_lock);
-		if ((vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) &&
-		    (vox->asr_strm_mode == VOX_ASR_MODE_STREAMING)) {
-			vox->asr_strm_mode = VOX_ASR_MODE_STOPPING;
-			mutex_unlock(&vox->mgmt_mode_lock);
-		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
-			return -EIO;
-		}
-
-		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
-
-		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-		if (ret)
-			return -EIO;
+		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
 
 		break;
 	default:
@@ -537,11 +517,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 exit:
 	/* In case of failure during SNDRV_PCM_TRIGGER_START. */
-	if (ret) {
-		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-
-		vox->asr_strm_mode = VOX_ASR_MODE_INACTIVE;
-	}
+	if (ret)
+		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
 
 	return ret;
 }
@@ -1910,7 +1887,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STREAMING);
 
 	return ret;
 }
@@ -1919,10 +1896,9 @@ exit:
  * vox_stop_bio_results() - no longer get biometric results from CLSIC
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
- * Tell CLSIC that we will no longer be requesting any biometric results - this
- * is necessary to ensure that CLSIC switches to IDLE mode in preparation for
- * the next operation. Obviously it will not be possible to get biometric
- * results any more after calling this.
+ * Tell CLSIC that we will no longer be requesting any biometric results by
+ * switching CLSIC to IDLE mode in preparation for the next operation. Obviously
+ * it will not be possible to get biometric results any more after calling this.
  *
  * Return: errno.
  */
@@ -1932,7 +1908,7 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
 
 	trace_clsic_vox_stop_bio_results(0);
 
-	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STREAMING);
 }
 
 /**
@@ -2361,8 +2337,7 @@ static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
 	vox->barge_in_status = ucontrol->value.enumerated.item[0];
 
 	/* Only set barge-in now if CLSIC is already doing something. */
-	if ((vox->mgmt_mode != VOX_MGMT_MODE_NEUTRAL) ||
-	    (vox->asr_strm_mode != VOX_ASR_MODE_INACTIVE))
+	if (vox->mgmt_mode != VOX_MGMT_MODE_NEUTRAL)
 		return vox_update_barge_in(vox);
 
 	return 0;
@@ -2393,95 +2368,83 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	mutex_lock(&vox->mgmt_mode_lock);
-	if (vox->asr_strm_mode == VOX_ASR_MODE_STREAMING) {
-		/* Streaming ASR data. */
-		if (ucontrol->value.enumerated.item[0] ==
-						VOX_MGMT_MODE_GET_BIO_RESULTS) {
-			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				vox->mgmt_mode =
-					VOX_MGMT_MODE_GETTING_BIO_RESULTS;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-		} else if (ucontrol->value.enumerated.item[0] ==
-					VOX_MGMT_MODE_STOP_BIO_RESULTS) {
-			/*
-			 * Set CLSIC to IDLE mode in order to prevent CLSIC
-			 * crashing due to bringing down the audio path while in
-			 * CLSIC STREAM mode.
-			 */
-			if ((vox->mgmt_mode ==
-					VOX_MGMT_MODE_GETTING_BIO_RESULTS) ||
-			    (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL)) {
-				vox->mgmt_mode =
-					VOX_MGMT_MODE_STOPPING_BIO_RESULTS;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				/*
-				 * Complete get_bio_results in case CLSIC is
-				 * hung doing scheduled work while getting
-				 * results from a previous action (waiting for
-				 * CLSIC_VOX_MSG_N_NEW_AUTH_RESULT).
-				 */
-				vox->get_bio_results_early_exit = true;
-				complete(&vox->new_bio_results_completion);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
+
+	switch (ucontrol->value.enumerated.item[0]) {
+	case VOX_MGMT_MODE_GET_BIO_RESULTS:
+		if ((vox->mgmt_mode == VOX_MGMT_MODE_LISTENING) ||
+		    (vox->mgmt_mode == VOX_MGMT_MODE_STREAMING)) {
+			vox->mgmt_mode = VOX_MGMT_MODE_GETTING_BIO_RESULTS;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
 		} else {
 			mutex_unlock(&vox->mgmt_mode_lock);
-			ret = -EINVAL;
+			ret = -EBUSY;
 		}
-	} else if (vox->asr_strm_mode == VOX_ASR_MODE_INACTIVE) {
-		/* Not streaming ASR data. */
-		switch (ucontrol->value.enumerated.item[0]) {
-		case VOX_MGMT_MODE_INSTALL_ASSET:
-		case VOX_MGMT_MODE_UNINSTALL_ASSET:
-		case VOX_MGMT_MODE_REMOVE_USER:
-		case VOX_MGMT_MODE_START_ENROL:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-				/*
-				 * Management mode goes from command
-				 * e.g. INSTALL to a state e.g. INSTALLING
-				 */
-				vox->mgmt_mode =
-					ucontrol->value.enumerated.item[0] + 1;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
-		case VOX_MGMT_MODE_PERFORM_ENROL_REP:
-		case VOX_MGMT_MODE_COMPLETE_ENROL:
-		case VOX_MGMT_MODE_TERMINATE_ENROL:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_ENROLLING) {
-				vox->mgmt_mode =
-					ucontrol->value.enumerated.item[0] + 1;
-				mutex_unlock(&vox->mgmt_mode_lock);
-				schedule_work(&vox->mgmt_mode_work);
-			} else {
-				mutex_unlock(&vox->mgmt_mode_lock);
-				ret = -EBUSY;
-			}
-			break;
-		default:
+		break;
+	case VOX_MGMT_MODE_STOP_BIO_RESULTS:
+		/*
+		 * Set CLSIC to IDLE mode in order to prevent CLSIC
+		 * crashing due to bringing down the audio path while in
+		 * CLSIC STREAM mode.
+		 */
+		if ((vox->mgmt_mode == VOX_MGMT_MODE_GETTING_BIO_RESULTS) ||
+		    (vox->mgmt_mode == VOX_MGMT_MODE_STREAMING)) {
+			vox->mgmt_mode = VOX_MGMT_MODE_STOPPING_BIO_RESULTS;
 			mutex_unlock(&vox->mgmt_mode_lock);
-			ret = -EINVAL;
+			/*
+			 * Complete get_bio_results in case CLSIC is
+			 * hung doing scheduled work while getting
+			 * results from a previous action (waiting for
+			 * CLSIC_VOX_MSG_N_NEW_AUTH_RESULT).
+			 */
+			vox->get_bio_results_early_exit = true;
+			complete(&vox->new_bio_results_completion);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
 		}
-	} else
+		break;
+	case VOX_MGMT_MODE_INSTALL_ASSET:
+	case VOX_MGMT_MODE_UNINSTALL_ASSET:
+	case VOX_MGMT_MODE_REMOVE_USER:
+	case VOX_MGMT_MODE_START_ENROL:
+		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+			/*
+			 * Management mode goes from command
+			 * e.g. INSTALL to a state e.g. INSTALLING
+			 */
+			vox->mgmt_mode =
+				ucontrol->value.enumerated.item[0] + 1;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_MGMT_MODE_PERFORM_ENROL_REP:
+	case VOX_MGMT_MODE_COMPLETE_ENROL:
+	case VOX_MGMT_MODE_TERMINATE_ENROL:
+		if (vox->mgmt_mode == VOX_MGMT_MODE_ENROLLING) {
+			vox->mgmt_mode =
+				ucontrol->value.enumerated.item[0] + 1;
+			mutex_unlock(&vox->mgmt_mode_lock);
+			schedule_work(&vox->mgmt_mode_work);
+		} else {
+			mutex_unlock(&vox->mgmt_mode_lock);
+			ret = -EBUSY;
+		}
+		break;
+	default:
+		mutex_unlock(&vox->mgmt_mode_lock);
 		ret = -EINVAL;
+	}
 
 	if (ret == -EINVAL)
 		clsic_err(vox->codec,
-			  "unable to switch to vox management mode %d with ASR stream mode %d.\n",
-			  ucontrol->value.enumerated.item[0],
-			  vox->asr_strm_mode);
+			  "unable to switch to vox management mode %d.\n",
+			  ucontrol->value.enumerated.item[0]);
 
 	return ret;
 }
