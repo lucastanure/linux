@@ -219,7 +219,7 @@ static const struct {
 #define VOX_MGMT_MODE_REMOVING_USER		6
 #define VOX_MGMT_MODE_START_ENROL		7
 #define VOX_MGMT_MODE_STARTING_ENROL		8
-#define VOX_MGMT_MODE_STARTED_ENROL		9
+#define VOX_MGMT_MODE_ENROLLING			9
 #define VOX_MGMT_MODE_PERFORM_ENROL_REP		10
 #define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
 #define VOX_MGMT_MODE_COMPLETE_ENROL		12
@@ -241,7 +241,7 @@ static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
 	[VOX_MGMT_MODE_REMOVING_USER]		= "Removing User",
 	[VOX_MGMT_MODE_START_ENROL]		= "Start User Enrolment",
 	[VOX_MGMT_MODE_STARTING_ENROL]		= "Starting User Enrolment",
-	[VOX_MGMT_MODE_STARTED_ENROL]		= "Started User Enrolment",
+	[VOX_MGMT_MODE_ENROLLING]		= "Enrolling User",
 	[VOX_MGMT_MODE_PERFORM_ENROL_REP] = "Perform Enrolment Repetition",
 	[VOX_MGMT_MODE_PERFORMING_ENROL_REP] =
 					    "Performing Enrolment Repetition",

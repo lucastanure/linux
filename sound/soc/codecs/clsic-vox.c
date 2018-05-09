@@ -1661,7 +1661,7 @@ exit:
 	if (ret)
 		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
 	else
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
 
 	return ret;
 }
@@ -1724,7 +1724,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 
 exit:
 	if (ret)
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
 
 	return ret;
 }
@@ -2460,7 +2460,7 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 		case VOX_MGMT_MODE_PERFORM_ENROL_REP:
 		case VOX_MGMT_MODE_COMPLETE_ENROL:
 		case VOX_MGMT_MODE_TERMINATE_ENROL:
-			if (vox->mgmt_mode == VOX_MGMT_MODE_STARTED_ENROL) {
+			if (vox->mgmt_mode == VOX_MGMT_MODE_ENROLLING) {
 				vox->mgmt_mode =
 					ucontrol->value.enumerated.item[0] + 1;
 				mutex_unlock(&vox->mgmt_mode_lock);
@@ -2574,7 +2574,7 @@ static int vox_notification_handler(struct clsic *clsic,
 			break;
 		}
 
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STARTED_ENROL);
+		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
