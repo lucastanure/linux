@@ -28,8 +28,29 @@
 /* Stride is the number of bytes per register address, typically this is 4  */
 #define CLSIC_ALG_STRIDE	(CLSIC_ALG_REG_BITS/BITS_PER_BYTE)
 
+#define CLSIC_DSP1_N_RX_CHANNELS	9
+#define CLSIC_DSP1_N_TX_CHANNELS	9
+#define CLSIC_DSP2_N_RX_CHANNELS	8
+#define CLSIC_DSP2_N_TX_CHANNELS	8
+
 static const struct wm_adsp_region clsic_alg_vpu_regions[] = {
 	{ .type = WMFW_VPU_DM, .base = 0x20000000 },
+};
+
+static const struct wm_adsp_region clsic_dsp1_regions[] = {
+	{ .type = WMFW_HALO_PM_PACKED, .base = 0x3800000 },
+	{ .type = WMFW_HALO_XM_PACKED, .base = 0x2000000 },
+	{ .type = WMFW_ADSP2_XM, .base = 0x2800000 },
+	{ .type = WMFW_HALO_YM_PACKED, .base = 0x2C00000 },
+	{ .type = WMFW_ADSP2_YM, .base = 0x3400000 },
+};
+
+static const struct wm_adsp_region clsic_dsp2_regions[] = {
+	{ .type = WMFW_HALO_PM_PACKED, .base = 0x5800000 },
+	{ .type = WMFW_HALO_XM_PACKED, .base = 0x4000000 },
+	{ .type = WMFW_ADSP2_XM, .base = 0x4800000 },
+	{ .type = WMFW_HALO_YM_PACKED, .base = 0x4C00000 },
+	{ .type = WMFW_ADSP2_YM, .base = 0x5400000 },
 };
 
 struct clsic_alg {
@@ -48,6 +69,8 @@ struct clsic_alg {
 	struct dentry *raw_msg_file;
 #endif
 	struct wm_adsp *vpu;
+	struct wm_adsp dsp[2];
+	struct mutex dsp_rate_lock;
 };
 
 static int clsic_alg_simple_readregister(struct clsic_alg *alg,
@@ -367,8 +390,28 @@ static void clsic_alg_regmap_unlock(void *context)
 bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0x20000000 ... 0x2fffffff:
-		return true;
+	case 0x02000000 ... 0x0201dff0:	/* DSP1 XM packed */
+	case 0x02400000 ... 0x02413ff8:	/* DSP1 XM unpacked32 */
+	case 0x025e0000 ... 0x025e413c:	/* DSP1 system info registers */
+	case 0x02800000 ... 0x02827ff4:	/* DSP1 XM unpacked24 */
+	case 0x02b80000 ... 0x02b80050:	/* DSP1 control registers */
+	case 0x02b805c0 ... 0x02b805d0:	/* DSP1 scratch registers */
+	case 0x02bc1000 ... 0x02bcd020:	/* DSP1 control registers */
+	case 0x02c00000 ... 0x02c17ff0:	/* DSP1 YM packed */
+	case 0x03000000 ... 0x0300fff8:	/* DSP1 YM unpacked32 */
+	case 0x03400000 ... 0x0341fff4:	/* DSP1 YM unpacked24 */
+	case 0x04000000 ... 0x0401dff0:	/* DSP2 XM packed */
+	case 0x04400000 ... 0x04413ff8:	/* DSP2 XM unpacked32 */
+	case 0x045e0000 ... 0x045e413c:	/* DSP2 system info registers */
+	case 0x04800000 ... 0x04827ff4:	/* DSP2 XM unpacked24 */
+	case 0x04b80000 ... 0x04b80050:	/* DSP2 control registers */
+	case 0x04b805c0 ... 0x04b805d0:	/* DSP2 scratch registers */
+	case 0x04bc1000 ... 0x04bcd020:	/* DSP2 control registers */
+	case 0x04c00000 ... 0x04c17ff0:	/* DSP2 YM packed */
+	case 0x05000000 ... 0x0500fff8:	/* DSP2 YM unpacked32 */
+	case 0x05400000 ... 0x0541fff4:	/* DSP2 YM unpacked24 */
+	case 0x20000000 ... 0x2fffffff:	/* VPU */
+	return true;
 	default:
 		return false;
 	}
@@ -576,6 +619,61 @@ static const struct file_operations clsic_alg_custom_message_fops = {
 };
 #endif
 
+static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
+{
+	struct wm_adsp *dsp;
+	int ret;
+
+	dsp = &alg->dsp[0];
+
+	dsp->part = "cs48lv40";
+	dsp->type = WMFW_HALO;
+	dsp->num = 1;
+	dsp->dev = dev;
+	dsp->mem = clsic_dsp1_regions;
+	dsp->regmap = alg->regmap;
+	dsp->suffix = "";
+	dsp->running = true;
+	dsp->num_mems = ARRAY_SIZE(clsic_dsp1_regions);
+	dsp->fw = 10; /* WM_ADSP_FW_MISC */
+
+	dsp->n_rx_channels = CLSIC_DSP1_N_RX_CHANNELS;
+	dsp->n_tx_channels = CLSIC_DSP1_N_TX_CHANNELS;
+
+	ret = wm_halo_init(dsp, &alg->dsp_rate_lock);
+	if (ret != 0)
+		clsic_err(alg->clsic, "Failed to initialise DSP1\n");
+
+	dsp->n_rx_channels = 0;
+	dsp->n_tx_channels = 0;
+
+	dsp = &alg->dsp[1];
+
+	dsp->part = "cs48lv40";
+	dsp->type = WMFW_HALO;
+	dsp->num = 2;
+	dsp->dev = dev;
+	dsp->mem = clsic_dsp2_regions;
+	dsp->regmap = alg->regmap;
+	dsp->suffix = "";
+	dsp->running = true;
+	dsp->num_mems = ARRAY_SIZE(clsic_dsp2_regions);
+	dsp->fw = 10; /* WM_ADSP_FW_MISC */
+
+	dsp->n_rx_channels = CLSIC_DSP2_N_RX_CHANNELS;
+	dsp->n_tx_channels = CLSIC_DSP2_N_TX_CHANNELS;
+
+	ret = wm_halo_init(dsp, &alg->dsp_rate_lock);
+	if (ret != 0)
+		clsic_err(alg->clsic, "Failed to initialise DSP2\n");
+
+	/* Number of dsp2 channels set to 0 as under management of ARM core */
+	dsp->n_rx_channels = 0;
+	dsp->n_tx_channels = 0;
+
+	return ret;
+}
+
 static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
@@ -585,6 +683,12 @@ static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 
 	alg->codec = codec;
 	handler->data = (void *)alg;
+
+	alg->dsp[0].codec = codec;
+	wm_adsp_queue_boot_work(&alg->dsp[0]);
+
+	alg->dsp[1].codec = codec;
+	wm_adsp_queue_boot_work(&alg->dsp[1]);
 
 	alg->vpu->codec = codec;
 	wm_adsp_queue_boot_work(alg->vpu);
@@ -656,6 +760,12 @@ static int clsic_alg_probe(struct platform_device *pdev)
 	alg->vpu->running = true;
 	alg->vpu->num_mems = ARRAY_SIZE(clsic_alg_vpu_regions);
 	wm_vpu_init(alg->vpu);
+
+	ret = clsic_alg_init_dsps(dev, alg);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Failed to init dsps: %d.\n", ret);
+		return ret;
+	}
 
 	/* Register codec with the ASoC core */
 	ret = snd_soc_register_codec(dev, &soc_codec_clsic_alg, NULL, 0);
