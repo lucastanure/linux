@@ -122,9 +122,9 @@ struct clsic_vox {
 	struct clsic_asr_stream asr_stream;
 
 	struct snd_kcontrol_new kcontrol_new[VOX_NUM_NEW_KCONTROLS];
-	struct mutex mgmt_mode_lock;
-	/* mgmt_mode refers to ongoing vox biometric operations only. */
-	unsigned int mgmt_mode;
+	struct mutex drv_state_lock;
+	/* drv_state refers to ongoing vox biometric operations only. */
+	unsigned int drv_state;
 	/* Which mode CLSIC is in. */
 	enum clsic_vox_mode clsic_mode;
 	/* error_info for showing result of a top level control mode change. */
@@ -183,8 +183,8 @@ struct clsic_vox {
 	bool bin_installed[CLSIC_VOX_BIN_CNT];
 	bool bio_vte_map_installed;
 
-	struct work_struct mgmt_mode_work;
-	struct snd_kcontrol *mgmt_mode_kctrl;
+	struct work_struct drv_state_work;
+	struct snd_kcontrol *drv_state_kctrl;
 
 	struct completion new_bio_results_completion;
 };
@@ -202,57 +202,57 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_MGMT_MODES			23
+#define VOX_NUM_DRV_STATES			23
 
-#define VOX_MGMT_MODE_NEUTRAL			0
-#define VOX_MGMT_MODE_INSTALL_ASSET		1
-#define VOX_MGMT_MODE_INSTALLING_ASSET		2
-#define VOX_MGMT_MODE_UNINSTALL_ASSET		3
-#define VOX_MGMT_MODE_UNINSTALLING_ASSET	4
-#define VOX_MGMT_MODE_REMOVE_USER		5
-#define VOX_MGMT_MODE_REMOVING_USER		6
-#define VOX_MGMT_MODE_START_ENROL		7
-#define VOX_MGMT_MODE_STARTING_ENROL		8
-#define VOX_MGMT_MODE_ENROLLING			9
-#define VOX_MGMT_MODE_PERFORM_ENROL_REP		10
-#define VOX_MGMT_MODE_PERFORMING_ENROL_REP	11
-#define VOX_MGMT_MODE_COMPLETE_ENROL		12
-#define VOX_MGMT_MODE_COMPLETING_ENROL		13
-#define VOX_MGMT_MODE_TERMINATE_ENROL		14
-#define VOX_MGMT_MODE_TERMINATING_ENROL		15
-#define VOX_MGMT_MODE_GET_BIO_RESULTS		16
-#define VOX_MGMT_MODE_GETTING_BIO_RESULTS	17
-#define VOX_MGMT_MODE_STOP_BIO_RESULTS		18
-#define VOX_MGMT_MODE_STOPPING_BIO_RESULTS	19
-#define VOX_MGMT_MODE_STARTING_LISTEN		20
-#define VOX_MGMT_MODE_LISTENING			21
-#define VOX_MGMT_MODE_STREAMING			22
+#define VOX_DRV_STATE_NEUTRAL			0
+#define VOX_DRV_STATE_INSTALL_ASSET		1
+#define VOX_DRV_STATE_INSTALLING_ASSET		2
+#define VOX_DRV_STATE_UNINSTALL_ASSET		3
+#define VOX_DRV_STATE_UNINSTALLING_ASSET	4
+#define VOX_DRV_STATE_REMOVE_USER		5
+#define VOX_DRV_STATE_REMOVING_USER		6
+#define VOX_DRV_STATE_START_ENROL		7
+#define VOX_DRV_STATE_STARTING_ENROL		8
+#define VOX_DRV_STATE_ENROLLING			9
+#define VOX_DRV_STATE_PERFORM_ENROL_REP		10
+#define VOX_DRV_STATE_PERFORMING_ENROL_REP	11
+#define VOX_DRV_STATE_COMPLETE_ENROL		12
+#define VOX_DRV_STATE_COMPLETING_ENROL		13
+#define VOX_DRV_STATE_TERMINATE_ENROL		14
+#define VOX_DRV_STATE_TERMINATING_ENROL		15
+#define VOX_DRV_STATE_GET_BIO_RESULTS		16
+#define VOX_DRV_STATE_GETTING_BIO_RESULTS	17
+#define VOX_DRV_STATE_STOP_BIO_RESULTS		18
+#define VOX_DRV_STATE_STOPPING_BIO_RESULTS	19
+#define VOX_DRV_STATE_STARTING_LISTEN		20
+#define VOX_DRV_STATE_LISTENING			21
+#define VOX_DRV_STATE_STREAMING			22
 
-static const char *vox_mgmt_mode_text[VOX_NUM_MGMT_MODES] = {
-	[VOX_MGMT_MODE_NEUTRAL]			= "Neutral",
-	[VOX_MGMT_MODE_INSTALL_ASSET]		= "Install Asset",
-	[VOX_MGMT_MODE_INSTALLING_ASSET]	= "Installing Asset",
-	[VOX_MGMT_MODE_UNINSTALL_ASSET]		= "Uninstall Asset",
-	[VOX_MGMT_MODE_UNINSTALLING_ASSET]	= "Uninstalling Asset",
-	[VOX_MGMT_MODE_REMOVE_USER]		= "Remove User",
-	[VOX_MGMT_MODE_REMOVING_USER]		= "Removing User",
-	[VOX_MGMT_MODE_START_ENROL]		= "Start User Enrolment",
-	[VOX_MGMT_MODE_STARTING_ENROL]		= "Starting User Enrolment",
-	[VOX_MGMT_MODE_ENROLLING]		= "Enrolling User",
-	[VOX_MGMT_MODE_PERFORM_ENROL_REP] = "Perform Enrolment Repetition",
-	[VOX_MGMT_MODE_PERFORMING_ENROL_REP] =
+static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
+	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
+	[VOX_DRV_STATE_INSTALL_ASSET]		= "Install Asset",
+	[VOX_DRV_STATE_INSTALLING_ASSET]	= "Installing Asset",
+	[VOX_DRV_STATE_UNINSTALL_ASSET]		= "Uninstall Asset",
+	[VOX_DRV_STATE_UNINSTALLING_ASSET]	= "Uninstalling Asset",
+	[VOX_DRV_STATE_REMOVE_USER]		= "Remove User",
+	[VOX_DRV_STATE_REMOVING_USER]		= "Removing User",
+	[VOX_DRV_STATE_START_ENROL]		= "Start User Enrolment",
+	[VOX_DRV_STATE_STARTING_ENROL]		= "Starting User Enrolment",
+	[VOX_DRV_STATE_ENROLLING]		= "Enrolling User",
+	[VOX_DRV_STATE_PERFORM_ENROL_REP] = "Perform Enrolment Repetition",
+	[VOX_DRV_STATE_PERFORMING_ENROL_REP] =
 					    "Performing Enrolment Repetition",
-	[VOX_MGMT_MODE_COMPLETE_ENROL]		= "Complete User Enrolment",
-	[VOX_MGMT_MODE_COMPLETING_ENROL]	= "Completing User Enrolment",
-	[VOX_MGMT_MODE_TERMINATE_ENROL]		= "Terminate User Enrolment",
-	[VOX_MGMT_MODE_TERMINATING_ENROL]	= "Terminating User Enrolment",
-	[VOX_MGMT_MODE_GET_BIO_RESULTS]		= "Get Biometric Results",
-	[VOX_MGMT_MODE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
-	[VOX_MGMT_MODE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
-	[VOX_MGMT_MODE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
-	[VOX_MGMT_MODE_STARTING_LISTEN]		= "Starting Listen For Trigger",
-	[VOX_MGMT_MODE_LISTENING]		= "Listening For Trigger",
-	[VOX_MGMT_MODE_STREAMING]		= "Streaming ASR Data",
+	[VOX_DRV_STATE_COMPLETE_ENROL]		= "Complete User Enrolment",
+	[VOX_DRV_STATE_COMPLETING_ENROL]	= "Completing User Enrolment",
+	[VOX_DRV_STATE_TERMINATE_ENROL]		= "Terminate User Enrolment",
+	[VOX_DRV_STATE_TERMINATING_ENROL]	= "Terminating User Enrolment",
+	[VOX_DRV_STATE_GET_BIO_RESULTS]		= "Get Biometric Results",
+	[VOX_DRV_STATE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
+	[VOX_DRV_STATE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
+	[VOX_DRV_STATE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
+	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
+	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
+	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",
 };
 
 #define VOX_NUM_ERRORS			4

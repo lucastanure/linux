@@ -58,7 +58,7 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
 void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-			   int mgmt_mode);
+			   int drv_state);
 
 /**
  * clsic_vox_asr_stream_open() - open the ASR stream
@@ -433,12 +433,12 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		/* Fail if any ongoing vox operations. */
-		mutex_lock(&vox->mgmt_mode_lock);
-		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
-			vox->mgmt_mode = VOX_MGMT_MODE_STARTING_LISTEN;
-			mutex_unlock(&vox->mgmt_mode_lock);
+		mutex_lock(&vox->drv_state_lock);
+		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
+			vox->drv_state = VOX_DRV_STATE_STARTING_LISTEN;
+			mutex_unlock(&vox->drv_state_lock);
 		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
+			mutex_unlock(&vox->drv_state_lock);
 			return -EIO;
 		}
 
@@ -494,7 +494,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 		wake_up_process(asr_stream->wait_for_trigger);
 
-		vox->mgmt_mode = VOX_MGMT_MODE_LISTENING;
+		vox->drv_state = VOX_DRV_STATE_LISTENING;
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -508,7 +508,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		vox->trigger_phrase_id = VOX_TRGR_INVALID;
 		vox->trigger_engine_id = VOX_TRGR_INVALID;
 
-		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 		break;
 	default:
@@ -518,7 +518,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 exit:
 	/* In case of failure during SNDRV_PCM_TRIGGER_START. */
 	if (ret)
-		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -754,24 +754,24 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  *			     mode
  * @vox:	The main instance of struct clsic_vox used in this driver.
  * @set_clsic_to_idle:	Whether to set CLSIC to IDLE mode or not.
- * @mgmt_mode:	New vox driver management mode to change to.
+ * @drv_state:	New vox driver state to change to.
  *
  * This function incorporates the 3 commonly performed tasks of setting CLSIC to
- * IDLE mode, setting the internal driver management mode and then notifying
- * userspace (i.e. waking the poll) that something has changed (usually meant to
- * imply that the error control node has changed value).
+ * IDLE mode, setting the internal driver state and then notifying userspace
+ * (i.e. waking the poll) that something has changed (usually meant to imply
+ * that the error control node has changed value).
  *
  */
 void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-			   int mgmt_mode)
+			   int drv_state)
 {
 	if (set_clsic_to_idle)
 		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 
-	vox->mgmt_mode = mgmt_mode;
+	vox->drv_state = drv_state;
 
 	snd_ctl_notify(vox->codec->component.card->snd_card,
-		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->mgmt_mode_kctrl->id);
+		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->drv_state_kctrl->id);
 }
 
 /**
@@ -1283,7 +1283,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1443,7 +1443,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1513,7 +1513,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1636,9 +1636,9 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 
 exit:
 	if (ret)
-		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 	else
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
+		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
 
 	return ret;
 }
@@ -1701,7 +1701,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 
 exit:
 	if (ret)
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
+		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
 
 	return ret;
 }
@@ -1768,7 +1768,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1887,7 +1887,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STREAMING);
+	vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_STREAMING);
 
 	return ret;
 }
@@ -1908,11 +1908,11 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
 
 	trace_clsic_vox_stop_bio_results(0);
 
-	vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_STREAMING);
+	vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_STREAMING);
 }
 
 /**
- * vox_mgmt_mode_handler() - handle userspace commands from the management mode
+ * vox_drv_state_handler() - handle userspace commands from the driver state
  *				control
  * @data:	Used to obtain the main instance of struct clsic_vox used in
  *		this driver in which this is contained.
@@ -1922,64 +1922,64 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
  *
  * Return: errno.
  */
-static void vox_mgmt_mode_handler(struct work_struct *data)
+static void vox_drv_state_handler(struct work_struct *data)
 {
 	struct clsic_vox *vox = container_of(data, struct clsic_vox,
-					     mgmt_mode_work);
+					     drv_state_work);
 	int ret;
 
-	switch (vox->mgmt_mode) {
-	case VOX_MGMT_MODE_INSTALLING_ASSET:
+	switch (vox->drv_state) {
+	case VOX_DRV_STATE_INSTALLING_ASSET:
 		ret = vox_install_asset(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_install_asset ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_UNINSTALLING_ASSET:
+	case VOX_DRV_STATE_UNINSTALLING_ASSET:
 		ret = vox_uninstall_asset(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_uninstall_asset ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_REMOVING_USER:
+	case VOX_DRV_STATE_REMOVING_USER:
 		ret = vox_remove_user(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_remove_user ret %d.\n", ret);
 		break;
-	case VOX_MGMT_MODE_STARTING_ENROL:
+	case VOX_DRV_STATE_STARTING_ENROL:
 		ret = vox_start_enrol_user(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_start_enrol_user ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_PERFORMING_ENROL_REP:
+	case VOX_DRV_STATE_PERFORMING_ENROL_REP:
 		ret = vox_perform_enrol_rep(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_perform_enrol_rep ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_COMPLETING_ENROL:
+	case VOX_DRV_STATE_COMPLETING_ENROL:
 		ret = vox_complete_enrolment(vox);
 		if (ret)
 			clsic_err(vox->clsic,
 				  "vox_complete_enrolment ret %d.\n", ret);
 		break;
-	case VOX_MGMT_MODE_TERMINATING_ENROL:
+	case VOX_DRV_STATE_TERMINATING_ENROL:
 		vox->error_info = VOX_ERROR_SUCCESS;
-		vox_set_idle_and_mode(vox, true, VOX_MGMT_MODE_NEUTRAL);
+		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
 		break;
-	case VOX_MGMT_MODE_GETTING_BIO_RESULTS:
+	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
 		ret = vox_get_bio_results(vox);
 		if (ret)
 			clsic_err(vox->clsic, "vox_get_bio_results ret %d.\n",
 				  ret);
 		break;
-	case VOX_MGMT_MODE_STOPPING_BIO_RESULTS:
+	case VOX_DRV_STATE_STOPPING_BIO_RESULTS:
 		vox_stop_bio_results(vox);
 		break;
 	default:
 		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
-			  vox->mgmt_mode);
+			  vox->drv_state);
 	}
 }
 
@@ -2337,60 +2337,60 @@ static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
 	vox->barge_in_status = ucontrol->value.enumerated.item[0];
 
 	/* Only set barge-in now if CLSIC is already doing something. */
-	if (vox->mgmt_mode != VOX_MGMT_MODE_NEUTRAL)
+	if (vox->drv_state != VOX_DRV_STATE_NEUTRAL)
 		return vox_update_barge_in(vox);
 
 	return 0;
 }
 
 /**
- * vox_ctrl_mgmt_put() - userspace control tells CLSIC to perform a particular
- *			action
+ * vox_ctrl_drv_state_put() - userspace control tells CLSIC to perform a
+ *			      particular action
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure (unused).
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
  * Userspace can get the driver to perform particular actions by writing to the
- * management mode ALSA control. The control then changes enumeration so that a
+ * driver state ALSA control. The control then changes enumeration so that a
  * read of the control from userspace provides information about the current
  * action being undertaken.
  *
  * Return: errno.
  */
-static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
-			     struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_mode);
 	int ret = 0;
 
-	if (ucontrol->value.enumerated.item[0] == vox->mgmt_mode)
+	if (ucontrol->value.enumerated.item[0] == vox->drv_state)
 		return 0;
 
-	mutex_lock(&vox->mgmt_mode_lock);
+	mutex_lock(&vox->drv_state_lock);
 
 	switch (ucontrol->value.enumerated.item[0]) {
-	case VOX_MGMT_MODE_GET_BIO_RESULTS:
-		if ((vox->mgmt_mode == VOX_MGMT_MODE_LISTENING) ||
-		    (vox->mgmt_mode == VOX_MGMT_MODE_STREAMING)) {
-			vox->mgmt_mode = VOX_MGMT_MODE_GETTING_BIO_RESULTS;
-			mutex_unlock(&vox->mgmt_mode_lock);
-			schedule_work(&vox->mgmt_mode_work);
+	case VOX_DRV_STATE_GET_BIO_RESULTS:
+		if ((vox->drv_state == VOX_DRV_STATE_LISTENING) ||
+		    (vox->drv_state == VOX_DRV_STATE_STREAMING)) {
+			vox->drv_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
+			mutex_unlock(&vox->drv_state_lock);
+			schedule_work(&vox->drv_state_work);
 		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
+			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
 		}
 		break;
-	case VOX_MGMT_MODE_STOP_BIO_RESULTS:
+	case VOX_DRV_STATE_STOP_BIO_RESULTS:
 		/*
 		 * Set CLSIC to IDLE mode in order to prevent CLSIC
 		 * crashing due to bringing down the audio path while in
 		 * CLSIC STREAM mode.
 		 */
-		if ((vox->mgmt_mode == VOX_MGMT_MODE_GETTING_BIO_RESULTS) ||
-		    (vox->mgmt_mode == VOX_MGMT_MODE_STREAMING)) {
-			vox->mgmt_mode = VOX_MGMT_MODE_STOPPING_BIO_RESULTS;
-			mutex_unlock(&vox->mgmt_mode_lock);
+		if ((vox->drv_state == VOX_DRV_STATE_GETTING_BIO_RESULTS) ||
+		    (vox->drv_state == VOX_DRV_STATE_STREAMING)) {
+			vox->drv_state = VOX_DRV_STATE_STOPPING_BIO_RESULTS;
+			mutex_unlock(&vox->drv_state_lock);
 			/*
 			 * Complete get_bio_results in case CLSIC is
 			 * hung doing scheduled work while getting
@@ -2399,51 +2399,51 @@ static int vox_ctrl_mgmt_put(struct snd_kcontrol *kcontrol,
 			 */
 			vox->get_bio_results_early_exit = true;
 			complete(&vox->new_bio_results_completion);
-			schedule_work(&vox->mgmt_mode_work);
+			schedule_work(&vox->drv_state_work);
 		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
+			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
 		}
 		break;
-	case VOX_MGMT_MODE_INSTALL_ASSET:
-	case VOX_MGMT_MODE_UNINSTALL_ASSET:
-	case VOX_MGMT_MODE_REMOVE_USER:
-	case VOX_MGMT_MODE_START_ENROL:
-		if (vox->mgmt_mode == VOX_MGMT_MODE_NEUTRAL) {
+	case VOX_DRV_STATE_INSTALL_ASSET:
+	case VOX_DRV_STATE_UNINSTALL_ASSET:
+	case VOX_DRV_STATE_REMOVE_USER:
+	case VOX_DRV_STATE_START_ENROL:
+		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
 			/*
 			 * Management mode goes from command
 			 * e.g. INSTALL to a state e.g. INSTALLING
 			 */
-			vox->mgmt_mode =
+			vox->drv_state =
 				ucontrol->value.enumerated.item[0] + 1;
-			mutex_unlock(&vox->mgmt_mode_lock);
-			schedule_work(&vox->mgmt_mode_work);
+			mutex_unlock(&vox->drv_state_lock);
+			schedule_work(&vox->drv_state_work);
 		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
+			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
 		}
 		break;
-	case VOX_MGMT_MODE_PERFORM_ENROL_REP:
-	case VOX_MGMT_MODE_COMPLETE_ENROL:
-	case VOX_MGMT_MODE_TERMINATE_ENROL:
-		if (vox->mgmt_mode == VOX_MGMT_MODE_ENROLLING) {
-			vox->mgmt_mode =
+	case VOX_DRV_STATE_PERFORM_ENROL_REP:
+	case VOX_DRV_STATE_COMPLETE_ENROL:
+	case VOX_DRV_STATE_TERMINATE_ENROL:
+		if (vox->drv_state == VOX_DRV_STATE_ENROLLING) {
+			vox->drv_state =
 				ucontrol->value.enumerated.item[0] + 1;
-			mutex_unlock(&vox->mgmt_mode_lock);
-			schedule_work(&vox->mgmt_mode_work);
+			mutex_unlock(&vox->drv_state_lock);
+			schedule_work(&vox->drv_state_work);
 		} else {
-			mutex_unlock(&vox->mgmt_mode_lock);
+			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
 		}
 		break;
 	default:
-		mutex_unlock(&vox->mgmt_mode_lock);
+		mutex_unlock(&vox->drv_state_lock);
 		ret = -EINVAL;
 	}
 
 	if (ret == -EINVAL)
 		clsic_err(vox->codec,
-			  "unable to switch to vox management mode %d.\n",
+			  "unable to switch to vox driver state %d.\n",
 			  ucontrol->value.enumerated.item[0]);
 
 	return ret;
@@ -2537,7 +2537,7 @@ static int vox_notification_handler(struct clsic *clsic,
 			break;
 		}
 
-		vox_set_idle_and_mode(vox, false, VOX_MGMT_MODE_ENROLLING);
+		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
@@ -2610,22 +2610,20 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
 
 	vox->codec = codec;
-
-	vox->mgmt_mode = VOX_MGMT_MODE_NEUTRAL;
-
+	vox->drv_state = VOX_DRV_STATE_NEUTRAL;
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
-	mutex_init(&vox->mgmt_mode_lock);
+	mutex_init(&vox->drv_state_lock);
 
-	INIT_WORK(&vox->mgmt_mode_work, vox_mgmt_mode_handler);
+	INIT_WORK(&vox->drv_state_work, vox_drv_state_handler);
 
-	vox->soc_enum_mode.items = VOX_NUM_MGMT_MODES;
-	vox->soc_enum_mode.texts = vox_mgmt_mode_text;
-	vox->soc_enum_mode.dobj.private = &vox->mgmt_mode;
+	vox->soc_enum_mode.items = VOX_NUM_DRV_STATES;
+	vox->soc_enum_mode.texts = vox_drv_state_text;
+	vox->soc_enum_mode.dobj.private = &vox->drv_state;
 	vox_enum_control_helper(&vox->kcontrol_new[ctl_id],
-				"Vox Management Mode",
+				"Vox Driver State",
 				(unsigned long) &vox->soc_enum_mode);
-	vox->kcontrol_new[ctl_id].put = vox_ctrl_mgmt_put;
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_drv_state_put;
 
 	ctl_id++;
 	vox->error_info = VOX_ERROR_CLEARED;
@@ -2898,9 +2896,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	if (ret != 0)
 		return ret;
 
-	vox->mgmt_mode_kctrl = snd_soc_card_get_kcontrol(
+	vox->drv_state_kctrl = snd_soc_card_get_kcontrol(
 						vox->codec->component.card,
-						"Vox Management Mode");
+						"Vox Driver State");
 
 	handler->data = (void *) vox;
 	handler->callback = &vox_notification_handler;
@@ -2923,7 +2921,7 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 
 	dev_info(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
 
-	cancel_work_sync(&vox->mgmt_mode_work);
+	cancel_work_sync(&vox->drv_state_work);
 
 	return 0;
 }
