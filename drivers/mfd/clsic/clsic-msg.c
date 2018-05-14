@@ -209,11 +209,6 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	clsic_unlink_message(clsic, msg_p);
 	list_add_tail(&msg_p->private_link, &clsic->completed_messages);
 
-	/*
-	 * Always signal completion to remove possible message conversion races
-	 */
-	complete(&msg_p->completion);
-
 	/* Test whether this is a shutdown message before it is released */
 	if ((clsic_get_servinst(msg_p) == CLSIC_SRV_INST_SYS) &&
 	    (clsic_get_messageid(msg_p) == CLSIC_SYS_MSG_CR_SP_SHDN)) {
@@ -222,13 +217,11 @@ static void clsic_complete_message_core(struct clsic *clsic,
 	}
 
 	/*
-	 * Perform any asynchronous callback - if the callback does not keep
+	 * Perform the asynchronous callback - if the callback does not keep
 	 * the message then release it
 	 */
-
-	if (msg_p->cb != NULL)
-		if (msg_p->cb(clsic, msg_p) != CLSIC_MSG_RETAINED)
-			clsic_release_msg(clsic, msg_p);
+	if (msg_p->cb(clsic, msg_p) != CLSIC_MSG_RETAINED)
+		clsic_release_msg(clsic, msg_p);
 
 	/*
 	 * Messaging becomes idle when the send and response lists are empty,
@@ -2043,6 +2036,17 @@ unlock_return:
 	mutex_unlock(&clsic->message_lock);
 }
 
+/*
+ * Simple callback function to release the waiting synchronous message context,
+ * return RETAINED so that the async code does not free the message structure.
+ */
+static enum clsic_message_cb_ret clsic_send_msg_sync_cb(struct clsic *clsic,
+						      struct clsic_message *msg)
+{
+	complete(&msg->completion);
+	return CLSIC_MSG_RETAINED;
+}
+
 int clsic_send_msg_sync(struct clsic *clsic,
 			const union t_clsic_generic_message *fsm_tx,
 			union t_clsic_generic_message *fsm_rx,
@@ -2057,6 +2061,8 @@ int clsic_send_msg_sync(struct clsic *clsic,
 		return -ENOMEM;
 
 	memcpy(&msg->fsm.raw, fsm_tx, sizeof(*fsm_tx));
+
+	msg->cb = &clsic_send_msg_sync_cb;
 
 	msg->bulk_txbuf = txbuf;
 	msg->bulk_txbuf_marker = (uint8_t *)txbuf;
@@ -2158,6 +2164,10 @@ int clsic_send_msg_async(struct clsic *clsic,
 {
 	struct clsic_message *msg;
 	int ret;
+
+	/* There must be a callback function */
+	if (cb == NULL)
+		return -EINVAL;
 
 	msg = clsic_allocate_msg(clsic);
 	if (msg == NULL)
