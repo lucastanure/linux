@@ -708,7 +708,7 @@ static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
 		    (vox->clsic_mode != CLSIC_VOX_MODE_LISTEN)) {
 			clsic_msgproc_release(vox->clsic,
 					vox->service->service_instance);
-		    }
+		}
 	} else {
 		clsic_msgproc_use(vox->clsic,
 				  vox->service->service_instance);
