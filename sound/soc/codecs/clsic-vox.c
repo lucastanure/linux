@@ -57,8 +57,8 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
-void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-			   int drv_state);
+static void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
+				  int drv_state);
 
 /**
  * clsic_vox_asr_stream_open() - open the ASR stream
@@ -762,8 +762,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  * that the error control node has changed value).
  *
  */
-void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-			   int drv_state)
+static void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
+				  int drv_state)
 {
 	if (set_clsic_to_idle)
 		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
