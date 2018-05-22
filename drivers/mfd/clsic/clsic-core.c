@@ -499,28 +499,6 @@ void clsic_maintenance(struct work_struct *data)
 
 		clsic_pm_service_transition(clsic, PM_EVENT_RESUME);
 	}
-
-	/*
-	 * If a debugcontrol request triggered a device resume, check whether
-	 * there are any outstanding messages that would prevent granting it
-	 * here.
-	 */
-	mutex_lock(&clsic->message_lock);
-	if ((clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) &&
-	    (clsic->current_msg == NULL)) {
-		clsic_info(clsic, "debugcontrol granted\n");
-		clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
-				CLSIC_STATE_CHANGE_LOCKHELD);
-
-		clsic_irq_disable(clsic);
-
-		if (clsic->debugcontrol_completion != NULL) {
-			complete(clsic->debugcontrol_completion);
-			clsic_dbg(clsic, "debugcontrol completed\n");
-		}
-	}
-	mutex_unlock(&clsic->message_lock);
-
 }
 
 int clsic_dev_exit(struct clsic *clsic)
