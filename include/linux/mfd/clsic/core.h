@@ -148,7 +148,7 @@ enum clsic_msgproc_states {
 
 enum clsic_service_states {
 	CLSIC_ENUMERATION_REQUIRED = 0,
-	CLSIC_REENUMERATION_REQUIRED, /* check enumeration or service states ? */
+	CLSIC_REENUMERATION_REQUIRED,
 	CLSIC_ENUMERATED,
 };
 
