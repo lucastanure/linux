@@ -305,6 +305,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	int ret = 0;
 
 	ret = wait_for_completion_interruptible(&asr_stream->trigger_heard);
+
 	if (ret || asr_stream->listen_error) {
 		clsic_dbg(clsic, "Wait for ASR stream trigger aborted.\n");
 
@@ -321,6 +322,19 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		return 0;
 
 	trace_clsic_vox_asr_stream_data_start(asr_stream->copied_total);
+
+	mutex_lock(&vox->drv_state_lock);
+	if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
+		vox->drv_state = VOX_DRV_STATE_STREAMING;
+		mutex_unlock(&vox->drv_state_lock);
+	} else {
+		mutex_unlock(&vox->drv_state_lock);
+		asr_stream->error = true;
+		clsic_err(vox->clsic,
+			  "unable to make driver state transition from %d to STREAMING",
+			  vox->drv_state);
+		return 0;
+	}
 
 	/* Fill in the trigger information. */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -492,23 +506,36 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 				       asr_stream,
 				       "clsic-vox-asr-wait-for-trigger");
 
-		wake_up_process(asr_stream->wait_for_trigger);
+		mutex_lock(&vox->drv_state_lock);
 
 		vox->drv_state = VOX_DRV_STATE_LISTENING;
+		wake_up_process(asr_stream->wait_for_trigger);
+
+		mutex_unlock(&vox->drv_state_lock);
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		if (asr_stream->asr_block_pending)
-			/*
-			 * Force a wait until the current block has completed
-			 * before finishing up otherwise CLSIC complains.
-			 */
-			wait_for_completion(&asr_stream->asr_block_completion);
+		mutex_lock(&vox->drv_state_lock);
+		if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
+			vox->asr_stream.listen_error = true;
+			complete(&vox->asr_stream.trigger_heard);
+		} else if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
+			if (asr_stream->asr_block_pending)
+				/*
+				 * Force a wait until the current block has
+				 * completed before finishing up otherwise CLSIC
+				 * complains.
+				 */
+				wait_for_completion(
+					&asr_stream->asr_block_completion);
+		}
 
 		vox->trigger_phrase_id = VOX_TRGR_INVALID;
 		vox->trigger_engine_id = VOX_TRGR_INVALID;
 
 		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+
+		mutex_unlock(&vox->drv_state_lock);
 
 		break;
 	default:
@@ -2373,8 +2400,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 
 	switch (ucontrol->value.enumerated.item[0]) {
 	case VOX_DRV_STATE_GET_BIO_RESULTS:
-		if ((vox->drv_state == VOX_DRV_STATE_LISTENING) ||
-		    (vox->drv_state == VOX_DRV_STATE_STREAMING)) {
+		if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
 			vox->drv_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
 			mutex_unlock(&vox->drv_state_lock);
 			schedule_work(&vox->drv_state_work);
