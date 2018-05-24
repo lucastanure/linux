@@ -107,12 +107,8 @@ static int clsic_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
-/*
- * XXX The "_broken" suffix is there to prevent the module from autoloading on
- * platform boot, that will be removed later in the project.
- */
 static const struct spi_device_id clsic_spi_ids[] = {
-	{ "clsic_broken", 1 },
+	{ "clsic", 1 },
 	{ },
 };
 

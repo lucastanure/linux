@@ -794,9 +794,16 @@ static int clsic_alg_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id clsic_alg_of_match[] = {
+	{ .compatible = "cirrus,clsic-alg", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, clsic_alg_of_match);
+
 static struct platform_driver clsic_alg_driver = {
 	.driver = {
 		.name = "clsic-alg",
+		.of_match_table = clsic_alg_of_match,
 	},
 	.probe = clsic_alg_probe,
 	.remove = clsic_alg_remove,

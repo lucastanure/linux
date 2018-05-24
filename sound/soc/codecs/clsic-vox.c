@@ -3035,10 +3035,17 @@ static int clsic_vox_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id clsic_vox_of_match[] = {
+	{ .compatible = "cirrus,clsic-vox", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, clsic_vox_of_match);
+
 static struct platform_driver clsic_vox_driver = {
 	.driver = {
 		.name = "clsic-vox",
 		.owner = THIS_MODULE,
+		.of_match_table = clsic_vox_of_match,
 	},
 	.probe = clsic_vox_probe,
 	.remove = clsic_vox_remove,
