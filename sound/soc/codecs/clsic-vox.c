@@ -482,6 +482,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		reinit_completion(&asr_stream->trigger_heard);
 
 		reinit_completion(&vox->new_bio_results_completion);
+		vox->auth_error = CLSIC_ERR_NONE;
 
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
@@ -1836,8 +1837,13 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	vox->get_bio_results_early_exit = false;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
 
-	/* Firstly wait for CLSIC to notify us of new results. */
-	wait_for_completion(&vox->new_bio_results_completion);
+	/*
+	 * Firstly wait for CLSIC to notify us of new results. There are no
+	 * further notifications after the last one if it contains the
+	 * CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED error code.
+	 */
+	if (vox->auth_error != CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED)
+		wait_for_completion(&vox->new_bio_results_completion);
 	reinit_completion(&vox->new_bio_results_completion);
 
 	if (vox->get_bio_results_early_exit)
@@ -1850,12 +1856,14 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 
 	switch (vox->auth_error) {
 	case CLSIC_ERR_NONE:
+		break;
 	case CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED:
 		/*
 		 * For CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED, the maximum amount of
 		 * audio has been processed however biometric results can still
 		 * be obtained.
 		 */
+		vox->clsic_error_code = CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED;
 		break;
 	case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
 	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
