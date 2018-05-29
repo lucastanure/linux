@@ -1186,7 +1186,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
-		.compress_new = snd_soc_new_compress,
+		.compress_new = &snd_soc_new_compress,
 	},
 	{
 		.name = "cs48l32-dsp-trace",
@@ -1207,7 +1207,7 @@ static struct snd_soc_dai_driver cs48l32_dai[] = {
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
-		.compress_new = snd_soc_new_compress,
+		.compress_new = &snd_soc_new_compress,
 	},
 	{
 		.name = "cs48l32-dsp-voicectrl",
@@ -1310,25 +1310,25 @@ static int cs48l32_set_fll(struct snd_soc_component *comp, int fll_id, int sourc
 }
 
 static const struct snd_compr_ops cs48l32_compr_ops = {
-	.open = cs48l32_compr_open,
-	.free = wm_adsp_compr_free,
-	.set_params = wm_adsp_compr_set_params,
-	.get_caps = wm_adsp_compr_get_caps,
-	.trigger = wm_adsp_compr_trigger,
-	.pointer = wm_adsp_compr_pointer,
-	.copy = wm_adsp_compr_copy,
+	.open = &cs48l32_compr_open,
+	.free = &wm_adsp_compr_free,
+	.set_params = &wm_adsp_compr_set_params,
+	.get_caps = &wm_adsp_compr_get_caps,
+	.trigger = &wm_adsp_compr_trigger,
+	.pointer = &wm_adsp_compr_pointer,
+	.copy = &wm_adsp_compr_copy,
 };
 
 static struct snd_soc_component_driver soc_component_dev_cs48l32 = {
-	.probe = cs48l32_component_probe,
-	.remove = cs48l32_component_remove,
-	.compr_ops = cs48l32_compr_ops,
+	.probe = &cs48l32_component_probe,
+	.remove = &cs48l32_component_remove,
+	.compr_ops = &cs48l32_compr_ops,
 
 	.idle_bias_on = false,
 	.name		= DRV_NAME,
 
-	.set_sysclk = tacna_set_sysclk,
-	.set_pll = cs48l32_set_fll,
+	.set_sysclk = &tacna_set_sysclk,
+	.set_pll = &cs48l32_set_fll,
 
 	.controls = cs48l32_snd_controls,
 	.num_controls = ARRAY_SIZE(cs48l32_snd_controls),
@@ -1494,8 +1494,8 @@ static struct platform_driver cs48l32_component_driver = {
 		.name = "cs48l32-codec",
 		.owner = THIS_MODULE,
 	},
-	.probe = cs48l32_probe,
-	.remove = cs48l32_remove,
+	.probe = &cs48l32_probe,
+	.remove = &cs48l32_remove,
 };
 
 module_platform_driver(cs48l32_component_driver);
