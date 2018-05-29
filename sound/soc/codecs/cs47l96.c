@@ -2549,7 +2549,7 @@ static struct snd_soc_dai_driver cs47l96_dai[] = {
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
-		.compress_new = snd_soc_new_compress,
+		.compress_new = &snd_soc_new_compress,
 	},
 	{
 		.name = "cs47l96-dsp-trace",
@@ -2714,25 +2714,25 @@ static int cs47l96_set_sysclk(struct snd_soc_component *comp, int clk_id,
 }
 
 static const struct snd_compr_ops cs47l96_compr_ops = {
-	.open = cs47l96_compr_open,
-	.free = wm_adsp_compr_free,
-	.set_params = wm_adsp_compr_set_params,
-	.get_caps = wm_adsp_compr_get_caps,
-	.trigger = wm_adsp_compr_trigger,
-	.pointer = wm_adsp_compr_pointer,
-	.copy = wm_adsp_compr_copy,
+	.open = &cs47l96_compr_open,
+	.free = &wm_adsp_compr_free,
+	.set_params = &wm_adsp_compr_set_params,
+	.get_caps = &wm_adsp_compr_get_caps,
+	.trigger = &wm_adsp_compr_trigger,
+	.pointer = &wm_adsp_compr_pointer,
+	.copy = &wm_adsp_compr_copy,
 };
 
 static struct snd_soc_component_driver soc_component_dev_cs47l96 = {
-	.probe = cs47l96_component_probe,
-	.remove = cs47l96_component_remove,
-	.compr_ops = cs47l96_compr_ops,
+	.probe = &cs47l96_component_probe,
+	.remove = &cs47l96_component_remove,
+	.compr_ops = &cs47l96_compr_ops,
 
 	.idle_bias_on = false,
 	.name 	= DRV_NAME,
 
-	.set_sysclk = cs47l96_set_sysclk,
-	.set_pll = cs47l96_set_fll,
+	.set_sysclk = &cs47l96_set_sysclk,
+	.set_pll = &cs47l96_set_fll,
 
 	.controls = cs47l96_snd_controls,
 	.num_controls = ARRAY_SIZE(cs47l96_snd_controls),
@@ -2909,8 +2909,8 @@ static struct platform_driver cs47l96_component_driver = {
 		.name = "cs47l96-codec",
 		.owner = THIS_MODULE,
 	},
-	.probe = cs47l96_probe,
-	.remove = cs47l96_remove,
+	.probe = &cs47l96_probe,
+	.remove = &cs47l96_remove,
 };
 
 module_platform_driver(cs47l96_component_driver);
