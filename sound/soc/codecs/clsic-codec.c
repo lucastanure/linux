@@ -1764,8 +1764,8 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 
 		if (ret != 0)
 			dev_err(codec->dev,
-				"%s():%u Failed to add DSP2 dapm controls: %d\n"
-				, __func__, __LINE__, ret);
+			       "%s():%u Failed to add DSP2 dapm controls: %d\n",
+			       __func__, __LINE__, ret);
 
 		ret = snd_soc_dapm_add_routes(clsic_codec->core.tacna->dapm,
 			clsic_dapm_routes_dsp2_visible,
@@ -1784,8 +1784,8 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 
 		if (ret != 0)
 			dev_err(codec->dev,
-				"%s():%u Failed to add DSP2 dapm controls: %d\n"
-				, __func__, __LINE__, ret);
+			       "%s():%u Failed to add DSP2 dapm controls: %d\n",
+			       __func__, __LINE__, ret);
 
 		ret = snd_soc_dapm_add_routes(clsic_codec->core.tacna->dapm,
 			clsic_dapm_routes_dsp2_hidden,
