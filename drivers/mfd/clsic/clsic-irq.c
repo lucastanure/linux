@@ -12,7 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/gpio.h>
-
+#include "clsic-trace.h"
 #include <linux/mfd/clsic/core.h>
 #include <linux/mfd/clsic/irq.h>
 #include <linux/mfd/clsic/message.h>
@@ -114,8 +114,10 @@ static int clsic_simirq_write(void *data, u64 val)
 	if (val == 0) {
 		clsic->simirq_state = CLSIC_SIMIRQ_STATE_DEASSERTED;
 		del_timer_sync(&clsic->simirq_timer);
+		trace_clsic_simirq_write_deasserted(0);
 	} else {
 		clsic->simirq_state = CLSIC_SIMIRQ_STATE_ASSERTED;
+		trace_clsic_simirq_write_asserted(0);
 	}
 
 	schedule_work(&clsic->simirq_work);

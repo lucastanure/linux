@@ -752,6 +752,16 @@ TRACE_EVENT(clsic_alg_read,
 			)
 );
 
+DEFINE_EVENT(clsic_vox_generic, clsic_simirq_write_asserted,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_simirq_write_deasserted,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
 #endif /* CLSIC_TRACE_H */
 
 /* This part must be outside protection */
