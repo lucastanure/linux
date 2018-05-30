@@ -2853,8 +2853,8 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	memset(&vox->file_id_mixer_ctrl, 0, sizeof(vox->file_id_mixer_ctrl));
 	vox->file_id_mixer_ctrl.min = 0;
-	vox->file_id_mixer_ctrl.max = UINT_MAX;
-	vox->file_id_mixer_ctrl.platform_max = UINT_MAX;
+	vox->file_id_mixer_ctrl.max = INT_MAX;
+	vox->file_id_mixer_ctrl.platform_max = INT_MAX;
 	vox->file_id_mixer_ctrl.dobj.private = &vox->file_id;
 	vox_int_control_helper(&vox->kcontrol_new[ctl_id],
 			       "Vox Asset Filename ID",
