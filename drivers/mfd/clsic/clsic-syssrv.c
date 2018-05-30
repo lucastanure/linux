@@ -215,9 +215,9 @@ static int clsic_system_service_finder(struct clsic *clsic,
 	struct mfd_cell *dev;
 	struct device_node *services_np, *child_np;
 
-	services_np = of_get_child_by_name(clsic->dev->of_node, "services");
+	services_np = of_get_child_by_name(clsic->dev->of_node, "cirrus,services");
 	for_each_child_of_node(services_np, child_np) {
-		of_property_read_u32(child_np, "type", &type);
+		of_property_read_u32(child_np, "cirrus,service-type", &type);
 		if (service_type != type)
 			continue;
 		if (clsic->service_handlers[service_instance] != NULL)
