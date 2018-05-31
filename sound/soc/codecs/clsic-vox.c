@@ -2443,7 +2443,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 
 	if (ret == -EINVAL)
 		clsic_err(vox->codec,
-			  "unable to switch to vox driver state %d.\n",
+			  "unable to switch from vox driver state %d to %d.\n",
+			  vox->drv_state,
 			  ucontrol->value.enumerated.item[0]);
 
 	return ret;
