@@ -127,23 +127,43 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(rtd->codec);
+	int ret = 0;
+
+	/*
+	 * When the ASR stream is open we must prevent the sound card and the
+	 * core CLSIC drivers from being unloaded as this would make the
+	 * callback function pointers invalid.
+	 *
+	 * Attempt to get a reference count on the required driver modules,
+	 * these calls may fail if the module is already being unloaded.
+	 */
+	if (!try_module_get(vox->codec->component.card->owner))
+		return -EBUSY;
+
+	if (!try_module_get(vox->clsic->dev->driver->owner)) {
+		module_put(vox->codec->component.card->owner);
+		return -EBUSY;
+	}
 
 	if (strcmp(rtd->codec_dai->name, "clsic-dsp-vox-asr") != 0) {
 		clsic_err(vox->clsic,
 			  "No compressed stream supported for: %s\n",
 			  rtd->codec_dai->name);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error_return;
 	}
 
 	if (vox->asr_stream.stream) {
 		clsic_err(vox->clsic, "ASR stream already active.\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto error_return;
 	}
 
 	if (stream->direction != SND_COMPRESS_CAPTURE) {
 		clsic_err(vox->clsic,
 			  "Only capture is supported for ASR stream.\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error_return;
 	}
 
 	vox->asr_stream.stream = stream;
@@ -153,6 +173,11 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	trace_clsic_vox_asr_stream_open(stream->direction);
 
 	return 0;
+
+error_return:
+	module_put(vox->clsic->dev->driver->owner);
+	module_put(vox->codec->component.card->owner);
+	return ret;
 }
 
 /**
@@ -183,6 +208,9 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	mutex_lock(&asr_stream->stream_lock);
 	asr_stream->stream = NULL;
 	mutex_unlock(&asr_stream->stream_lock);
+
+	module_put(vox->clsic->dev->driver->owner);
+	module_put(vox->codec->component.card->owner);
 
 	return 0;
 }
@@ -355,6 +383,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 
 	trace_clsic_vox_asr_stream_data_rcv(payload_sz);
 
+	module_put(vox->codec->dev->driver->owner);
 	return CLSIC_MSG_RELEASED;
 }
 
@@ -373,6 +402,13 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 	union clsic_vox_msg msg_cmd;
 	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
 	int ret;
+
+	/*
+	 * when an async message is outstanding the vox driver cannot be
+	 * unloaded as this would make the callback function invalid
+	 */
+	if (!try_module_get(vox->codec->dev->driver->owner))
+		return -EBUSY;
 
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
@@ -395,6 +431,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 			snd_compr_fragment_elapsed(asr_stream->stream);
 		mutex_unlock(&asr_stream->stream_lock);
 
+		module_put(vox->codec->dev->driver->owner);
 		return -EINVAL;
 	}
 
@@ -3044,6 +3081,9 @@ static int clsic_vox_remove(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s() dev %p priv %p.\n",
 		 __func__, &pdev->dev, vox);
+
+	if (vox->clsic_mode != CLSIC_VOX_MODE_IDLE)
+		return -EBUSY;
 
 	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_codec(&pdev->dev);
