@@ -2563,12 +2563,29 @@ static int vox_notification_handler(struct clsic *clsic,
 	return ret;
 }
 
+/*
+ * Callback to provide information of vox integer controls
+ */
+static int vox_int_control_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_mreg_control *mc =
+		(struct soc_mreg_control *)kcontrol->private_value;
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = mc->min;
+	uinfo->value.integer.max = mc->max;
+
+	return 0;
+}
+
 static void vox_int_control_helper(struct snd_kcontrol_new *kc,
 				   const char *control_name,
 				   unsigned long private_value)
 {
 	kc->name = control_name;
-	kc->info = snd_soc_info_volsw;
+	kc->info = vox_int_control_info;
 	kc->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	kc->get = vox_ctrl_int_get;
 	kc->put = vox_ctrl_int_put;
