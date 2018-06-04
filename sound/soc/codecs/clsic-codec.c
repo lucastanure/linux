@@ -1,9 +1,7 @@
 /*
  * clsic-codec.c -- ALSA SoC Audio driver for CLSIC codec
  *
- * Copyright 2017 CirrusLogic, Inc.
- *
- * Author: Simon Trimmer <simont@opensource.cirrus.com>
+ * Copyright 2016-2018 Cirrus Logic
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
