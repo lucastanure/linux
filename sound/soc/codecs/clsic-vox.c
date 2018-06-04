@@ -709,7 +709,7 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
-	trace_clsic_vox_set_mode(new_mode);
+	trace_clsic_vox_set_mode(vox->clsic_mode, new_mode);
 
 	if (vox->clsic_mode == new_mode)
 		return 0;

@@ -343,17 +343,21 @@ TRACE_EVENT(clsic_vox_asr_stream_copy_end,
 );
 
 TRACE_EVENT(clsic_vox_set_mode,
-	TP_PROTO(enum clsic_vox_mode mode),
-	TP_ARGS(mode),
+	TP_PROTO(enum clsic_vox_mode old_mode, enum clsic_vox_mode new_mode),
+	TP_ARGS(old_mode, new_mode),
 	TP_STRUCT__entry(
-			__field(uint8_t, mode)
+			__field(uint8_t, old_mode)
+			__field(uint8_t, new_mode)
 			),
 	TP_fast_assign(
-			__entry->mode = mode
+			__entry->old_mode = old_mode;
+			__entry->new_mode = new_mode
 		),
-	TP_printk("CLSIC change vox mode to %s (0x%x)",
-		  clsic_mode_to_string(__entry->mode),
-		  __entry->mode
+	TP_printk("CLSIC change vox mode from %s (0x%x) to %s (0x%x)",
+		  clsic_mode_to_string(__entry->old_mode),
+		  __entry->old_mode,
+		  clsic_mode_to_string(__entry->new_mode),
+		  __entry->new_mode
 		)
 );
 
