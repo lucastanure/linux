@@ -2681,8 +2681,6 @@ static int tacna_set_dacclk(struct snd_soc_component *comp, int source,
 	}
 
 	switch (priv->tacna->type) {
-	case CS47L94:
-	case CS47L95:
 	case CS47L96:
 	case CS47L97:
 		if (freq % 4000)
