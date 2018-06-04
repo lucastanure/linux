@@ -765,6 +765,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 static void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
 				  int drv_state)
 {
+	trace_clsic_vox_set_idle_and_mode(set_clsic_to_idle, drv_state);
+
 	if (set_clsic_to_idle)
 		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
 

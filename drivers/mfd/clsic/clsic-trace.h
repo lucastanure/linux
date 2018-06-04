@@ -357,6 +357,24 @@ TRACE_EVENT(clsic_vox_set_mode,
 		)
 );
 
+TRACE_EVENT(clsic_vox_set_idle_and_mode,
+	TP_PROTO(bool set_clsic_to_idle, unsigned int drv_state),
+	TP_ARGS(set_clsic_to_idle, drv_state),
+	TP_STRUCT__entry(
+			__field(bool, set_clsic_to_idle)
+			__field(unsigned int, drv_state)
+			),
+	TP_fast_assign(
+			__entry->set_clsic_to_idle = set_clsic_to_idle;
+			__entry->drv_state = drv_state
+		),
+	TP_printk(
+		  "CLSIC will %s set to IDLE mode and driver state will be set to %d",
+		  __entry->set_clsic_to_idle ? "be" : "not be",
+		  __entry->drv_state
+		)
+);
+
 TRACE_EVENT(clsic_vox_remove_user,
 	TP_PROTO(uint8_t user_id, uint8_t phrase_id),
 	TP_ARGS(user_id, phrase_id),
