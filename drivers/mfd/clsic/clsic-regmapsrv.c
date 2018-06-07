@@ -109,7 +109,7 @@ static int clsic_ras_simple_readregister(
 	}
 
 	trace_clsic_ras_simpleread(msg_cmd.cmd_rdreg.addr,
-				   (unsigned int) *value, ret);
+				   msg_rsp.rsp_rdreg.value, ret);
 	return ret;
 }
 
