@@ -180,41 +180,55 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 	struct clsic *clsic = vox->clsic;
 	size_t frag_sz = params->buffer.fragment_size;
 	int block_sz, i, frame_sz;
-	bool params_ok = true;
 
 	frame_sz = params->codec.ch_in * PCM_S16_LE_BYTES_PER_SAMPLE;
 	if (frag_sz % frame_sz) {
 		clsic_err(clsic,
-			  "%u is not a supported ASR stream fragment size.\n",
-			  params->buffer.fragment_size);
+			  "requested ASR stream fragment size %u is not supported (frame size %u).\n",
+			  frag_sz, frame_sz);
 		return -EINVAL;
 	}
 	block_sz = clsic_vox_asr_stream_block_sz(frag_sz / frame_sz);
 	if (block_sz < 0) {
 		clsic_err(clsic,
-			  "%u is not a supported ASR stream fragment size.\n",
-			  params->buffer.fragment_size);
+			  "requested ASR stream fragment size %u is not supported (frame size %u).\n",
+			  frag_sz, frame_sz);
 		return -EINVAL;
 	}
 
-	params_ok = params_ok && (clsic_asr_stream_caps.id == params->codec.id);
-	params_ok = params_ok &&
-		(clsic_asr_stream_caps.desc.max_ch == params->codec.ch_in);
-	params_ok = params_ok && (clsic_asr_stream_caps.desc.formats &
-		(1 << params->codec.format));
+	if (clsic_asr_stream_caps.id != params->codec.id) {
+		clsic_err(clsic,
+			  "requested codec ID (%u) is not correct (%u).\n",
+			  params->codec.id, clsic_asr_stream_caps.id);
+		return -EINVAL;
+	}
+
+	if (clsic_asr_stream_caps.desc.max_ch != params->codec.ch_in) {
+		clsic_err(clsic,
+			  "requested ch_in (%u) is not supported number of channels (%u).\n",
+			  params->codec.ch_in,
+			  clsic_asr_stream_caps.desc.max_ch);
+		return -EINVAL;
+	}
+
+	if (!(clsic_asr_stream_caps.desc.formats
+	      & (1 << params->codec.format))) {
+		clsic_err(clsic,
+			  "requested format bit %d is not supported (format bitmask: 0x%x).\n",
+			  params->codec.format,
+			  clsic_asr_stream_caps.desc.formats);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < clsic_asr_stream_caps.desc.num_sample_rates; ++i)
 		if (clsic_asr_stream_caps.desc.sample_rates[i] ==
 				params->codec.sample_rate)
 			break;
-	params_ok = params_ok &&
-			(i < clsic_asr_stream_caps.desc.num_sample_rates);
 
-	if (!params_ok) {
+	if (i >= clsic_asr_stream_caps.desc.num_sample_rates) {
 		clsic_err(clsic,
-			  "Invalid params id=%u, ch=%u,%u, rate=%u fmt=%u\n",
-			  params->codec.id, params->codec.ch_in,
-			  params->codec.ch_out, params->codec.sample_rate,
-			  params->codec.format);
+			  "requested sample rate (%u) is not supported.\n",
+			  params->codec.sample_rate);
 		return -EINVAL;
 	}
 
