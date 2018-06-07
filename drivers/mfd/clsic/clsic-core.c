@@ -42,8 +42,6 @@ module_param(clsic_bootonload, bool, 0000);
 MODULE_PARM_DESC(clsic_bootonload,
 		 "Whether to boot the device when the module is loaded");
 
-#define CLSIC_POST_RESET_DELAY	500
-
 /* CLSIC_PM_AUTOSUSPEND_MS is used as the idle time for runtime autosuspend */
 #define CLSIC_PM_AUTOSUSPEND_MS		(15 * 1000)
 
@@ -93,14 +91,13 @@ void clsic_soft_reset(struct clsic *clsic)
 				   CLSIC_FW_UPDATE_BIT, CLSIC_FW_UPDATE_BIT);
 
 	regmap_write(clsic->regmap, TACNA_SFT_RESET, CLSIC_SOFTWARE_RESET_CODE);
-	msleep(CLSIC_POST_RESET_DELAY);
 	clsic_wait_for_boot_done(clsic);
 }
 
 static void clsic_hard_reset(struct clsic *clsic)
 {
 	clsic_enable_hard_reset(clsic);
-	msleep(CLSIC_POST_RESET_DELAY);
+	usleep_range(1000, 2000);
 	clsic_disable_hard_reset(clsic);
 
 	clsic_wait_for_boot_done(clsic);
