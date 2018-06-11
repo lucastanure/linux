@@ -63,16 +63,24 @@ struct clsic_alg {
 	struct snd_soc_codec *codec;
 
 	struct regmap *regmap;
-	struct mutex regmap_mutex;
+	struct mutex regmapMutex;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *raw_msg_file;
+	struct dentry *rawMsgFile;
 #endif
 	struct wm_adsp *vpu;
 	struct wm_adsp dsp[2];
-	struct mutex dsp_rate_lock;
+	struct mutex dspRateLock;
 };
 
+/**
+ * clsic_alg_simple_readregister() - Single 32bit word read over SPI
+ * @alg:	The main instance of struct clsic_alg used in this driver.
+ * @address:	Address of 32bit word to be read.
+ * @value:	Pointer to address at which read value is returned
+ *
+ * Return: 0 success, -EIO on error.
+ */
 static int clsic_alg_simple_readregister(struct clsic_alg *alg,
 					 uint32_t address, __be32 *value)
 {
@@ -121,6 +129,14 @@ static int clsic_alg_simple_readregister(struct clsic_alg *alg,
 	return ret;
 }
 
+/**
+ * clsic_alg_simple_writeregister() - Single 32bit word write over SPI
+ * @alg:	The main instance of struct clsic_alg used in this driver.
+ * @address:	Address of 32bit word to be written.
+ * @value:	Value to be written.
+ *
+ * Return: 0 success, -EIO on error.
+ */
 static int clsic_alg_simple_writeregister(struct clsic_alg *alg,
 					  uint32_t address, __be32 value)
 {
@@ -167,6 +183,23 @@ static int clsic_alg_simple_writeregister(struct clsic_alg *alg,
 	return ret;
 }
 
+/**
+ * clsic_alg_read() - Read data over SPI
+ *
+ * This function is called via the regmap_bus interface when a number of
+ * sequential register reads are requested on the regmap, it has to iterate
+ * through the request making individual register read requests.
+ *
+ * As with the sub functions it uses, the values passed to this function are in
+ * the regmap bus order that we're exposing (big endian) so the function needs
+ * to translate the address to read to the native cpu ordering before sending
+ * on the request.
+ *
+ * If/when the register access service gets multiple register read/write
+ * operations this could be made more efficient.
+ *
+ * Return: 0 success, -EIO on error.
+ */
 static int clsic_alg_read(void *context, const void *reg_buf,
 			  const size_t reg_size, void *val_buf,
 			  const size_t val_size)
@@ -175,7 +208,9 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 	struct clsic_alg *alg = context;
 	u32 reg = be32_to_cpu(*(const __be32 *) reg_buf);
 	int ret = 0;
-	size_t i, j, frag_sz;
+	size_t i;
+	size_t j;
+	size_t frag_sz;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
 
@@ -213,19 +248,23 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 		 */
 		if (ret != 0) {
 			clsic_dbg(clsic, "0x%x ret %d", reg, ret);
-			return -EIO;
+			ret = -EIO;
 		} else if ((clsic_get_bulk_bit(msg_rsp.rsp_rdreg_bulk.hdr.sbc)
 			    == 0) && (msg_rsp.rsp_rdreg_bulk.hdr.err != 0)) {
 			clsic_dbg(clsic, "rsp addr: 0x%x status %d\n", reg,
 				  msg_rsp.rsp_rdreg_bulk.hdr.err);
-			return -EIO;
+			ret = -EIO;
 		} else if (msg_rsp.blkrsp_rdreg_bulk.hdr.err != 0) {
 			clsic_dbg(clsic, "blkrsp addr: 0x%x status %d\n", reg,
 				  msg_rsp.blkrsp_rdreg_bulk.hdr.err);
-			return -EIO;
+			ret = -EIO;
+		} else {
+			/* The request succeeded */
+			ret = 0;
 		}
-		/* The request succeeded */
-		ret = 0;
+
+		if (ret != 0)
+			return ret;
 
 		/*
 		 * The regmap bus is declared as BIG endian but all the
@@ -240,6 +279,23 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 	return ret;
 }
 
+/**
+ * clsic_alg_write() - Write data over SPI
+ *
+ * This function is called via the regmap_bus interface when a number of
+ * sequential register reads are requested on the regmap, it has to iterate
+ * through the request making individual register write requests.
+ *
+ * As with the sub functions it uses, the values passed to this function are in
+ * the regmap bus order that we're exposing (big endian) so the function needs
+ * to translate the address to write to the native cpu ordering before sending
+ * on the request.
+ *
+ * If/when the register access service gets multiple register read/write
+ * operations this could be made more efficient.
+ *
+ * Return: 0 success, -EIO on error.
+ */
 static int clsic_alg_write(void *context, const void *val_buf,
 			   const size_t val_size)
 {
@@ -248,7 +304,8 @@ static int clsic_alg_write(void *context, const void *val_buf,
 	const __be32 *buf = val_buf;
 	u32 addr = be32_to_cpu(buf[0]);
 	int ret = 0;
-	size_t i, payload_sz;
+	size_t i;
+	size_t payload_sz;
 	size_t frag_sz;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
@@ -308,15 +365,17 @@ static int clsic_alg_write(void *context, const void *val_buf,
 		if (ret != 0) {
 			clsic_dbg(clsic, "0x%x ret %d", addr, ret);
 			ret = -EIO;
-			goto error;
 		} else if (msg_rsp.rsp_wrreg_bulk.hdr.err != 0) {
 			clsic_dbg(clsic, "addr: 0x%x status %d\n", addr,
 				  msg_rsp.rsp_wrreg_bulk.hdr.err);
 			ret = -EIO;
-			goto error;
+		} else {
+			/* The request succeeded */
+			ret = 0;
 		}
-		/* The request succeeded */
-		ret = 0;
+
+		if (ret != 0)
+			goto error;
 	}
 
 error:
@@ -377,16 +436,26 @@ static void clsic_alg_regmap_lock(void *context)
 {
 	struct clsic_alg *alg = context;
 
-	mutex_lock(&alg->regmap_mutex);
+	mutex_lock(&alg->regmapMutex);
 }
 
 static void clsic_alg_regmap_unlock(void *context)
 {
 	struct clsic_alg *alg = context;
 
-	mutex_unlock(&alg->regmap_mutex);
+	mutex_unlock(&alg->regmapMutex);
 }
 
+/**
+ * clsic_alg_readable_register()
+ *
+ * Check if a register is defined as readable by the algorithm service
+ *
+ * @dev:	Pointer to device structure
+ * @reg:	Register address to be checked
+ *
+ * Return: 0 non-readable, 1 readable.
+ */
 bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
@@ -418,9 +487,7 @@ bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
 }
 
 /*
- * The regmap_config for the service is different to the one setup by the main
- * driver; as this is tunneling over the messaging protocol to access the
- * registers of the device the values can be cached.
+ * regmap_config for the algorithm service
  */
 static struct regmap_config regmap_config_alg = {
 	.reg_bits = CLSIC_ALG_REG_BITS,
@@ -572,12 +639,12 @@ static ssize_t clsic_alg_custom_message_write(struct file *file,
 		return -EINVAL;
 	}
 #ifdef CONFIG_DEBUG_FS
-	mutex_lock(&alg->regmap_mutex);
+	mutex_lock(&alg->regmapMutex);
 #endif
 	ret = clsic_send_msg_sync(clsic, msg_p, msg_p, txbuf, txcount,
 							    rxbuf, rxcount);
 #ifdef CONFIG_DEBUG_FS
-	mutex_unlock(&alg->regmap_mutex);
+	mutex_unlock(&alg->regmapMutex);
 #endif
 	/*
 	 * Response gets stored in private_data automatically but we need to
@@ -619,6 +686,16 @@ static const struct file_operations clsic_alg_custom_message_fops = {
 };
 #endif
 
+/**
+ * clsic_alg_init_dsps()
+ *
+ * Initialise DSP configurations
+ *
+ * @dev:	Pointer to device structure.
+ * @alg:	The main instance of struct clsic_alg used in this driver.
+ *
+ * Return: 0 success
+ */
 static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
 {
 	struct wm_adsp *dsp;
@@ -640,7 +717,7 @@ static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
 	dsp->n_rx_channels = CLSIC_DSP1_N_RX_CHANNELS;
 	dsp->n_tx_channels = CLSIC_DSP1_N_TX_CHANNELS;
 
-	ret = wm_halo_init(dsp, &alg->dsp_rate_lock);
+	ret = wm_halo_init(dsp, &alg->dspRateLock);
 	if (ret != 0)
 		clsic_err(alg->clsic, "Failed to initialise DSP1\n");
 
@@ -663,7 +740,7 @@ static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
 	dsp->n_rx_channels = CLSIC_DSP2_N_RX_CHANNELS;
 	dsp->n_tx_channels = CLSIC_DSP2_N_TX_CHANNELS;
 
-	ret = wm_halo_init(dsp, &alg->dsp_rate_lock);
+	ret = wm_halo_init(dsp, &alg->dspRateLock);
 	if (ret != 0)
 		clsic_err(alg->clsic, "Failed to initialise DSP2\n");
 
@@ -674,6 +751,14 @@ static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
 	return ret;
 }
 
+/**
+ * clsic_alg_codec_probe() - probe function for the codec part of the driver
+ * @codec:	The main shared instance of struct snd_soc_codec used in CLSIC.
+ *
+ * Initialise ALSA controls on VPU and DSPs
+ *
+ * Return: 0 success
+ */
 static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 {
 	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
@@ -696,6 +781,12 @@ static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 	return 0;
 }
 
+/**
+ * clsic_alg_codec_remove() - remove function for the codec part of the driver
+ * @codec:	The main shared instance of struct snd_soc_codec used in CLSIC.
+ *
+ * Return: 0 success
+ */
 static int clsic_alg_codec_remove(struct snd_soc_codec *codec)
 {
 	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
@@ -710,6 +801,14 @@ static struct snd_soc_codec_driver soc_codec_clsic_alg = {
 	.remove = clsic_alg_codec_remove,
 };
 
+/**
+ * clsic_alg_probe() - probe function for the module
+ * @pdev:	Platform device struct.
+ *
+ * Standard module probe function.
+ *
+ * Return: errno.
+ */
 static int clsic_alg_probe(struct platform_device *pdev)
 {
 	struct clsic *clsic = dev_get_drvdata(pdev->dev.parent);
@@ -728,11 +827,11 @@ static int clsic_alg_probe(struct platform_device *pdev)
 	alg->service = clsic_service;
 
 #ifdef CONFIG_DEBUG_FS
-	alg->raw_msg_file = debugfs_create_file("alg_raw_message", 0600,
+	alg->rawMsgFile = debugfs_create_file("alg_raw_message", 0600,
 						clsic->debugfs_root, alg,
 						&clsic_alg_custom_message_fops);
 #endif
-	mutex_init(&alg->regmap_mutex);
+	mutex_init(&alg->regmapMutex);
 	regmap_config_alg.lock_arg = alg;
 
 	/* Set device specific data */
@@ -779,6 +878,14 @@ static int clsic_alg_probe(struct platform_device *pdev)
 	return ret;
 }
 
+/**
+ * clsic_alg_remove() - remove function for the module
+ * @pdev:	Platform device struct.
+ *
+ * Standard module remove function, removes debugfs interface
+ *
+ * Return: errno.
+ */
 static int clsic_alg_remove(struct platform_device *pdev)
 {
 	struct clsic_alg *alg = platform_get_drvdata(pdev);
@@ -787,7 +894,7 @@ static int clsic_alg_remove(struct platform_device *pdev)
 		 __func__, &pdev->dev, alg);
 
 #ifdef CONFIG_DEBUG_FS
-	debugfs_remove(alg->raw_msg_file);
+	debugfs_remove(alg->rawMsgFile);
 #endif
 	snd_soc_unregister_codec(&pdev->dev);
 
