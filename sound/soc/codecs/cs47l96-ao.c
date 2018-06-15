@@ -965,15 +965,7 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 				cs47l96_ao);
 	if (ret != 0) {
 		dev_err(&pdev->dev, "Failed to request DSP2_IRQ0: %d\n", ret);
-		goto error_dsp1ao_irq;
-	}
-
-	ret = tacna_request_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR,
-				"DSP1AO MPU", wm_halo_bus_error,
-				&cs47l96_ao->core.dsp[0]);
-	if (ret) {
-		dev_warn(&pdev->dev, "Failed to get DSP1AO MPU IRQ: %d\n", ret);
-		goto error_mpu_irq;
+		return ret;
 	}
 
 	dsp = &cs47l96_ao->core.dsp[0];
@@ -996,7 +988,16 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 
 	ret = wm_halo_init(dsp, &cs47l96_ao->core.rate_lock);
 	if (ret != 0)
-		goto error_core;
+		goto error_dsp1ao_irq0;
+
+	ret = tacna_request_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR,
+				"DSP1AO MPU", wm_halo_bus_error,
+				&cs47l96_ao->core.dsp[0]);
+	if (ret) {
+		dev_warn(&pdev->dev, "Failed to get DSP1AO MPU IRQ: %d\n",
+			 ret);
+		goto error_dsp_core;
+	}
 
 	cs47l96_ao->fll.tacna_priv = &cs47l96_ao->core;
 	cs47l96_ao->fll.id = 1;
@@ -1020,18 +1021,18 @@ static int cs47l96_ao_probe(struct platform_device *pdev)
 					      ARRAY_SIZE(cs47l96_ao_dai));
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to register component: %d\n", ret);
-		goto error_dsp;
+		goto error_mpu_irq;
 	}
 
 	return ret;
-error_dsp:
-	wm_adsp2_remove(&cs47l96_ao->core.dsp[0]);
-error_core:
-	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR, cs47l96_ao);
+
 error_mpu_irq:
+	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR,
+		       &cs47l96_ao->core.dsp[0]);
+error_dsp_core:
+	wm_adsp2_remove(&cs47l96_ao->core.dsp[0]);
+error_dsp1ao_irq0:
 	tacna_free_irq(tacna, TACNA_IRQ_DSP2_IRQ0, cs47l96_ao);
-error_dsp1ao_irq:
-	tacna_core_destroy(&cs47l96_ao->core);
 
 	return ret;
 }
@@ -1043,12 +1044,11 @@ static int cs47l96_ao_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
-	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR, cs47l96_ao);
+	tacna_free_irq(tacna, TACNA_IRQ_DSP2_MPU_ERR,
+		       &cs47l96_ao->core.dsp[0]);
 	tacna_free_irq(tacna, TACNA_IRQ_DSP2_IRQ0, cs47l96_ao);
 
 	wm_adsp2_remove(&cs47l96_ao->core.dsp[0]);
-
-	tacna_core_destroy(&cs47l96_ao->core);
 
 	return 0;
 }
