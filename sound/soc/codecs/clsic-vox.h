@@ -16,7 +16,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	21
+#define VOX_NUM_NEW_KCONTROLS	27
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT	4
 
@@ -135,6 +135,10 @@ struct clsic_vox {
 	unsigned int security_level;
 	unsigned int bio_results_format;
 	unsigned int clsic_error_code;
+	uint32_t scc_status;
+	int32_t scc_cap_delay_ms;
+	int32_t scc_triggerpoint;
+	int32_t scc_cap_preamble_ms;
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
 	struct clsic_vox_auth_key bio_pub_key;
@@ -171,6 +175,12 @@ struct clsic_vox {
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
 	struct soc_bytes_ext s_bytes_bio_pub_key;
+	struct soc_bytes_ext s_bytes_scc_manage_ack;
+	struct soc_bytes_ext s_bytes_scc_status;
+	struct soc_bytes_ext s_bytes_scc_cap_delay_ms;
+	struct soc_bytes_ext s_bytes_scc_triggerpoint;
+	struct soc_bytes_ext s_bytes_scc_cap_preamble_ms;
+	struct soc_bytes_ext s_bytes_scc_phraseid;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
@@ -347,3 +357,36 @@ static inline void set_error_info(struct clsic_vox *vox, int ret)
 	else
 		vox->error_info = VOX_ERROR_CLSIC;
 }
+
+/* SoundTrigger HAL-related definitions. */
+
+/* 8 bits in the bitmap */
+#define SCC_MANAGE_ACK_MAX_VALUE	255
+
+/* SCC_STATUS... */
+/* Indicates VTEx active. */
+#define VTE1_ACTIVE			(1 << 8)
+#define VTE2_ACTIVE			(1 << 9)
+/* Indicates VTEx has triggered since listening state was last entered. */
+#define VTE1_TRIGGERED_SINCE_LISTEN	(1 << 12)
+#define VTE2_TRIGGERED_SINCE_LISTEN	(1 << 13)
+/* Indicates VTEx was responsible for the most recent trigger event. */
+#define VTE1_TRIGGERED_MOST_RECENT	(1 << 16)
+#define VTE2_TRIGGERED_MOST_RECENT	(1 << 17)
+
+/* SCCMANAGEACKCTRL... */
+#define CTRL_ACK_SCC_NULL	0
+/* Start VTEx. */
+#define CTRL_ACK_START_VTE_1	(1 << 0)
+#define CTRL_ACK_START_VTE_2	(1 << 2)
+/* Stop VTEx. */
+#define CTRL_ACK_STOP_VTE_1	(1 << 1)
+#define CTRL_ACK_STOP_VTE_2	(1 << 3)
+/* Request streaming mode (without trigger). */
+#define CTRL_ACK_STREAM_MODE	(1 << 4)
+/* Inform DSP that buffer reading has ended. */
+#define CTRL_ACK_STOP_STREAM	(1 << 5)
+/* Acknowledge that the VTEx event has been seen. */
+#define CTRL_ACK_VTE1_TRIG	(1 << 6)
+#define CTRL_ACK_VTE2_TRIG	(1 << 7)
+

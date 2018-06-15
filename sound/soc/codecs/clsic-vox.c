@@ -354,6 +354,11 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	mutex_lock(&vox->drv_state_lock);
 	if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
 		vox->drv_state = VOX_DRV_STATE_STREAMING;
+
+		vox->scc_status &= (~VTE1_ACTIVE);
+		vox->scc_status |= VTE1_TRIGGERED_SINCE_LISTEN;
+		vox->scc_status |= VTE1_TRIGGERED_MOST_RECENT;
+
 		mutex_unlock(&vox->drv_state_lock);
 	} else {
 		mutex_unlock(&vox->drv_state_lock);
@@ -512,6 +517,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		trace_clsic_vox_asr_stream_listen(
 					msg_cmd.cmd_listen_start.trgr_domain);
 
+		vox->scc_status |= VTE1_ACTIVE;
+
 		asr_stream->listen_error = false;
 		asr_stream->asr_block_pending = false;
 		asr_stream->error = false;
@@ -530,6 +537,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
+		vox->scc_status = 0;
+
 		mutex_lock(&vox->drv_state_lock);
 		if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
 			vox->asr_stream.listen_error = true;
@@ -547,6 +556,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 		vox->trigger_phrase_id = VOX_TRGR_INVALID;
 		vox->trigger_engine_id = VOX_TRGR_INVALID;
+		vox->scc_cap_preamble_ms = 0;
 
 		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
@@ -2678,6 +2688,106 @@ static void vox_enum_control_helper(struct snd_kcontrol_new *kc,
 }
 
 /**
+ * vox_ctrl_scc_get() - read the bytes for commonly used SCC controls
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Allow userspace to read virtual SCC control registers.
+ *
+ * Return: errno.
+ */
+static int vox_ctrl_scc_get(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_bytes_ext *s_bytes_scc =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox = (struct clsic_vox *) s_bytes_scc->dobj.private;
+	uint32_t rgstr;
+	__be32 rgstr_be;
+
+	if (s_bytes_scc == &vox->s_bytes_scc_manage_ack)
+		/*
+		 * As we are simulating the SCCManageAckCtrl register on
+		 * a codec, we ensure that reads always get 0.
+		 */
+		rgstr = 0;
+	else if (s_bytes_scc == &vox->s_bytes_scc_status)
+		rgstr = vox->scc_status;
+	else if (s_bytes_scc == &vox->s_bytes_scc_cap_delay_ms)
+		rgstr = vox->scc_cap_delay_ms;
+	else if (s_bytes_scc == &vox->s_bytes_scc_triggerpoint)
+		rgstr = vox->scc_triggerpoint;
+	else if (s_bytes_scc == &vox->s_bytes_scc_cap_preamble_ms)
+		rgstr = vox->scc_cap_preamble_ms;
+	else if (s_bytes_scc == &vox->s_bytes_scc_phraseid)
+		rgstr = vox->trigger_phrase_id;
+	else {
+		clsic_err(vox->clsic,
+			  "unrecognised accessor %p\n", s_bytes_scc);
+		return -EINVAL;
+	}
+
+	rgstr_be = cpu_to_be32(rgstr);
+
+	if (!memcpy(ucontrol->value.bytes.data, &rgstr_be, sizeof(uint32_t)))
+		return -EIO;
+
+	return 0;
+}
+
+/**
+ * vox_ctrl_scc_put() - write the bytes for commonly used SCC controls
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Allow userspace to write virtual SCC control registers.
+ *
+ * Return: errno.
+ */
+static int vox_ctrl_scc_put(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_bytes_ext *s_bytes_scc =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox = (struct clsic_vox *) s_bytes_scc->dobj.private;
+	__be32 rgstr;
+
+	if (s_bytes_scc == &vox->s_bytes_scc_manage_ack) {
+		if (!memcpy(&rgstr, ucontrol->value.bytes.data,
+			    sizeof(uint32_t)))
+			return -EIO;
+
+		if ((vox->drv_state == VOX_DRV_STATE_STREAMING) ||
+		    (vox->drv_state == VOX_DRV_STATE_GETTING_BIO_RESULTS)) {
+			if (be32_to_cpu(rgstr) & CTRL_ACK_VTE1_TRIG)
+				vox->scc_status &=
+						(~VTE1_TRIGGERED_MOST_RECENT);
+			if (be32_to_cpu(rgstr) & CTRL_ACK_STOP_STREAM)
+				vox->scc_status = 0;
+		}
+	}
+
+	return 0;
+}
+
+static void vox_scc_control_helper(struct snd_kcontrol_new *kc,
+				   const char *control_name,
+				   struct soc_bytes_ext *s_bytes_var,
+				   struct clsic_vox *vox)
+{
+	s_bytes_var->max = sizeof(uint32_t);
+	kc->name = control_name;
+	kc->info = snd_soc_bytes_info_ext;
+	kc->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	kc->get = vox_ctrl_scc_get;
+	kc->put = vox_ctrl_scc_put;
+	kc->private_value = (unsigned long) s_bytes_var;
+	kc->access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+		     SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+	s_bytes_var->dobj.private = vox;
+}
+
+/**
  * clsic_vox_codec_probe() - probe function for the codec part of the driver
  * @codec:	The main shared instance of struct snd_soc_codec used in
  *		CLSIC.
@@ -2973,6 +3083,46 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			       "Vox Trigger Engine ID",
 			       (unsigned long) &vox->trgr_engine_id_mixer_ctrl);
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
+
+	ctl_id++;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox SCCMANAGEACKCTRL",
+			       &vox->s_bytes_scc_manage_ack,
+			       vox);
+
+	ctl_id++;
+	vox->scc_status = 0;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox SCC_STATUS",
+			       &vox->s_bytes_scc_status,
+			       vox);
+
+	ctl_id++;
+	vox->scc_cap_delay_ms = 0;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox VTE1_CAPDELAYMS",
+			       &vox->s_bytes_scc_cap_delay_ms,
+			       vox);
+
+	ctl_id++;
+	vox->scc_triggerpoint = 0;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox VTE1_TRIGGERPOINT",
+			       &vox->s_bytes_scc_triggerpoint,
+			       vox);
+
+	ctl_id++;
+	vox->scc_cap_preamble_ms = 0;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox VTE1_CAPPREAMBLEMS",
+			       &vox->s_bytes_scc_cap_preamble_ms,
+			       vox);
+
+	ctl_id++;
+	vox_scc_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox VTE1_PHRASEID",
+			       &vox->s_bytes_scc_phraseid,
+			       vox);
 
 	BUG_ON(VOX_NUM_NEW_KCONTROLS != (ctl_id + 1));
 
