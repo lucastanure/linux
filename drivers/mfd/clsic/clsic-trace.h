@@ -359,7 +359,7 @@ TRACE_EVENT(clsic_vox_set_mode,
 		)
 );
 
-TRACE_EVENT(clsic_vox_set_idle_and_mode,
+TRACE_EVENT(clsic_vox_set_idle_and_state,
 	TP_PROTO(bool set_clsic_to_idle, unsigned int drv_state),
 	TP_ARGS(set_clsic_to_idle, drv_state),
 	TP_STRUCT__entry(

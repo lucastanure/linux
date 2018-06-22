@@ -57,8 +57,9 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
-static void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-				  int drv_state);
+static void vox_set_idle_and_state(struct clsic_vox *vox,
+				   bool set_clsic_to_idle,
+				   int drv_state);
 
 /**
  * clsic_vox_asr_stream_open() - open the ASR stream
@@ -547,7 +548,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		vox->trigger_phrase_id = VOX_TRGR_INVALID;
 		vox->trigger_engine_id = VOX_TRGR_INVALID;
 
-		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 		mutex_unlock(&vox->drv_state_lock);
 
@@ -559,7 +560,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 exit:
 	/* In case of failure during SNDRV_PCM_TRIGGER_START. */
 	if (ret)
-		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -791,7 +792,7 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 }
 
 /**
- * vox_set_idle_and_mode() - set CLSIC to IDLE mode and set driver management
+ * vox_set_idle_and_state() - set CLSIC to IDLE mode and set driver management
  *			     mode
  * @vox:	The main instance of struct clsic_vox used in this driver.
  * @set_clsic_to_idle:	Whether to set CLSIC to IDLE mode or not.
@@ -803,10 +804,10 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  * that the error control node has changed value).
  *
  */
-static void vox_set_idle_and_mode(struct clsic_vox *vox, bool set_clsic_to_idle,
-				  int drv_state)
+static void vox_set_idle_and_state(struct clsic_vox *vox, bool set_clsic_to_idle,
+				   int drv_state)
 {
-	trace_clsic_vox_set_idle_and_mode(set_clsic_to_idle, drv_state);
+	trace_clsic_vox_set_idle_and_state(set_clsic_to_idle, drv_state);
 
 	if (set_clsic_to_idle)
 		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
@@ -1326,7 +1327,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1486,7 +1487,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1556,7 +1557,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1679,9 +1680,9 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 
 exit:
 	if (ret)
-		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	else
-		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
 
 	return ret;
 }
@@ -1744,7 +1745,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 
 exit:
 	if (ret)
-		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
 
 	return ret;
 }
@@ -1811,7 +1812,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 
 	return ret;
 }
@@ -1930,7 +1931,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_STREAMING);
+	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
 
 	return ret;
 }
@@ -1951,7 +1952,7 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
 
 	trace_clsic_vox_stop_bio_results(0);
 
-	vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_STREAMING);
+	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
 }
 
 /**
@@ -2009,7 +2010,7 @@ static void vox_drv_state_handler(struct work_struct *data)
 		break;
 	case VOX_DRV_STATE_TERMINATING_ENROL:
 		vox->error_info = VOX_ERROR_SUCCESS;
-		vox_set_idle_and_mode(vox, true, VOX_DRV_STATE_NEUTRAL);
+		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 		break;
 	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
 		ret = vox_get_bio_results(vox);
@@ -2580,7 +2581,7 @@ static int vox_notification_handler(struct clsic *clsic,
 			break;
 		}
 
-		vox_set_idle_and_mode(vox, false, VOX_DRV_STATE_ENROLLING);
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:

@@ -32,7 +32,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_data_rcv_end);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_copy_start);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_copy_end);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_mode);
-EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_idle_and_mode);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_idle_and_state);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_install_asset);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_uninstall_phrase);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_uninstall_bin);
