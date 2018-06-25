@@ -18,7 +18,43 @@
 
 static struct mfd_cell clsic_tacna_devs[] = {
 	{ .name = "clsic-codec", },
+	{
+		.name = "tacna-pinctrl",
+		.of_compatible = "cirrus,tacna-pinctrl",
+	},
 };
+
+/*
+ * Apply the default state of the pins specified as "active" in the device tree
+ * on startup.
+ *
+ * If there is no "active" state specified then this function will succeed.
+ */
+static int clsic_tacna_pinctrl_setactive(struct tacna *tacna)
+{
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pinctrl_state;
+	int ret = 0;
+
+	pinctrl = pinctrl_get(tacna->dev);
+	if (IS_ERR(pinctrl)) {
+		ret = PTR_ERR(pinctrl);
+		dev_err(tacna->dev, "Failed to get pinctrl: %d\n", ret);
+		return ret;
+	}
+
+	pinctrl_state = pinctrl_lookup_state(pinctrl, "active");
+	if (!IS_ERR(pinctrl_state)) {
+		ret = pinctrl_select_state(pinctrl, pinctrl_state);
+		if (ret)
+			dev_err(tacna->dev,
+				"Failed to select pinctrl probe state: %d\n",
+				ret);
+	}
+	pinctrl_put(pinctrl);
+
+	return ret;
+}
 
 static int clsic_tacna_probe(struct platform_device *pdev)
 {
@@ -45,14 +81,11 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 	if (!tacna)
 		return -ENOMEM;
 
-	tacna->type = CS48LX50; /* TODO: should read this? */
+	tacna->type = CS48LX50;
 	tacna->dev = &pdev->dev;
 	tacna->dev->of_node = clsic->dev->of_node;
-	tacna->irq = 0; /*
-			 * TODO: should set something sensible once IRQ support
-			 * is added
-			 */
-
+	tacna->irq = 0;
+	tacna->dev->platform_data = NULL;
 	tacna->regmap = regmapsrv->regmap;
 
 	dev_set_drvdata(tacna->dev, tacna);
@@ -70,6 +103,18 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 			      ARRAY_SIZE(clsic_tacna_devs), NULL, 0, NULL);
 	if (ret)
 		dev_err(tacna->dev, "Failed to add subdevices: %d\n", ret);
+	else
+		ret = clsic_tacna_pinctrl_setactive(tacna);
+
+	/*
+	 * returning an error from the probe function will cause the device
+	 * managed memory to be released.
+	 *
+	 * So if any part of the driver load fails remove all of the MFD
+	 * children.
+	 */
+	if (ret)
+		mfd_remove_devices(&pdev->dev);
 
 	return ret;
 }
