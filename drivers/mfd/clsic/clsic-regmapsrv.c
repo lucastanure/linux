@@ -427,8 +427,7 @@ static struct regmap_config regmap_config_ras = {
  * match up device drivers .names and call the driver probe() callbacks
  */
 static struct mfd_cell clsic_devs[] = {
-	{ .name = "clsic-tacna", },
-	{ .name = "clsic-gpio", },
+	{ .name = "clsic-tacna", }
 };
 
 /*
@@ -551,9 +550,6 @@ int clsic_regmap_service_start(struct clsic *clsic,
 		  clsic_devs[0].name,
 		  clsic_devs[0].platform_data,
 		  clsic_devs[0].pdata_size);
-
-	clsic_devs[1].platform_data = regmapsrv_struct;
-	clsic_devs[1].pdata_size = sizeof(struct clsic_regmapsrv_struct);
 
 	ret = mfd_add_devices(clsic->dev, PLATFORM_DEVID_NONE, clsic_devs,
 			      ARRAY_SIZE(clsic_devs), NULL, 0, NULL);
