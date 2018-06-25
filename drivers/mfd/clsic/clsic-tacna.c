@@ -86,8 +86,8 @@ static struct platform_driver clsic_tacna_core_driver = {
 		.name = "clsic-tacna",
 		.owner = THIS_MODULE,
 	},
-	.probe	= clsic_tacna_probe,
-	.remove	= clsic_tacna_remove,
+	.probe	= &clsic_tacna_probe,
+	.remove	= &clsic_tacna_remove,
 };
 
 static int __init clsic_tacna_core_init(void)
