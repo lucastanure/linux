@@ -369,14 +369,25 @@ static const char *vox_asset_type_text[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "Biometric Voice Trigger Engine Map",
 };
 
-/* Templates for asset filenames. */
+/*
+ * All the files follow the same pattern:
+ * "clsic-<devid>/<devid>-???-NNN.bin"
+ *	"clsic-"	= 6
+ *	"%s" = devid	= 8
+ *	"/"		= 1
+ *	"%s" = devid	= 8
+ *	"-???-"		= 5
+ *	"%03u"		= 10
+ *	".bin"		= 4
+ *	"\0"		= 1
+ */
+#define VOX_ASSET_TYPE_NAME_MAX_LEN	(6 + 8 + 1 + 8 + 5 + 10 + 4 + 1)
 static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES] = {
-	[VOX_ASSET_TYPE_PHRASE]		= "bpb.p%02u",
-	[VOX_ASSET_TYPE_BIN_VTE]	= "vte%u.bin",
-	[VOX_ASSET_TYPE_BIN_SSF]	= "ssf%u.bin",
-	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "biovte%u.map",
+	[VOX_ASSET_TYPE_PHRASE]		= "clsic-%s/%s-bpb-%03u.bin",
+	[VOX_ASSET_TYPE_BIN_VTE]	= "clsic-%s/%s-vte-%03u.bin",
+	[VOX_ASSET_TYPE_BIN_SSF]	= "clsic-%s/%s-ssf-%03u.bin",
+	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "clsic-%s/%s-map-%03u.bin",
 };
-#define VOX_ASSET_TYPE_NAME_MAX_LEN	21
 
 /*
  * Valid values for Engine and Phrase IDs are 0 to 255 (8 bit unsigned

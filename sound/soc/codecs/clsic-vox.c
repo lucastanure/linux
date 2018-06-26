@@ -1228,7 +1228,11 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 	/* vox->asset_type is auto-bounded by ALSA enum control. */
 	snprintf(file, VOX_ASSET_TYPE_NAME_MAX_LEN,
-		 vox_asset_filenames[vox->asset_type], vox->file_id);
+		 vox_asset_filenames[vox->asset_type],
+		 clsic_devid_to_string(vox->clsic->devid),
+		 clsic_devid_to_string(vox->clsic->devid),
+		 vox->file_id);
+
 	if (vox->asset_type == VOX_ASSET_TYPE_PHRASE)
 		id = phrase_id;
 	else if (vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP)
