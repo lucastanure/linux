@@ -400,7 +400,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 			vox->trigger_phrase_id = trgr_info.phraseid;
 		else {
 			clsic_err(vox->clsic,
-				  "unsupported trigger engine ID %d.\n",
+				  "unsupported trigger phrase ID %d.\n",
 				  trgr_info.phraseid);
 			asr_stream->error = true;
 			return 0;
