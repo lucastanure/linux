@@ -156,8 +156,6 @@ struct clsic_vox {
 	struct soc_enum soc_enum_bio_res_type;
 	struct soc_enum soc_enum_barge_in;
 	struct soc_enum soc_enum_asset_type;
-	struct soc_enum soc_enum_trgr_phr;
-	struct soc_enum soc_enum_trgr_eng;
 
 	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
@@ -167,6 +165,8 @@ struct clsic_vox {
 	struct soc_mixer_control bin_id_mixer_ctrl;
 	struct soc_mixer_control file_id_mixer_ctrl;
 	struct soc_mixer_control clsic_error_mixer_ctrl;
+	struct soc_mixer_control trgr_phrase_id_mixer_ctrl;
+	struct soc_mixer_control trgr_engine_id_mixer_ctrl;
 
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
@@ -321,25 +321,10 @@ static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES_MVP] = {
 };
 #define VOX_ASSET_TYPE_NAME_MAX_LEN	21
 
-#define VOX_TRGR_INVALID		0
-
-#define VOX_NUM_TRGR_ENG		2
-
-#define VOX_TRGR_ENG_12			1
-#define VOX_TRGR_ENG_12_NUM		12
-
-static const char *vox_trgr_eng_text[VOX_NUM_TRGR_ENG] = {
-	[VOX_TRGR_INVALID]		= "Invalid",
-	[VOX_TRGR_ENG_12]		= "12",
-};
-
-#define VOX_NUM_TRGR_PHR		3
-
-#define VOX_TRGR_PHR_1			1
-#define VOX_TRGR_PHR_2			2
-
-static const char *vox_trgr_phr_text[VOX_NUM_TRGR_PHR] = {
-	[VOX_TRGR_INVALID]		= "Invalid",
-	[VOX_TRGR_PHR_1]		= "1",
-	[VOX_TRGR_PHR_2]		= "2",
-};
+/*
+ * Valid values for Engine and Phrase IDs are 0 to 255 (8 bit unsigned
+ * integer), the vox service stores the value in a signed 32 bit integer and an
+ * INT ALSA control so the value of -1 can be stored and communicaten safely
+ * through the stack.
+ */
+#define VOX_TRGR_INVALID		-1

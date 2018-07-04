@@ -383,29 +383,9 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 			return 0;
 		}
 
-	if (vox->service->service_version > CLSIC_VOX_SRV_VERSION_MVP2) {
-		if (trgr_info.engineid == VOX_TRGR_ENG_12_NUM)
-			vox->trigger_engine_id = VOX_TRGR_ENG_12;
-		else {
-			clsic_err(vox->clsic,
-				  "unsupported trigger engine ID %d.\n",
-				  trgr_info.engineid);
-				asr_stream->error = true;
-				return 0;
-		}
-
-		if ((trgr_info.phraseid == VOX_TRGR_PHR_1) ||
-		    (trgr_info.phraseid == VOX_TRGR_PHR_2))
-			/* 1 to 1 mapping of engine ID and enum index. */
-			vox->trigger_phrase_id = trgr_info.phraseid;
-		else {
-			clsic_err(vox->clsic,
-				  "unsupported trigger phrase ID %d.\n",
-				  trgr_info.phraseid);
-			asr_stream->error = true;
-			return 0;
-		}
-	}
+	/* Populate the ALSA controls with the trigger information. */
+	vox->trigger_engine_id = trgr_info.engineid;
+	vox->trigger_phrase_id = trgr_info.phraseid;
 
 	/* queue up the first read */
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -805,8 +785,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  * that the error control node has changed value).
  *
  */
-static void vox_set_idle_and_state(struct clsic_vox *vox, bool set_clsic_to_idle,
-				   int drv_state)
+static void vox_set_idle_and_state(struct clsic_vox *vox,
+				   bool set_clsic_to_idle, int drv_state)
 {
 	trace_clsic_vox_set_idle_and_state(set_clsic_to_idle, drv_state);
 
@@ -2905,7 +2885,6 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->asset_type = VOX_ASSET_TYPE_PHRASE;
 
-
 	if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
 		vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES_MVP2;
 	else
@@ -2932,22 +2911,30 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->trigger_phrase_id = VOX_TRGR_INVALID;
 
-	vox->soc_enum_trgr_phr.items = VOX_NUM_TRGR_PHR;
-	vox->soc_enum_trgr_phr.texts = vox_trgr_phr_text;
-	vox->soc_enum_trgr_phr.dobj.private = &vox->trigger_phrase_id;
-	vox_enum_control_helper(&vox->kcontrol_new[ctl_id],
-				"Vox Trigger Phrase ID",
-				(unsigned long) &vox->soc_enum_trgr_phr);
+	memset(&vox->trgr_phrase_id_mixer_ctrl, 0,
+	       sizeof(vox->trgr_phrase_id_mixer_ctrl));
+	vox->trgr_phrase_id_mixer_ctrl.min = INT_MIN;
+	vox->trgr_phrase_id_mixer_ctrl.max = INT_MAX;
+	vox->trgr_phrase_id_mixer_ctrl.platform_max = INT_MAX;
+	vox->trgr_phrase_id_mixer_ctrl.dobj.private = &vox->trigger_phrase_id;
+	vox_int_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox Trigger Phrase ID",
+			       (unsigned long) &vox->trgr_phrase_id_mixer_ctrl);
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
 	vox->trigger_engine_id = VOX_TRGR_INVALID;
 
-	vox->soc_enum_trgr_eng.items = VOX_NUM_TRGR_ENG;
-	vox->soc_enum_trgr_eng.texts = vox_trgr_eng_text;
-	vox->soc_enum_trgr_eng.dobj.private = &vox->trigger_engine_id;
-	vox_enum_control_helper(&vox->kcontrol_new[ctl_id],
-				"Vox Trigger Engine ID",
-				(unsigned long) &vox->soc_enum_trgr_eng);
+	memset(&vox->trgr_engine_id_mixer_ctrl, 0,
+	       sizeof(vox->trgr_engine_id_mixer_ctrl));
+	vox->trgr_engine_id_mixer_ctrl.min = INT_MIN;
+	vox->trgr_engine_id_mixer_ctrl.max = INT_MAX;
+	vox->trgr_engine_id_mixer_ctrl.platform_max = INT_MAX;
+	vox->trgr_engine_id_mixer_ctrl.dobj.private = &vox->trigger_engine_id;
+	vox_int_control_helper(&vox->kcontrol_new[ctl_id],
+			       "Vox Trigger Engine ID",
+			       (unsigned long) &vox->trgr_engine_id_mixer_ctrl);
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	BUG_ON(VOX_NUM_NEW_KCONTROLS != (ctl_id + 1));
 
