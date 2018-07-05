@@ -124,7 +124,7 @@ static int clsic_alg_simple_readregister(struct clsic_alg *alg,
 	}
 
 	trace_clsic_alg_simple_readregister(msg_cmd.cmd_rdreg.addr,
-					    (unsigned int) *value, ret);
+					    msg_rsp.rsp_rdreg.value, ret);
 
 	return ret;
 }
@@ -138,7 +138,7 @@ static int clsic_alg_simple_readregister(struct clsic_alg *alg,
  * Return: 0 success, -EIO on error.
  */
 static int clsic_alg_simple_writeregister(struct clsic_alg *alg,
-					  uint32_t address, __be32 value)
+					  uint32_t address, uint32_t value)
 {
 	struct clsic *clsic;
 	union clsic_ras_msg msg_cmd;
