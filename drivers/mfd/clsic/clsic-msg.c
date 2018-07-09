@@ -654,6 +654,12 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 			clsic_irq_disable(clsic);
 			clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
 					CLSIC_STATE_CHANGE_LOCKHELD);
+			/*
+			 * purge the message queues to clear the message which is
+			 * pushed to queue but worker thread is not yet scheduled.
+			 */
+			clsic_purge_message_queues(clsic);
+
 			ret = 0;
 		} else if (clsic->state == CLSIC_STATE_DEBUGCONTROL_REQUESTED) {
 			ret = -EBUSY;
@@ -669,6 +675,11 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 					CLSIC_STATE_CHANGE_LOCKHELD);
 			mutex_unlock(&clsic->message_lock);
 			ret = wait_for_completion_interruptible(&a_completion);
+			if (schedule_work(&clsic->message_work) == false) {
+				flush_scheduled_work();
+				schedule_work(&clsic->message_work);
+			}
+
 			mutex_lock(&clsic->message_lock);
 		} else {
 			clsic_err(clsic, "state %d unhandled\n", clsic->state);
@@ -1344,23 +1355,6 @@ static int clsic_send_message_core(struct clsic *clsic,
 	else
 		msg->timeout = CLSIC_MSG_TIMEOUT_PERIOD;
 
-	/* Check that it is possible to send the message */
-	switch (clsic->state) {
-	case CLSIC_STATE_HALTED:
-	case CLSIC_STATE_DEBUGCONTROL_GRANTED:
-		/*
-		 * The driver has lost communication with the device or is
-		 * being prevented from communicating with the device.
-		 */
-		return -EIO;
-	default:
-		/*
-		 * In all other states allow the message to pass this
-		 * checkpoint
-		 */
-		break;
-	}
-
 	pm_runtime_get_sync(clsic->dev);
 
 	/* Check whether messaging is limited to the bootloader service */
@@ -1396,6 +1390,26 @@ static int clsic_send_message_core(struct clsic *clsic,
 		pm_runtime_mark_last_busy(clsic->dev);
 		pm_runtime_put_autosuspend(clsic->dev);
 		return -EINTR;
+	}
+
+	/* Check that it is possible to send the message */
+	switch (clsic->state) {
+	case CLSIC_STATE_HALTED:
+	case CLSIC_STATE_DEBUGCONTROL_GRANTED:
+		/*
+		 * The driver has lost communication with the device or is
+		 * being prevented from communicating with the device.
+		 */
+		mutex_unlock(&clsic->message_lock);
+		pm_runtime_mark_last_busy(clsic->dev);
+		pm_runtime_put_autosuspend(clsic->dev);
+		return -EIO;
+	default:
+		/*
+		 * In all other states allow the message to pass this
+		 * checkpoint
+		 */
+		break;
 	}
 
 	/*
