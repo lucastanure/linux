@@ -2147,40 +2147,53 @@ static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_challenge() - read or write the challenge bytes for biometric
- *			authentication
+ * vox_ctrl_challenge_get() - read the challenge bytes for biometric
+ *			      authentication
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
- * @op_flag:	SNDRV_CTL_TLV_OP_READ or SNDRV_CTL_TLV_OP_WRITE.
- * @size:	Size of data being written to set the challenge bytes.
- * @tlv:	ALSA TLV data, effectively a byte buffer.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
- * Allow userspace to both get and set the bytes used as a cryptographic
- * challenge to CLSIC when getting biometric authentication results.
+ * Allow userspace to get the bytes used as a cryptographic challenge to CLSIC
+ * when getting biometric authentication results.
  *
- * Return: errno.
+ * Return: 0 always.
  */
-static int vox_ctrl_challenge(struct snd_kcontrol *kcontrol,
-			      int op_flag,
-			      unsigned int size,
-			      unsigned int __user *tlv)
+static int vox_ctrl_challenge_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *be =
+	struct soc_bytes_ext *s_bytes_challenge =
 		(struct soc_bytes_ext *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(be, struct clsic_vox, s_bytes_challenge);
+		container_of(s_bytes_challenge, struct clsic_vox,
+			     s_bytes_challenge);
 
-	if (op_flag == SNDRV_CTL_TLV_OP_WRITE) {
-		if (size != sizeof(struct clsic_vox_auth_challenge))
-			return -EINVAL;
+	memcpy(ucontrol->value.bytes.data, &vox->challenge,
+	       s_bytes_challenge->max);
 
-		if (copy_from_user(&vox->challenge, tlv,
-				   sizeof(struct clsic_vox_auth_challenge)))
-			return -EFAULT;
-	} else {
-		if (copy_to_user(tlv, &vox->challenge,
-				 sizeof(struct clsic_vox_auth_challenge)))
-			return -EFAULT;
-	}
+	return 0;
+}
+
+/**
+ * vox_ctrl_challenge_put() - write the challenge bytes for biometric
+ *			      authentication
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Allow userspace to set the bytes used as a cryptographic challenge to CLSIC
+ * when getting biometric authentication results.
+ *
+ * Return: 0 always.
+ */
+static int vox_ctrl_challenge_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_bytes_ext *s_bytes_challenge =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(s_bytes_challenge, struct clsic_vox,
+			     s_bytes_challenge);
+
+	memcpy(&vox->challenge, ucontrol->value.bytes.data,
+	       s_bytes_challenge->max);
 
 	return 0;
 }
@@ -2218,32 +2231,26 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_bio_pub_key() - obtain the public signing key of CLSIC
+ * vox_ctrl_bio_pub_key_get() - obtain the public signing key of CLSIC
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
- * @op_flag:	Can only usefully be SNDRV_CTL_TLV_OP_READ.
- * @size:	Unused.
- * @tlv:	ALSA TLV data, effectively a byte buffer.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
  * Allow userspace to get CLSIC's public key as used within the biometric
  * results blob.
  *
- * Return: errno.
+ * Return: 0 always.
  */
-static int vox_ctrl_bio_pub_key(struct snd_kcontrol *kcontrol,
-				int op_flag,
-				unsigned int size,
-				unsigned int __user *tlv)
+static int vox_ctrl_bio_pub_key_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *be =
+	struct soc_bytes_ext *s_bytes_bio_pub_key =
 		(struct soc_bytes_ext *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(be, struct clsic_vox, s_bytes_bio_pub_key);
+		container_of(s_bytes_bio_pub_key, struct clsic_vox,
+			     s_bytes_bio_pub_key);
 
-	if (op_flag == SNDRV_CTL_TLV_OP_WRITE)
-		return -EACCES;
-	if (copy_to_user(tlv, &vox->bio_pub_key,
-			 sizeof(struct clsic_vox_auth_key)))
-		return -EFAULT;
+	memcpy(ucontrol->value.bytes.data, &vox->bio_pub_key,
+	       s_bytes_bio_pub_key->max);
 
 	return 0;
 }
@@ -2840,11 +2847,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[ctl_id].name = "Vox Challenge";
 	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
 	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[ctl_id].tlv.c = vox_ctrl_challenge;
+	vox->kcontrol_new[ctl_id].get = vox_ctrl_challenge_get;
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_challenge_put;
 	vox->kcontrol_new[ctl_id].private_value =
 				(unsigned long) &vox->s_bytes_challenge;
-	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
-					   SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
+	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
@@ -2871,11 +2878,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[ctl_id].name = "Vox Biometric Result Public Key";
 	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
 	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[ctl_id].tlv.c = vox_ctrl_bio_pub_key;
+	vox->kcontrol_new[ctl_id].get = vox_ctrl_bio_pub_key_get;
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 	vox->kcontrol_new[ctl_id].private_value =
 				(unsigned long) &vox->s_bytes_bio_pub_key;
-	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_TLV_READWRITE |
-					   SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK |
+	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
