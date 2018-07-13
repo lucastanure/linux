@@ -458,22 +458,26 @@ TRACE_EVENT(clsic_vox_new_auth_result,
 	TP_ARGS(msg),
 	TP_STRUCT__entry(
 			__field(int32_t, total_frames_processed)
+			__field(int32_t, auth_stop_reason)
 			__array(uint8_t, user_id_detected,
 						CLSIC_VOX_SECURITY_LVL_COUNT)
 			),
 	TP_fast_assign(
 			__entry->total_frames_processed =
 				msg->nty_new_auth_result.total_frames_processed;
+			__entry->auth_stop_reason =
+				msg->nty_new_auth_result.auth_stop_reason;
 			memcpy(__entry->user_id_detected,
 			       msg->nty_new_auth_result.userid,
 			       CLSIC_VOX_SECURITY_LVL_COUNT);
 		),
 	TP_printk(
-			"total frames: %d, LOW: user %d, MEDIUM: user %d, HIGH: user %d",
+			"total frames: %d, LOW: user %d, MEDIUM: user %d, HIGH: user %d (auth stop reason: %d)",
 			__entry->total_frames_processed,
 			__entry->user_id_detected[CLSIC_VOX_SECURITY_LOW],
 			__entry->user_id_detected[CLSIC_VOX_SECURITY_MEDIUM],
-			__entry->user_id_detected[CLSIC_VOX_SECURITY_HIGH]
+			__entry->user_id_detected[CLSIC_VOX_SECURITY_HIGH],
+			__entry->auth_stop_reason
 			)
 );
 
