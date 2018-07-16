@@ -1305,7 +1305,7 @@ static const struct snd_compr_ops cs48l32_compr_ops = {
 	.copy = &wm_adsp_compr_copy,
 };
 
-static struct snd_soc_component_driver soc_component_dev_cs48l32 = {
+static const struct snd_soc_component_driver soc_component_dev_cs48l32 = {
 	.probe = &cs48l32_component_probe,
 	.remove = &cs48l32_component_remove,
 	.compr_ops = &cs48l32_compr_ops,
