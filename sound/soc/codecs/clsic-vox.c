@@ -1611,6 +1611,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 			clsic_err(vox->clsic, "unsupported phrase ID %d.\n",
 				  vox->phrase_id);
 			vox->error_info = VOX_ERROR_DRIVER;
+			ret = -EIO;
 			goto exit;
 		}
 
