@@ -454,6 +454,12 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+		if (asr_stream->buf.size == 0) {
+			/* Last of the params to be set in set_params. */
+			clsic_err(clsic, "Bad ASR params. Unable to start.\n");
+			return -EIO;
+		}
+
 		/* Fail if any ongoing vox operations. */
 		mutex_lock(&vox->drv_state_lock);
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
