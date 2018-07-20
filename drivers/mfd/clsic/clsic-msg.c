@@ -1786,6 +1786,7 @@ static void clsic_message_handler(struct clsic *clsic,
 void clsic_handle_incoming_messages(struct clsic *clsic)
 {
 	int ret;
+	uint32_t sts;
 	struct clsic_message msg;
 
 	/* If debugcontrol is asserted then do nothing */
@@ -1794,14 +1795,36 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 		return;
 	}
 
-	memset(&msg, 0, sizeof(struct clsic_message));
-	ret = clsic_fifo_readmessage(clsic, &msg);
-	if (ret != 0) {
-		clsic_err(clsic, "readmessage %d\n", ret);
-		return;
-	}
+	/*
+	 * Read the status register of the FIFO to see whether there are
+	 * messages that should be processed
+	 */
+	do {
+		ret = regmap_read(clsic->regmap, TACNA_CPF1_TX_GPR_STATUS1,
+				  &sts);
+		if (ret != 0) {
+			clsic_err(clsic, "TACNA_CPF1_TX_GPR_STATUS1 ret %d\n",
+				  ret);
+			return;
+		}
 
-	clsic_message_handler(clsic, &msg);
+		/*
+		 * If the status register shows that the FIFO is not empty then
+		 * read a fixed sized message from the FIFO and call the message
+		 * handler to progress it
+		 */
+		if ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0) {
+			memset(&msg, 0, sizeof(struct clsic_message));
+			ret = clsic_fifo_readmessage(clsic, &msg);
+			if (ret != 0) {
+				clsic_err(clsic, "readmessage %d\n", ret);
+				return;
+			}
+
+			clsic_message_handler(clsic, &msg);
+		}
+		/* the loop handled a FIFO message then go around again */
+	} while ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0);
 }
 
 static void clsic_message_worker_sending(struct clsic *clsic,
