@@ -796,7 +796,7 @@ static void vox_set_idle_and_state(struct clsic_vox *vox,
 	vox->drv_state = drv_state;
 
 	snd_ctl_notify(vox->codec->component.card->snd_card,
-		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->drv_state_kctrl->id);
+		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->error_info_kctrl->id);
 }
 
 /**
@@ -2953,9 +2953,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	if (ret != 0)
 		return ret;
 
-	vox->drv_state_kctrl = snd_soc_card_get_kcontrol(
+	vox->error_info_kctrl = snd_soc_card_get_kcontrol(
 						vox->codec->component.card,
-						"Vox Driver State");
+						"Vox Error Info");
 
 	handler->data = (void *) vox;
 	handler->callback = &vox_notification_handler;

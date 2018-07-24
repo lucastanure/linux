@@ -178,7 +178,7 @@ struct clsic_vox {
 	bool bio_vte_map_installed;
 
 	struct work_struct drv_state_work;
-	struct snd_kcontrol *drv_state_kctrl;
+	struct snd_kcontrol *error_info_kctrl;
 
 	struct completion new_bio_results_completion;
 };
