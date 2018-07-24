@@ -75,6 +75,44 @@ static void vox_send_userspace_event(struct clsic_vox *vox)
 }
 
 /**
+ * clsic_vox_asr_streaming_failed() - set CLSIC back to IDLE after a problem.
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * When the audio path has closed, the last operation to be running needs to
+ * clear up.
+ *
+ */
+static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
+{
+	vox->trigger_phrase_id = VOX_TRGR_INVALID;
+	vox->trigger_engine_id = VOX_TRGR_INVALID;
+
+	vox->scc_cap_preamble_ms = 0;
+	vox->scc_status &= (~VTE1_ACTIVE);
+
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+}
+
+/**
+ * clsic_vox_asr_cleanup_states() - ensure that other threads close sensibly
+ *				when there is no more ASR streaming to be done.
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Use the driver state to determine how to bring down the ASR operations.
+ *
+ */
+static void clsic_vox_asr_cleanup_states(struct clsic_vox *vox)
+{
+	vox->scc_status = 0;
+
+	clsic_vox_asr_end_streaming(vox);
+
+	vox->asr_stream.listen_error = true;
+	complete(&vox->asr_stream.completion);
+	complete(&vox->new_bio_results_completion);
+}
+
+/**
  * clsic_vox_asr_stream_open() - open the ASR stream
  * @stream:	Standard parameter as used by compressed stream infrastructure.
  *
@@ -109,9 +147,6 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 
 	stream->runtime->private_data = &vox->asr_stream;
 
-	init_completion(&vox->asr_stream.trigger_heard);
-	init_completion(&vox->asr_stream.asr_block_completion);
-
 	trace_clsic_vox_asr_stream_open(stream->direction);
 
 	return 0;
@@ -128,19 +163,23 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
+	struct clsic_vox *vox = container_of(asr_stream, struct clsic_vox,
+					     asr_stream);
 
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
 
-	asr_stream->stream = NULL;
-
-	complete(&asr_stream->trigger_heard);
+	clsic_vox_asr_cleanup_states(vox);
 
 	kfree(asr_stream->buf.data);
 
 	asr_stream->buf.data = NULL;
 	asr_stream->buf.size = 0;
 	asr_stream->buf.frag_sz = 0;
+
+	mutex_lock(&asr_stream->stream_lock);
+	asr_stream->stream = NULL;
+	mutex_unlock(&asr_stream->stream_lock);
 
 	return 0;
 }
@@ -266,50 +305,76 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	struct clsic_vox *vox = (struct clsic_vox *) (uintptr_t) msg->cookie;
 	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
 	union clsic_vox_msg *msg_rsp;
-	u32 payload_sz;
+	u32 payload_sz = 0;
 
-	asr_stream->asr_block_pending = false;
-	complete(&asr_stream->asr_block_completion);
+	if (msg->state != CLSIC_MSG_SUCCESS) {
+		clsic_err(clsic, "async message failed with state: %d\n",
+			  msg->state);
+		asr_stream->cb_error = true;
+	} else {
+		msg_rsp = (union clsic_vox_msg *) &msg->response;
+		if (!clsic_get_bulk_bit(msg_rsp->rsp_get_asr_block.hdr.sbc) &&
+		    (msg_rsp->rsp_get_asr_block.hdr.err != 0)) {
+			/*
+			 * We have set CLSIC to IDLE mode while there is a
+			 * pending ASR request. This causes CLSIC to forcibly
+			 * cancel the request for that ASR block.
+			 */
+			clsic_dbg(clsic, "response: %d\n",
+				  msg_rsp->rsp_get_asr_block.hdr.err);
+			asr_stream->cb_error = true;
+		} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
+			clsic_dbg(clsic, "bulk response: %d\n",
+				  msg_rsp->blkrsp_get_asr_block.hdr.err);
+			asr_stream->cb_error = true;
+		} else {
+			payload_sz = msg_rsp->blkrsp_get_asr_block.hdr.bulk_sz;
+			asr_stream->copied_total += payload_sz;
 
-	if (!asr_stream->stream) {
-		clsic_dbg(clsic, "ASR stream is no longer active.\n");
-		return CLSIC_MSG_RELEASED;
+			/* Alert userspace via compressed framework. */
+			mutex_lock(&asr_stream->stream_lock);
+			if (asr_stream->stream)
+				snd_compr_fragment_elapsed(asr_stream->stream);
+			mutex_unlock(&asr_stream->stream_lock);
+		}
 	}
 
-	msg_rsp = (union clsic_vox_msg *) &msg->response;
-	if (!clsic_get_bulk_bit(msg_rsp->rsp_get_asr_block.hdr.sbc) &&
-	    msg_rsp->rsp_get_asr_block.hdr.err != 0) {
-		/*
-		 * Error CLSIC_ERR_CANCELLED simply means that we have set CLSIC
-		 * to IDLE mode while there is a pending ASR request (see
-		 * clsic_vox_asr_stream_trigger). This causes CLSIC to forcibly
-		 * cancel the request for that ASR block.
-		 */
-		clsic_info(clsic, "response: %d\n",
-			   msg_rsp->rsp_get_asr_block.hdr.err);
-		asr_stream->error = true;
-		snd_compr_fragment_elapsed(asr_stream->stream);
-		return CLSIC_MSG_RELEASED;
-	} else if (msg_rsp->blkrsp_get_asr_block.hdr.err != 0) {
-		clsic_info(clsic, "bulk response: %d\n",
-			   msg_rsp->blkrsp_get_asr_block.hdr.err);
-		asr_stream->error = true;
-		snd_compr_fragment_elapsed(asr_stream->stream);
-		return CLSIC_MSG_RELEASED;
-	}
-
-	payload_sz = msg_rsp->blkrsp_get_asr_block.hdr.bulk_sz;
-
-	trace_clsic_vox_asr_stream_data_rcv_start(payload_sz);
-
-	asr_stream->copied_total += payload_sz;
-
-	/* Notify the compressed framework of available data. */
-	snd_compr_fragment_elapsed(asr_stream->stream);
-
-	trace_clsic_vox_asr_stream_data_rcv_end(payload_sz);
+	trace_clsic_vox_asr_stream_data_rcv(payload_sz);
 
 	return CLSIC_MSG_RELEASED;
+}
+
+static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
+	int ret;
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
+	ret = clsic_send_msg_async(vox->clsic,
+				   (union t_clsic_generic_message *) &msg_cmd,
+				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				   (uint8_t *) asr_stream->buf.data,
+				   asr_stream->buf.size,
+				   (uint64_t) (uintptr_t) vox,
+				   clsic_vox_asr_stream_data_cb);
+	if (ret) {
+		clsic_err(vox->clsic, "Error sending msg: %d\n", ret);
+
+		clsic_vox_asr_end_streaming(vox);
+
+		/* Alert userspace via compressed framework. */
+		mutex_lock(&asr_stream->stream_lock);
+		if (asr_stream->stream)
+			snd_compr_fragment_elapsed(asr_stream->stream);
+		mutex_unlock(&asr_stream->stream_lock);
+
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 /**
@@ -332,22 +397,20 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	struct clsic_vox_trgr_info trgr_info;
 	int ret = 0;
 
-	ret = wait_for_completion_interruptible(&asr_stream->trigger_heard);
-
+	ret = wait_for_completion_interruptible(&asr_stream->completion);
 	if (ret || asr_stream->listen_error) {
 		clsic_dbg(clsic, "Wait for ASR stream trigger aborted.\n");
 
-		if (asr_stream->stream) {
-			/* force compressed fw to notice error */
-			asr_stream->error = true;
-			asr_stream->copied_total += 1;
+		/* Alert userspace via compressed framework. */
+		mutex_lock(&asr_stream->stream_lock);
+		if (asr_stream->stream)
 			snd_compr_fragment_elapsed(asr_stream->stream);
-		}
-		return 0;
-	}
+		mutex_unlock(&asr_stream->stream_lock);
 
-	if (!asr_stream->stream)
-		return 0;
+		clsic_vox_asr_end_streaming(vox);
+
+		return -EIO;
+	}
 
 	trace_clsic_vox_asr_stream_data_start(asr_stream->copied_total);
 
@@ -362,11 +425,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		mutex_unlock(&vox->drv_state_lock);
 	} else {
 		mutex_unlock(&vox->drv_state_lock);
-		asr_stream->error = true;
-		clsic_err(vox->clsic,
-			  "unable to make driver state transition from %d to STREAMING",
-			  vox->drv_state);
-		return 0;
+		return -EINVAL;
 	}
 
 	/* Fill in the trigger information. */
@@ -381,47 +440,31 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 				  sizeof(struct clsic_vox_trgr_info));
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		asr_stream->error = true;
-		return 0;
+
+		clsic_vox_asr_end_streaming(vox);
+
+		return -EIO;
 	}
 
 	/* Response is either bulk in case of success, or not. */
 	if (!clsic_get_bulk_bit(msg_rsp.rsp_get_trgr_info.hdr.sbc)) {
 		clsic_err(vox->clsic, "failure %d.\n",
 			  msg_rsp.rsp_get_trgr_info.hdr.err);
-		asr_stream->error = true;
-		return 0;
+		clsic_vox_asr_end_streaming(vox);
+
+		return -EIO;
 	}
 
 	/* Populate the ALSA controls with the trigger information. */
 	vox->trigger_engine_id = trgr_info.engineid;
 	vox->trigger_phrase_id = trgr_info.phraseid;
 
-	/* queue up the first read */
-	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
-
-	reinit_completion(&asr_stream->asr_block_completion);
-	asr_stream->asr_block_pending = true;
-	ret = clsic_send_msg_async(clsic,
-				   (union t_clsic_generic_message *) &msg_cmd,
-				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				   (uint8_t *) asr_stream->buf.data,
-				   asr_stream->buf.size,
-				   (uint64_t) (uintptr_t) vox,
-				   clsic_vox_asr_stream_data_cb);
-	if (ret) {
-		clsic_err(clsic, "Error sending msg: %d\n", ret);
-		/* force compressed fw to notice error */
-		asr_stream->asr_block_pending = false;
-		asr_stream->error = true;
-		asr_stream->copied_total += 1;
-		snd_compr_fragment_elapsed(asr_stream->stream);
-		return 0;
-	}
+	asr_stream->cb_error = false;
 
 	trace_clsic_vox_asr_stream_queue_read(asr_stream->copied_total);
+
+	/* Queue up the first read. */
+	clsic_vox_asr_queue_async(vox);
 
 	return 0;
 }
@@ -453,37 +496,36 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 	case SNDRV_PCM_TRIGGER_START:
 		if (asr_stream->buf.size == 0) {
 			/* Last of the params to be set in set_params. */
-			clsic_err(clsic, "Bad ASR params. Unable to start.\n");
+			clsic_dbg(clsic, "Bad ASR params. Unable to start.\n");
 			return -EIO;
 		}
 
 		/* Fail if any ongoing vox operations. */
 		mutex_lock(&vox->drv_state_lock);
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
-			vox->drv_state = VOX_DRV_STATE_STARTING_LISTEN;
+			vox->drv_state = VOX_DRV_STATE_LISTENING;
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
+			clsic_dbg(clsic,
+				  "Audio path opened with bad state %d.\n",
+				  vox->drv_state);
 			return -EIO;
 		}
 
 		vox_update_barge_in(vox);
 
 		ret = vox_set_mode(vox, CLSIC_VOX_MODE_LISTEN);
-		if (ret) {
-			ret = -EIO;
-			goto exit;
-		}
+		if (ret)
+			return ret;
 
-		reinit_completion(&asr_stream->trigger_heard);
-
+		reinit_completion(&asr_stream->completion);
 		reinit_completion(&vox->new_bio_results_completion);
 		vox->auth_error = CLSIC_ERR_NONE;
 
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_LISTEN_START);
-
 		msg_cmd.cmd_listen_start.trgr_domain =
 						CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
@@ -495,15 +537,13 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 		if (ret) {
 			clsic_err(clsic, "Error sending msg: %d\n", ret);
-			ret = -EIO;
-			goto exit;
-		}
-		if (msg_rsp.rsp_listen_start.hdr.err) {
-			clsic_err(clsic,
+			break;
+		} else if (msg_rsp.rsp_listen_start.hdr.err) {
+			clsic_dbg(clsic,
 				  "Failed to start listening: %d\n",
 				  msg_rsp.rsp_listen_start.hdr.err);
-			ret = -EIO;
-			goto exit;
+			ret = -EINVAL;
+			break;
 		}
 
 		trace_clsic_vox_asr_stream_listen(
@@ -512,57 +552,26 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		vox->scc_status |= VTE1_ACTIVE;
 
 		asr_stream->listen_error = false;
-		asr_stream->asr_block_pending = false;
-		asr_stream->error = false;
 		asr_stream->copied_total = 0;
 		asr_stream->wait_for_trigger =
 			kthread_create(clsic_vox_asr_stream_wait_for_trigger,
 				       asr_stream,
 				       "clsic-vox-asr-wait-for-trigger");
 
-		mutex_lock(&vox->drv_state_lock);
-
-		vox->drv_state = VOX_DRV_STATE_LISTENING;
 		wake_up_process(asr_stream->wait_for_trigger);
 
-		mutex_unlock(&vox->drv_state_lock);
-
 		break;
+
 	case SNDRV_PCM_TRIGGER_STOP:
-		vox->scc_status = 0;
-
-		mutex_lock(&vox->drv_state_lock);
-		if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
-			vox->asr_stream.listen_error = true;
-			complete(&vox->asr_stream.trigger_heard);
-		} else if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
-			if (asr_stream->asr_block_pending)
-				/*
-				 * Force a wait until the current block has
-				 * completed before finishing up otherwise CLSIC
-				 * complains.
-				 */
-				wait_for_completion(
-					&asr_stream->asr_block_completion);
-		}
-
-		vox->trigger_phrase_id = VOX_TRGR_INVALID;
-		vox->trigger_engine_id = VOX_TRGR_INVALID;
-		vox->scc_cap_preamble_ms = 0;
-
-		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
-
-		mutex_unlock(&vox->drv_state_lock);
+		clsic_vox_asr_cleanup_states(vox);
 
 		break;
 	default:
 		return -EINVAL;
 	}
 
-exit:
-	/* In case of failure during SNDRV_PCM_TRIGGER_START. */
 	if (ret)
-		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+		clsic_vox_asr_end_streaming(vox);
 
 	return ret;
 }
@@ -607,12 +616,16 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 	struct clsic_vox *vox =
 		container_of(asr_stream, struct clsic_vox, asr_stream);
 	struct clsic *clsic = vox->clsic;
-	union clsic_vox_msg msg_cmd;
-	int ret = 0;
 
-	if (asr_stream->error) {
-		clsic_err(clsic, "ASR stream error.\n");
-		return -EIO;
+	if ((vox->drv_state != VOX_DRV_STATE_STREAMING) &&
+	    (vox->drv_state != VOX_DRV_STATE_GETTING_BIO_RESULTS)) {
+		clsic_err(clsic, "ASR not streaming yet.\n");
+		return -EINVAL;
+	}
+
+	if (asr_stream->cb_error) {
+		clsic_vox_asr_end_streaming(vox);
+		return EFAULT;
 	}
 
 	count = min(count, asr_stream->buf.size);
@@ -621,32 +634,15 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 
 	if (copy_to_user(buf, (uint8_t *) asr_stream->buf.data, count)) {
 		clsic_err(clsic, "Failed to copy data to user.\n");
+		clsic_vox_asr_end_streaming(vox);
 		return -EFAULT;
 	}
 
-	trace_clsic_vox_asr_stream_copy_end(count);
+	trace_clsic_vox_asr_stream_copy_end(count, asr_stream->copied_total);
 
-	/* queue up next read */
-	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
-			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
-
-	reinit_completion(&asr_stream->asr_block_completion);
-	asr_stream->asr_block_pending = true;
-	ret = clsic_send_msg_async(clsic,
-				   (union t_clsic_generic_message *) &msg_cmd,
-				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				   (uint8_t *) asr_stream->buf.data,
-				   asr_stream->buf.size,
-				   (uint64_t) (uintptr_t) vox,
-				   clsic_vox_asr_stream_data_cb);
-	if (ret) {
-		asr_stream->asr_block_pending = false;
-		clsic_err(clsic, "Error sending msg: %d\n", ret);
+	/* Queue up next read. */
+	if (clsic_vox_asr_queue_async(vox))
 		return -EIO;
-	}
-
-	trace_clsic_vox_asr_stream_queue_read(asr_stream->copied_total);
 
 	return count;
 }
@@ -1664,7 +1660,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 
 	trace_clsic_vox_get_bio_results(0);
 
-	vox->get_bio_results_early_exit = false;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
 
 	/*
@@ -1675,14 +1670,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	if (vox->auth_error != CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED)
 		wait_for_completion(&vox->new_bio_results_completion);
 	reinit_completion(&vox->new_bio_results_completion);
-
-	if (vox->get_bio_results_early_exit)
-		/*
-		 * We are here if the biometric results available notification
-		 * never came (e.g. no detected users) and we decide to stop
-		 * getting any more results.
-		 */
-		return -EBUSY;
 
 	switch (vox->auth_error) {
 	case CLSIC_ERR_NONE:
@@ -1735,7 +1722,11 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	}
 
 exit:
-	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
+	mutex_lock(&vox->drv_state_lock);
+	if (vox->drv_state == VOX_DRV_STATE_GETTING_BIO_RESULTS)
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
+	mutex_unlock(&vox->drv_state_lock);
+
 	vox_send_userspace_event(vox);
 
 	return ret;
@@ -1834,7 +1825,7 @@ static void vox_drv_state_handler(struct work_struct *data)
 		vox_stop_bio_results(vox);
 		break;
 	default:
-		clsic_err(vox->clsic, "unknown mode %d for scheduled work.\n",
+		clsic_err(vox->clsic, "unknown state %d for scheduled work.\n",
 			  vox->drv_state);
 	}
 }
@@ -2242,27 +2233,16 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		break;
 	case VOX_DRV_STATE_STOP_BIO_RESULTS:
 		/*
-		 * Set CLSIC to IDLE mode in order to prevent CLSIC
-		 * crashing due to bringing down the audio path while in
-		 * CLSIC STREAM mode.
+		 * TODO: remove stop biometrics entirely as it is now managed
+		 * by simply closing the compressed audio path.
 		 */
-		if ((vox->drv_state == VOX_DRV_STATE_GETTING_BIO_RESULTS) ||
-		    (vox->drv_state == VOX_DRV_STATE_STREAMING)) {
-			vox->drv_state = VOX_DRV_STATE_STOPPING_BIO_RESULTS;
-			mutex_unlock(&vox->drv_state_lock);
-			/*
-			 * Complete get_bio_results in case CLSIC is
-			 * hung doing scheduled work while getting
-			 * results from a previous action (waiting for
-			 * CLSIC_VOX_MSG_N_NEW_AUTH_RESULT).
-			 */
-			vox->get_bio_results_early_exit = true;
-			complete(&vox->new_bio_results_completion);
-		} else {
-			mutex_unlock(&vox->drv_state_lock);
-			ret = -EBUSY;
-		}
-		break;
+		trace_clsic_vox_stop_bio_results(0);
+
+		mutex_unlock(&vox->drv_state_lock);
+		vox->error_info = VOX_ERROR_SUCCESS;
+		vox_send_userspace_event(vox);
+
+		return 0;
 	case VOX_DRV_STATE_INSTALL_ASSET:
 	case VOX_DRV_STATE_UNINSTALL_ASSET:
 	case VOX_DRV_STATE_REMOVE_USER:
@@ -2352,9 +2332,7 @@ static int vox_notification_handler(struct clsic *clsic,
 			  msg_nty->nty_listen_err.err);
 
 		vox->asr_stream.listen_error = true;
-
-		if (vox->asr_stream.stream)
-			complete(&vox->asr_stream.trigger_heard);
+		complete(&vox->asr_stream.completion);
 
 		break;
 	case CLSIC_VOX_MSG_N_TRGR_DETECT:
@@ -2364,7 +2342,6 @@ static int vox_notification_handler(struct clsic *clsic,
 		 */
 		trace_clsic_vox_trigger_heard(true);
 		vox->clsic_mode = CLSIC_VOX_MODE_STREAM;
-		vox->asr_stream.listen_error = false;
 
 		/*
 		 * Prevent the messaging processor from being powered off while
@@ -2372,8 +2349,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		 */
 		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
 
-		if (vox->asr_stream.stream)
-			complete(&vox->asr_stream.trigger_heard);
+		complete(&vox->asr_stream.completion);
 
 		break;
 	case CLSIC_VOX_MSG_N_REP_COMPLETE:
@@ -2581,6 +2557,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	mutex_init(&vox->drv_state_lock);
 
 	INIT_WORK(&vox->drv_state_work, vox_drv_state_handler);
+
+	init_completion(&vox->asr_stream.completion);
+	mutex_init(&vox->asr_stream.stream_lock);
 
 	vox->soc_enum_mode.items = VOX_NUM_DRV_STATES;
 	vox->soc_enum_mode.texts = vox_drv_state_text;
@@ -2901,7 +2880,6 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 		return ret;
 	}
 
-	vox->get_bio_results_early_exit = false;
 	init_completion(&vox->new_bio_results_completion);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);

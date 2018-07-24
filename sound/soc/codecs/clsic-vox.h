@@ -52,17 +52,12 @@ struct clsic_asr_stream_buf {
  *		means we do not intend to stream data.
  * @copied_total:	Total ASR data copied in this stream.
  * @sample_rate:	Sample rate in Hz of this stream.
- * @listen_error:	In case of a failure to trigger, this error is set to
- *			prevent streaming from occurring.
  * @error:		If there is a problem in setting up the ASR stream
  *			before or after trigger has occurred, this is set to
  *			prevent further attempts to stream data.
- * @asr_block_pending:	Set while we are waiting to receive an ASR block.
  * @wait_for_trigger:	Thread to wait for the initial trigger.
- * @trigger_heard:	Completion that is used in waiting for a trigger to
+ * @completion:		Completion that is used in waiting for a trigger to
  *			occur.
- * @asr_block_completion:	Used with asr_block_pending if the stream is
- *				closed mid ASR block copy.
  *
  * Information about the intermediate buffer used for copying ASR data from
  * CLSIC to userspace.
@@ -76,14 +71,13 @@ struct clsic_asr_stream {
 	unsigned int copied_total;
 
 	unsigned int sample_rate;
-	bool listen_error;
-
-	bool error;
-	bool asr_block_pending;
 
 	struct task_struct *wait_for_trigger;
-	struct completion trigger_heard;
-	struct completion asr_block_completion;
+	struct completion completion;
+	struct mutex stream_lock;
+
+	bool cb_error;
+	bool listen_error;
 };
 
 /**
@@ -142,7 +136,6 @@ struct clsic_vox {
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
 	struct clsic_vox_auth_key bio_pub_key;
-	bool get_bio_results_early_exit;
 	uint8_t auth_error;
 	/*
 	 * asr_streaming tells us if we are currently streaming audio data -
@@ -206,7 +199,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_DRV_STATES			23
+#define VOX_NUM_DRV_STATES			22
 
 #define VOX_DRV_STATE_NEUTRAL			0
 #define VOX_DRV_STATE_INSTALL_ASSET		1
@@ -228,9 +221,8 @@ static const struct {
 #define VOX_DRV_STATE_GETTING_BIO_RESULTS	17
 #define VOX_DRV_STATE_STOP_BIO_RESULTS		18
 #define VOX_DRV_STATE_STOPPING_BIO_RESULTS	19
-#define VOX_DRV_STATE_STARTING_LISTEN		20
-#define VOX_DRV_STATE_LISTENING			21
-#define VOX_DRV_STATE_STREAMING			22
+#define VOX_DRV_STATE_LISTENING			20
+#define VOX_DRV_STATE_STREAMING			21
 
 static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
@@ -254,7 +246,6 @@ static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
 	[VOX_DRV_STATE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
 	[VOX_DRV_STATE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
-	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
 	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
 	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",
 };
@@ -334,7 +325,7 @@ static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES_MVP] = {
 /*
  * Valid values for Engine and Phrase IDs are 0 to 255 (8 bit unsigned
  * integer), the vox service stores the value in a signed 32 bit integer and an
- * INT ALSA control so the value of -1 can be stored and communicaten safely
+ * INT ALSA control so the value of -1 can be stored and communicated safely
  * through the stack.
  */
 #define VOX_TRGR_INVALID		-1

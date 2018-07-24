@@ -308,15 +308,7 @@ TRACE_EVENT(clsic_vox_asr_stream_queue_read,
 	TP_printk("bytes copied up to now: %zu", __entry->bytes_copied)
 );
 
-TRACE_EVENT(clsic_vox_asr_stream_data_rcv_start,
-	TP_PROTO(size_t sz),
-	TP_ARGS(sz),
-	TP_STRUCT__entry(__field(size_t, sz)),
-	TP_fast_assign(__entry->sz = sz;),
-	TP_printk("receiving: %u bytes", __entry->sz)
-);
-
-TRACE_EVENT(clsic_vox_asr_stream_data_rcv_end,
+TRACE_EVENT(clsic_vox_asr_stream_data_rcv,
 	TP_PROTO(size_t sz),
 	TP_ARGS(sz),
 	TP_STRUCT__entry(__field(size_t, sz)),
@@ -333,11 +325,14 @@ TRACE_EVENT(clsic_vox_asr_stream_copy_start,
 );
 
 TRACE_EVENT(clsic_vox_asr_stream_copy_end,
-	TP_PROTO(size_t count),
-	TP_ARGS(count),
-	TP_STRUCT__entry(__field(size_t, count)),
-	TP_fast_assign(__entry->count = count;),
-	TP_printk("copying: %zu bytes", __entry->count)
+	TP_PROTO(size_t count, unsigned int copied_total),
+	TP_ARGS(count, copied_total),
+	TP_STRUCT__entry(__field(size_t, count)
+			 __field(unsigned int, copied_total)),
+	TP_fast_assign(__entry->count = count;
+		       __entry->copied_total = copied_total),
+	TP_printk("copied: %zu bytes of total so far: %zu bytes",
+		  __entry->count, __entry->copied_total)
 );
 
 TRACE_EVENT(clsic_vox_set_mode,
