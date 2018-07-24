@@ -1856,7 +1856,7 @@ static struct regmap *clsic_get_regmap(struct device *dev)
 	return clsic_codec->core.tacna->regmap;
 }
 
-static struct snd_soc_codec_driver soc_codec_dev_clsic = {
+static const struct snd_soc_codec_driver soc_codec_dev_clsic = {
 	.probe = clsic_codec_probe,
 	.remove = clsic_codec_remove,
 	.get_regmap = clsic_get_regmap,

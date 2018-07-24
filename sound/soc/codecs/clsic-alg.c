@@ -796,7 +796,7 @@ static int clsic_alg_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static struct snd_soc_codec_driver soc_codec_clsic_alg = {
+static const struct snd_soc_codec_driver soc_codec_clsic_alg = {
 	.probe = clsic_alg_codec_probe,
 	.remove = clsic_alg_codec_remove,
 };

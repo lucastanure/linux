@@ -689,7 +689,7 @@ static struct snd_soc_dai_driver clsic_vox_dai[] = {
 	},
 };
 
-static struct snd_compr_ops clsic_vox_compr_ops = {
+static const struct snd_compr_ops clsic_vox_compr_ops = {
 	.open = clsic_vox_asr_stream_open,
 	.free = clsic_vox_asr_stream_free,
 	.set_params = clsic_vox_asr_stream_set_params,
@@ -699,7 +699,7 @@ static struct snd_compr_ops clsic_vox_compr_ops = {
 	.get_caps = clsic_vox_asr_stream_get_caps,
 };
 
-static struct snd_soc_platform_driver clsic_vox_compr_platform = {
+static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
 	.compr_ops = &clsic_vox_compr_ops,
 };
 
@@ -2995,7 +2995,7 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
+static const struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
 	.probe = clsic_vox_codec_probe,
 	.remove = clsic_vox_codec_remove,
 };
