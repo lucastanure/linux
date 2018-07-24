@@ -328,3 +328,22 @@ static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES_MVP] = {
  * through the stack.
  */
 #define VOX_TRGR_INVALID		-1
+
+/**
+ * set_error_info() - set the error info control value for userspace
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @ret:	The return code from another function.
+ *
+ * This function sets the internal variable used for the error info ALSA control
+ * according to the return value passed into it. We define any return value
+ * other than EIO to imply that CLSIC has returned an error code in a message
+ * response, otherwise it is a general driver error.
+ *
+ */
+static inline void set_error_info(struct clsic_vox *vox, int ret)
+{
+	if (ret == -EIO)
+		vox->error_info = VOX_ERROR_DRIVER;
+	else
+		vox->error_info = VOX_ERROR_CLSIC;
+}

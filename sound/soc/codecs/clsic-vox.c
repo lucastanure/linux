@@ -768,7 +768,6 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 
@@ -780,13 +779,11 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 		return 0;
 	case CLSIC_ERR_INVAL_MODE_TRANSITION:
 	case CLSIC_ERR_INVAL_MODE:
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code = msg_rsp.rsp_set_mode.hdr.err;
-		return -EIO;
+		return -EINVAL;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
 			  msg_rsp.rsp_set_mode.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 }
@@ -807,14 +804,24 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 static void vox_set_idle_and_state(struct clsic_vox *vox,
 				   bool set_clsic_to_idle, int drv_state)
 {
+	int ret = 0;
+
 	trace_clsic_vox_set_idle_and_state(set_clsic_to_idle, drv_state);
 
-	if (set_clsic_to_idle)
-		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	if (set_clsic_to_idle) {
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+		if (ret) {
+			clsic_err(vox->clsic,
+				  "unable to change to driver state %d from %d (ret = %d, CLSIC error code %d).\n",
+				  drv_state,
+				  vox->drv_state,
+				  ret,
+				  vox->clsic_error_code);
+			return;
+		}
+	}
 
 	vox->drv_state = drv_state;
-
-	vox_send_userspace_event(vox);
 }
 
 /**
@@ -847,7 +854,6 @@ static int vox_update_phrases(struct clsic_vox *vox)
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 		if (ret) {
 			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-			vox->error_info = VOX_ERROR_DRIVER;
 			return -EIO;
 		}
 
@@ -860,15 +866,14 @@ static int vox_update_phrases(struct clsic_vox *vox)
 			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVAL_PHRASEID:
-			vox->error_info = VOX_ERROR_CLSIC;
-			vox->clsic_error_code =
-				msg_rsp.rsp_is_phrase_installed.hdr.err;
+			clsic_err(vox->clsic,
+				  "failed to check if phrase %d was installed %d.\n",
+				  phr, msg_rsp.rsp_is_phrase_installed.hdr.err);
 			return -EIO;
 		default:
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d.\n",
 				  msg_rsp.rsp_is_phrase_installed.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 			return -EIO;
 		}
 	}
@@ -905,7 +910,6 @@ static int vox_update_bins(struct clsic_vox *vox)
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 		if (ret) {
 			clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-			vox->error_info = VOX_ERROR_DRIVER;
 			return -EIO;
 		}
 
@@ -919,16 +923,14 @@ static int vox_update_bins(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVALID_BIN_ID:
 		case CLSIC_ERR_INVALID_BIN_DATA:
-			/* TODO: check these error codes are possible. */
-			vox->error_info = VOX_ERROR_CLSIC;
-			vox->clsic_error_code =
-				msg_rsp.rsp_is_bin_installed.hdr.err;
+			clsic_err(vox->clsic,
+				  "failed to check VTE bin status %d.\n",
+				  msg_rsp.rsp_is_bin_installed.hdr.err);
 			return -EIO;
 		default:
 			clsic_err(vox->clsic,
 				  "unexpected CLSIC error code %d.\n",
 				  msg_rsp.rsp_is_bin_installed.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 			return -EIO;
 		}
 	}
@@ -961,7 +963,6 @@ static int vox_update_map(struct clsic_vox *vox)
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 
@@ -975,16 +976,14 @@ static int vox_update_map(struct clsic_vox *vox)
 	case CLSIC_ERR_BIOVTE_MAP_INVALID:
 	case CLSIC_ERR_BIOVTE_MAP_SZ_INVALID:
 	case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
-		/* TODO: check these error codes are possible. */
-		vox->error_info = VOX_ERROR_CLSIC;
-		vox->clsic_error_code =
-			msg_rsp.rsp_is_biovte_map_installed.hdr.err;
+		clsic_err(vox->clsic,
+			  "failed to check biometrics VTE map status %d.\n",
+			  msg_rsp.rsp_is_biovte_map_installed.hdr.err);
 		return -EIO;
 	default:
 		clsic_err(vox->clsic,
 			  "unexpected CLSIC error code %d.\n",
 			  msg_rsp.rsp_is_biovte_map_installed.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 
@@ -1055,7 +1054,6 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			if (ret) {
 				clsic_err(vox->clsic,
 					  "clsic_send_msg_sync %d.\n", ret);
-				vox->error_info = VOX_ERROR_DRIVER;
 				return -EIO;
 			}
 
@@ -1071,7 +1069,6 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 			case CLSIC_ERR_INVAL_USERID:
 			case CLSIC_ERR_INVAL_PHRASEID:
-				vox->error_info = VOX_ERROR_CLSIC;
 				vox->clsic_error_code =
 					msg_rsp.rsp_is_user_installed.hdr.err;
 				return -EIO;
@@ -1079,7 +1076,6 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 				clsic_err(vox->clsic,
 					  "unexpected CLSIC error code %d.\n",
 					 msg_rsp.rsp_is_user_installed.hdr.err);
-				vox->error_info = VOX_ERROR_DRIVER;
 				return -EIO;
 			}
 		}
@@ -1115,7 +1111,6 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 				  sizeof(struct clsic_vox_auth_key));
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 
@@ -1126,13 +1121,13 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	switch (msg_rsp.rsp_get_auth_key.hdr.err) {
 	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 	case CLSIC_ERR_KEY_NOT_FOUND:
-		vox->error_info = VOX_ERROR_CLSIC;
-		vox->clsic_error_code = msg_rsp.rsp_get_auth_key.hdr.err;
+		clsic_err(vox->clsic,
+			  "failed to get biometric public key: %d.\n",
+			  msg_rsp.rsp_get_auth_key.hdr.err);
 		return -EIO;
 	default:
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
 			  msg_rsp.rsp_get_auth_key.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
 		return -EIO;
 	}
 }
@@ -1157,8 +1152,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
-		clsic_err(vox->clsic, "%d.\n", ret);
-		vox->error_info = VOX_ERROR_DRIVER;
+		set_error_info(vox, ret);
 		goto exit;
 	}
 
@@ -1233,8 +1227,10 @@ static int vox_install_asset(struct clsic_vox *vox)
 			/* Get updated information on enrolled users. */
 			ret = vox_update_user_status(vox, vox->phrase_id,
 						     vox->phrase_id);
-			if (ret)
+			if (ret) {
+				set_error_info(vox, ret);
 				goto exit;
+			}
 			vox->phrase_installed[vox->phrase_id] = true;
 			clsic_dbg(vox->clsic,
 				  "successfully installed phrase %d.\n",
@@ -1257,9 +1253,9 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVAL_PHRASEID:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_install_phrase.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			break;
 		default:
 			clsic_err(vox->clsic,
@@ -1285,8 +1281,8 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_FLASH:
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code = msg_rsp.rsp_install_bin.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			break;
 		default:
 			clsic_err(vox->clsic,
@@ -1312,9 +1308,9 @@ static int vox_install_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_FLASH:
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_install_biovte_map.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			break;
 		default:
 			clsic_err(vox->clsic,
@@ -1327,6 +1323,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1348,8 +1345,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
-		clsic_err(vox->clsic, "%d.\n", ret);
-		vox->error_info = VOX_ERROR_DRIVER;
+		set_error_info(vox, ret);
 		goto exit;
 	}
 
@@ -1414,9 +1410,9 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVAL_PHRASEID:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_phrase.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			ret = -EIO;
 			break;
 		default:
@@ -1443,8 +1439,8 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_INVALID_BIN_ID:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code = msg_rsp.rsp_remove_bin.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			ret = -EIO;
 			break;
 		default:
@@ -1469,9 +1465,9 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			break;
 		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
 		case CLSIC_ERR_VOICEID:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_biovte_map.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			ret = -EIO;
 			break;
 		default:
@@ -1487,6 +1483,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1510,7 +1507,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
-		clsic_err(vox->clsic, "%d.\n", ret);
+		set_error_info(vox, ret);
 		goto exit;
 	}
 
@@ -1543,8 +1540,8 @@ static int vox_remove_user(struct clsic_vox *vox)
 	case CLSIC_ERR_INVAL_USERID:
 	case CLSIC_ERR_INVAL_PHRASEID:
 	case CLSIC_ERR_VOICEID:
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code = msg_rsp.rsp_remove_user.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 		break;
 	default:
@@ -1557,6 +1554,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1582,7 +1580,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_ENROL);
 	if (ret) {
-		clsic_err(vox->clsic, "%d.\n", ret);
+		set_error_info(vox, ret);
 		goto exit;
 	}
 
@@ -1666,8 +1664,8 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		/* Could install the requisite phrase and try again? */
 	case CLSIC_ERR_USER_ALREADY_INSTALLED:
 		/* Could remove the user and try again? */
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code = msg_rsp.rsp_install_user_begin.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 		break;
 	default:
@@ -1683,6 +1681,8 @@ exit:
 		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	else
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
+
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1731,8 +1731,8 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	case CLSIC_ERR_INPUT_PATH:
 	case CLSIC_ERR_VOICEID:
 	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code = msg_rsp.rsp_rep_start.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 		break;
 	default:
@@ -1744,8 +1744,10 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 	}
 
 exit:
-	if (ret)
+	if (ret) {
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
+		vox_send_userspace_event(vox);
+	}
 
 	return ret;
 }
@@ -1786,7 +1788,6 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 
 	switch (msg_rsp.rsp_install_user_complete.hdr.err) {
 	case CLSIC_ERR_NONE:
-		vox->error_info = VOX_ERROR_SUCCESS;
 		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
 				    + vox->user_id] = true;
 		if ((vox->timeout > 0) && (vox->duration > 0))
@@ -1794,13 +1795,14 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 			vox->user_installed[
 					(CLSIC_VOX_PHRASE_TI * VOX_MAX_USERS)
 					+ vox->user_id] = true;
+		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case CLSIC_ERR_REPS_NOT_ENOUGH_VALID:
 	case CLSIC_ERR_VOICEID:
 	case CLSIC_ERR_FLASH:
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code =
 			msg_rsp.rsp_install_user_complete.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 		break;
 	default:
@@ -1813,6 +1815,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1868,8 +1871,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
 	case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
-		vox->error_info = VOX_ERROR_CLSIC;
 		vox->clsic_error_code = vox->auth_error;
+		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 		goto exit;
 	default:
@@ -1923,8 +1926,8 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
 		case CLSIC_ERR_AUTH_BIOM_DISABLED:
 		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			ret = -EIO;
 			break;
 		default:
@@ -1939,6 +1942,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 
 exit:
 	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -1955,11 +1959,17 @@ exit:
  */
 static void vox_stop_bio_results(struct clsic_vox *vox)
 {
-	vox->error_info = VOX_ERROR_SUCCESS;
-
 	trace_clsic_vox_stop_bio_results(0);
 
-	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
+	mutex_lock(&vox->drv_state_lock);
+
+	if (vox->drv_state == VOX_DRV_STATE_STOPPING_BIO_RESULTS)
+		vox->drv_state = VOX_DRV_STATE_STREAMING;
+
+	vox->error_info = VOX_ERROR_SUCCESS;
+	vox_send_userspace_event(vox);
+
+	mutex_unlock(&vox->drv_state_lock);
 }
 
 /**
@@ -2018,6 +2028,7 @@ static void vox_drv_state_handler(struct work_struct *data)
 	case VOX_DRV_STATE_TERMINATING_ENROL:
 		vox->error_info = VOX_ERROR_SUCCESS;
 		vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+		vox_send_userspace_event(vox);
 		break;
 	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
 		ret = vox_get_bio_results(vox);
@@ -2584,8 +2595,8 @@ static int vox_notification_handler(struct clsic *clsic,
 		case CLSIC_ERR_REP_FEATURE_OVERFLOW:
 		case CLSIC_ERR_REP_PLOSIVE:
 		case CLSIC_ERR_REP_REWIND_OVF:
-			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code = msg_nty->nty_rep_complete.err;
+			vox->error_info = VOX_ERROR_CLSIC;
 			break;
 		default:
 			clsic_err(vox->clsic,
@@ -2596,6 +2607,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		}
 
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
+		vox_send_userspace_event(vox);
 
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
