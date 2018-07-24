@@ -62,6 +62,19 @@ static void vox_set_idle_and_state(struct clsic_vox *vox,
 				   int drv_state);
 
 /**
+ * vox_send_userspace_event() - notify userspace of a change.
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Notify userspace that a change has happened using an event.
+ *
+ */
+static void vox_send_userspace_event(struct clsic_vox *vox)
+{
+	snd_ctl_notify(vox->codec->component.card->snd_card,
+		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->error_info_kctrl->id);
+}
+
+/**
  * clsic_vox_asr_stream_open() - open the ASR stream
  * @stream:	Standard parameter as used by compressed stream infrastructure.
  *
@@ -795,8 +808,7 @@ static void vox_set_idle_and_state(struct clsic_vox *vox,
 
 	vox->drv_state = drv_state;
 
-	snd_ctl_notify(vox->codec->component.card->snd_card,
-		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->error_info_kctrl->id);
+	vox_send_userspace_event(vox);
 }
 
 /**
