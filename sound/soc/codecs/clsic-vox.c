@@ -2235,7 +2235,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
 			vox->drv_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
 			mutex_unlock(&vox->drv_state_lock);
-			schedule_work(&vox->drv_state_work);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
@@ -2259,7 +2258,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			 */
 			vox->get_bio_results_early_exit = true;
 			complete(&vox->new_bio_results_completion);
-			schedule_work(&vox->drv_state_work);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
@@ -2277,7 +2275,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			vox->drv_state =
 				ucontrol->value.enumerated.item[0] + 1;
 			mutex_unlock(&vox->drv_state_lock);
-			schedule_work(&vox->drv_state_work);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
@@ -2290,7 +2287,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			vox->drv_state =
 				ucontrol->value.enumerated.item[0] + 1;
 			mutex_unlock(&vox->drv_state_lock);
-			schedule_work(&vox->drv_state_work);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
 			ret = -EBUSY;
@@ -2301,11 +2297,20 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		ret = -EINVAL;
 	}
 
-	if (ret == -EINVAL)
+	if (ret == 0) {
+		if (schedule_work(&vox->drv_state_work) == false) {
+			clsic_info(vox->clsic,
+				   "flush scheduled work and reschedule: state %d\n",
+				   vox->drv_state);
+			flush_scheduled_work();
+			schedule_work(&vox->drv_state_work);
+		}
+	} else
 		clsic_err(vox->codec,
-			  "unable to switch from vox driver state %d to %d.\n",
+			  "unable to switch from vox driver state %d to %d (error %d).\n",
 			  vox->drv_state,
-			  ucontrol->value.enumerated.item[0]);
+			  ucontrol->value.enumerated.item[0],
+			  ret);
 
 	return ret;
 }
