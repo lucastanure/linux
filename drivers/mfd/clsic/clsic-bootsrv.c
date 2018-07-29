@@ -530,7 +530,6 @@ static void clsic_bootsrv_service_stop(struct clsic *clsic,
 int clsic_bootsrv_service_start(struct clsic *clsic,
 				struct clsic_service *handler)
 {
-	int ret = 0;
 
 	handler->callback = &clsic_bootsrv_msghandler;
 	handler->stop = &clsic_bootsrv_service_stop;
@@ -538,5 +537,5 @@ int clsic_bootsrv_service_start(struct clsic *clsic,
 	device_create_file(clsic->dev, &dev_attr_device_fw_version);
 	device_create_file(clsic->dev, &dev_attr_file_fw_version);
 
-	return ret;
+	return 0;
 }
