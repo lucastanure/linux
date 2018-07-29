@@ -654,6 +654,7 @@ int clsic_register_service_handler(struct clsic *clsic,
 		tmp_handler = kzalloc(sizeof(*tmp_handler), GFP_KERNEL);
 		if (tmp_handler == NULL) {
 			ret = -ENOMEM;
+			mutex_unlock(&clsic->service_lock);
 			goto reterror;
 		}
 

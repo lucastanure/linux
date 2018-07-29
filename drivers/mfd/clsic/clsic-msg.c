@@ -1518,6 +1518,7 @@ static int clsic_handle_message_response(struct clsic *clsic,
 			 * halted state
 			 */
 			clsic_device_error(clsic, CLSIC_DEVICE_ERROR_LOCKHELD);
+			mutex_unlock(&clsic->message_lock);
 			return CLSIC_HANDLED;
 		}
 		clsic_set_msgstate(found_msg, CLSIC_MSG_SUCCESS);
