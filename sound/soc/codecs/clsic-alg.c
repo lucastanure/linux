@@ -209,7 +209,6 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 	u32 reg = be32_to_cpu(*(const __be32 *) reg_buf);
 	int ret = 0;
 	size_t i;
-	size_t j;
 	size_t frag_sz;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
@@ -265,16 +264,14 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 
 		if (ret != 0)
 			return ret;
-
-		/*
-		 * The regmap bus is declared as BIG endian but all the
-		 * accesses this service makes are CPU native so the value may
-		 * need to be converted.
-		 */
-		for (j = 0; j < (frag_sz / CLSIC_ALG_VAL_BYTES); ++j)
-			((__be32 *) val_buf)[i + j] =
-				cpu_to_be32(((u32 *) val_buf)[i + j]);
 	}
+	/*
+	 * The regmap bus is declared as BIG endian but all the
+	 * accesses this service makes are CPU native so the value may
+	 * need to be converted.
+	 */
+	for (i = 0; i < (val_size / CLSIC_ALG_VAL_BYTES); ++i)
+		((__be32 *) val_buf)[i] = cpu_to_be32(((u32 *) val_buf)[i]);
 
 	return ret;
 }
