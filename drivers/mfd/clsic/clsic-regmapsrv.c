@@ -18,14 +18,11 @@
 
 /*
  * The regmap we expose is 32bits address and data width
- *
- * The stride is the number of bytes per register address, typically this is 4
  */
 #define CLSIC_RAS_REG_BITS	32
 #define CLSIC_RAS_REG_BYTES	(CLSIC_RAS_REG_BITS/BITS_PER_BYTE)
 #define CLSIC_RAS_VAL_BITS	32
 #define CLSIC_RAS_VAL_BYTES	(CLSIC_RAS_VAL_BITS/BITS_PER_BYTE)
-#define CLSIC_RAS_STRIDE	(CLSIC_RAS_REG_BITS/BITS_PER_BYTE)
 
 /*
  * actually is 1024, but using a multiple of 3 and 5 solves issues with
@@ -224,8 +221,7 @@ static int clsic_ras_read(void *context, const void *reg_buf,
 				   regmapsrv->service_instance,
 				   CLSIC_RAS_MSG_CR_RDREG_BULK);
 		frag_sz = min(val_size - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
-		msg_cmd.cmd_rdreg_bulk.addr =
-			reg + ((i / CLSIC_RAS_REG_BYTES) * CLSIC_RAS_STRIDE);
+		msg_cmd.cmd_rdreg_bulk.addr = reg + i;
 		msg_cmd.cmd_rdreg_bulk.byte_count = frag_sz;
 
 		ret = clsic_send_msg_sync(
@@ -291,7 +287,7 @@ static int clsic_ras_write(void *context, const void *val_buf,
 	clsic = regmapsrv->clsic;
 
 	payload_sz = val_size - CLSIC_RAS_REG_BYTES;
-	if ((val_size % CLSIC_RAS_STRIDE) != 0) {
+	if ((val_size % CLSIC_RAS_REG_BYTES) != 0) {
 		clsic_err(clsic,
 			  "error: context %p val_buf %p, val_size %d",
 			  context, val_buf, val_size);
@@ -318,8 +314,7 @@ static int clsic_ras_write(void *context, const void *val_buf,
 				   regmapsrv->service_instance,
 				   CLSIC_RAS_MSG_CR_WRREG_BULK);
 		frag_sz = min(payload_sz - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
-		msg_cmd.blkcmd_wrreg_bulk.addr =
-			addr + ((i / CLSIC_RAS_REG_BYTES) * CLSIC_RAS_STRIDE);
+		msg_cmd.blkcmd_wrreg_bulk.addr = addr + i;
 		msg_cmd.blkcmd_wrreg_bulk.hdr.bulk_sz = frag_sz;
 
 		/* XXX check - we shouldn't need to clear response structures */
@@ -405,7 +400,7 @@ static void clsic_ras_regmap_unlock(void *context)
 static struct regmap_config regmap_config_ras = {
 	.reg_bits = CLSIC_RAS_REG_BITS,
 	.val_bits = CLSIC_RAS_VAL_BITS,
-	.reg_stride = CLSIC_RAS_STRIDE,
+	.reg_stride = CLSIC_RAS_REG_BYTES,
 
 	.lock = &clsic_ras_regmap_lock,
 	.unlock = &clsic_ras_regmap_unlock,
