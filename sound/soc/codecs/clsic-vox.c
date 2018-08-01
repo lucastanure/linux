@@ -1826,31 +1826,6 @@ exit:
 }
 
 /**
- * vox_stop_bio_results() - no longer get biometric results from CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
- *
- * Tell CLSIC that we will no longer be requesting any biometric results by
- * switching CLSIC to IDLE mode in preparation for the next operation. Obviously
- * it will not be possible to get biometric results any more after calling this.
- *
- * Return: errno.
- */
-static void vox_stop_bio_results(struct clsic_vox *vox)
-{
-	trace_clsic_vox_stop_bio_results(0);
-
-	mutex_lock(&vox->drv_state_lock);
-
-	if (vox->drv_state == VOX_DRV_STATE_STOPPING_BIO_RESULTS)
-		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
-
-	vox->error_info = VOX_ERROR_SUCCESS;
-	vox_send_userspace_event(vox);
-
-	mutex_unlock(&vox->drv_state_lock);
-}
-
-/**
  * vox_drv_state_handler() - handle userspace commands from the driver state
  *				control
  * @data:	Used to obtain the main instance of struct clsic_vox used in
@@ -1910,9 +1885,6 @@ static void vox_drv_state_handler(struct work_struct *data)
 		ret = vox_get_bio_results(vox);
 		if (ret)
 			clsic_err(clsic, "vox_get_bio_results ret %d.\n", ret);
-		break;
-	case VOX_DRV_STATE_STOPPING_BIO_RESULTS:
-		vox_stop_bio_results(vox);
 		break;
 	default:
 		clsic_err(clsic, "unknown state %d for scheduled work.\n",
@@ -2323,18 +2295,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			ret = -EBUSY;
 		}
 		break;
-	case VOX_DRV_STATE_STOP_BIO_RESULTS:
-		/*
-		 * TODO: remove stop biometrics entirely as it is now managed
-		 * by simply closing the compressed audio path.
-		 */
-		trace_clsic_vox_stop_bio_results(0);
-
-		mutex_unlock(&vox->drv_state_lock);
-		vox->error_info = VOX_ERROR_SUCCESS;
-		vox_send_userspace_event(vox);
-
-		return 0;
 	case VOX_DRV_STATE_INSTALL_ASSET:
 	case VOX_DRV_STATE_UNINSTALL_ASSET:
 	case VOX_DRV_STATE_REMOVE_USER:

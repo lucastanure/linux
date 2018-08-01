@@ -222,7 +222,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_DRV_STATES			22
+#define VOX_NUM_DRV_STATES			21
 
 #define VOX_DRV_STATE_NEUTRAL			0
 #define VOX_DRV_STATE_INSTALL_ASSET		1
@@ -242,10 +242,9 @@ static const struct {
 #define VOX_DRV_STATE_TERMINATING_ENROL		15
 #define VOX_DRV_STATE_GET_BIO_RESULTS		16
 #define VOX_DRV_STATE_GETTING_BIO_RESULTS	17
-#define VOX_DRV_STATE_STOP_BIO_RESULTS		18
-#define VOX_DRV_STATE_STOPPING_BIO_RESULTS	19
-#define VOX_DRV_STATE_LISTENING			20
-#define VOX_DRV_STATE_STREAMING			21
+#define VOX_DRV_STATE_STARTING_LISTEN		18
+#define VOX_DRV_STATE_LISTENING			19
+#define VOX_DRV_STATE_STREAMING			20
 
 static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
@@ -267,8 +266,7 @@ static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_TERMINATING_ENROL]	= "Terminating User Enrolment",
 	[VOX_DRV_STATE_GET_BIO_RESULTS]		= "Get Biometric Results",
 	[VOX_DRV_STATE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
-	[VOX_DRV_STATE_STOP_BIO_RESULTS]	= "Stop Biometric Results",
-	[VOX_DRV_STATE_STOPPING_BIO_RESULTS]	= "Stopping Biometric Results",
+	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
 	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
 	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",
 };
