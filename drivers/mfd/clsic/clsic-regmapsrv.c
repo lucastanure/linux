@@ -299,7 +299,7 @@ static int clsic_ras_write(void *context, const void *val_buf,
 	clsic = regmapsrv->clsic;
 
 	payload_sz = val_size - CLSIC_RAS_REG_BYTES;
-	if ((val_size % CLSIC_RAS_REG_BYTES) != 0) {
+	if ((val_size & (CLSIC_RAS_REG_BYTES - 1)) != 0) {
 		clsic_err(clsic,
 			  "error: context %p val_buf %p, val_size %d",
 			  context, val_buf, val_size);
