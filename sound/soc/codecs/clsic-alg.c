@@ -25,9 +25,6 @@
 #define CLSIC_ALG_VAL_BITS	32
 #define CLSIC_ALG_VAL_BYTES	(CLSIC_ALG_VAL_BITS/BITS_PER_BYTE)
 
-/* Stride is the number of bytes per register address, typically this is 4  */
-#define CLSIC_ALG_STRIDE	(CLSIC_ALG_REG_BITS/BITS_PER_BYTE)
-
 #define CLSIC_DSP1_N_RX_CHANNELS	9
 #define CLSIC_DSP1_N_TX_CHANNELS	9
 #define CLSIC_DSP2_N_RX_CHANNELS	8
@@ -228,8 +225,7 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 				   alg->service->service_instance,
 				   CLSIC_RAS_MSG_CR_RDREG_BULK);
 		frag_sz = min(val_size - i, (size_t) CLSIC_ALG_MAX_BULK_SZ);
-		msg_cmd.cmd_rdreg_bulk.addr =
-			reg + ((i / CLSIC_ALG_REG_BYTES) * CLSIC_ALG_STRIDE);
+		msg_cmd.cmd_rdreg_bulk.addr = reg + i;
 		msg_cmd.cmd_rdreg_bulk.byte_count = frag_sz;
 
 		ret = clsic_send_msg_sync(
@@ -314,7 +310,7 @@ static int clsic_alg_write(void *context, const void *val_buf,
 	clsic = alg->clsic;
 
 	payload_sz = val_size - CLSIC_ALG_REG_BYTES;
-	if ((val_size % CLSIC_ALG_STRIDE) != 0) {
+	if ((val_size % CLSIC_ALG_REG_BYTES) != 0) {
 		clsic_err(clsic,
 			  "error: context %p val_buf %p, val_size %d",
 			  context, val_buf, val_size);
@@ -340,8 +336,7 @@ static int clsic_alg_write(void *context, const void *val_buf,
 				   alg->service->service_instance,
 				   CLSIC_RAS_MSG_CR_WRREG_BULK);
 		frag_sz = min(payload_sz - i, (size_t) CLSIC_ALG_MAX_BULK_SZ);
-		msg_cmd.blkcmd_wrreg_bulk.addr =
-			addr + ((i / CLSIC_ALG_REG_BYTES) * CLSIC_ALG_STRIDE);
+		msg_cmd.blkcmd_wrreg_bulk.addr = addr + i;
 		msg_cmd.blkcmd_wrreg_bulk.hdr.bulk_sz = frag_sz;
 
 		memset(&msg_rsp, 0, CLSIC_FIXED_MSG_SZ);
@@ -489,7 +484,7 @@ bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
 static struct regmap_config regmap_config_alg = {
 	.reg_bits = CLSIC_ALG_REG_BITS,
 	.val_bits = CLSIC_ALG_VAL_BITS,
-	.reg_stride = CLSIC_ALG_STRIDE,
+	.reg_stride = CLSIC_ALG_REG_BYTES,
 
 	.lock = &clsic_alg_regmap_lock,
 	.unlock = &clsic_alg_regmap_unlock,
