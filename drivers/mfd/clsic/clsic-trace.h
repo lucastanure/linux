@@ -545,86 +545,98 @@ TRACE_EVENT(clsic_dev_panic,
 );
 
 TRACE_EVENT(clsic_ras_simplewrite,
-	TP_PROTO(uint32_t address, uint32_t value, int ret),
-	TP_ARGS(address, value, ret),
+	TP_PROTO(uint32_t address, uint32_t value, int ret, uint8_t err),
+	TP_ARGS(address, value, ret, err),
 	TP_STRUCT__entry(
 			__field(uint32_t, address)
 			__field(uint32_t, value)
 			__field(int, ret)
+			__field(uint8_t, err)
 			),
 	TP_fast_assign(
 			__entry->address = address;
 			__entry->value = value;
 			__entry->ret = ret;
+			__entry->err = err;
 		),
 	TP_printk(
-			"  addr: 0x%x val: 0x%x ret: %d",
+			"  addr: 0x%x val: 0x%x ret: %d (err: %d)",
 			__entry->address,
 			__entry->value,
-			__entry->ret
+			__entry->ret,
+			__entry->err
 			)
 );
 
 TRACE_EVENT(clsic_ras_simpleread,
-	TP_PROTO(uint32_t address, uint32_t value, int ret),
-	TP_ARGS(address, value, ret),
+	TP_PROTO(uint32_t address, uint32_t value, int ret, uint8_t err),
+	TP_ARGS(address, value, ret, err),
 	TP_STRUCT__entry(
 			__field(uint32_t, address)
 			__field(uint32_t, value)
 			__field(int, ret)
+			__field(uint8_t, err)
 			),
 	TP_fast_assign(
 			__entry->address = address;
 			__entry->value = value;
 			__entry->ret = ret;
+			__entry->err = err;
 		),
 	TP_printk(
-			"   addr: 0x%x val: 0x%x ret: %d",
+			"   addr: 0x%x val: 0x%x ret: %d (err: %d)",
 			__entry->address,
 			__entry->value,
-			__entry->ret
+			__entry->ret,
+			__entry->err
 			)
 );
 
 TRACE_EVENT(clsic_ras_bulkwrite,
-	TP_PROTO(uint32_t address, uint32_t count, int ret),
-	TP_ARGS(address, count, ret),
+	TP_PROTO(uint32_t address, uint32_t count, int ret, uint8_t err),
+	TP_ARGS(address, count, ret, err),
 	TP_STRUCT__entry(
 			__field(uint32_t, address)
 			__field(uint32_t, count)
 			__field(int, ret)
+			__field(uint8_t, err)
 			),
 	TP_fast_assign(
 			__entry->address = address;
 			__entry->count = count;
 			__entry->ret = ret;
+			__entry->err = err;
 		),
 	TP_printk(
-			"    addr: 0x%x count: %d ret: %d",
+			"    addr: 0x%x count: %d ret: %d (err: %d)",
 			__entry->address,
 			__entry->count,
-			__entry->ret
+			__entry->ret,
+			__entry->err
 			)
 );
 
 TRACE_EVENT(clsic_ras_bulkread,
-	TP_PROTO(uint32_t address, uint32_t count, int ret),
-	TP_ARGS(address, count, ret),
+	TP_PROTO(uint32_t address, uint32_t count, int ret, uint8_t err),
+	TP_ARGS(address, count, ret, err),
 	TP_STRUCT__entry(
 			__field(uint32_t, address)
 			__field(uint32_t, count)
 			__field(int, ret)
+			__field(uint8_t, err)
 			),
 	TP_fast_assign(
 			__entry->address = address;
 			__entry->count = count;
 			__entry->ret = ret;
+			__entry->err = err;
 		),
 	TP_printk(
-			"    addr: 0x%x count: %d ret: %d",
+			"    addr: 0x%x count: %d ret: %d (err: %d)",
 			__entry->address,
 			__entry->count,
-			__entry->ret
+			__entry->ret,
+			__entry->err
 			)
 );
 
