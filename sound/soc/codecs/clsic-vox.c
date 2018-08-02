@@ -2378,14 +2378,12 @@ static int vox_update_barge_in(struct clsic_vox *vox)
 	}
 
 	/* rsp_barge_in_ena and rsp_barge_in_dis are identical. */
-	switch (msg_rsp.rsp_barge_in_ena.hdr.err) {
-	case CLSIC_ERR_NONE:
-		return 0;
-	default:
+	if (msg_rsp.rsp_barge_in_ena.hdr.err != CLSIC_ERR_NONE) {
 		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
 			  msg_rsp.rsp_barge_in_ena.hdr.err);
 		return -EIO;
 	}
+	return 0;
 }
 
 /**
