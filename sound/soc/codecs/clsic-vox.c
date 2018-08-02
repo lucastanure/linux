@@ -1474,18 +1474,9 @@ static int vox_remove_user(struct clsic_vox *vox)
 				    + vox->user_id] = false;
 		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_INVAL_USERID:
-	case CLSIC_ERR_INVAL_PHRASEID:
-	case CLSIC_ERR_VOICEID:
+	default:
 		vox->clsic_error_code = msg_rsp.rsp_remove_user.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
-		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_remove_user.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
 		ret = -EIO;
 		break;
 	}
