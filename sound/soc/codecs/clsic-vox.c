@@ -916,16 +916,9 @@ static int vox_update_bins(struct clsic_vox *vox)
 		case CLSIC_ERR_BIN_NOT_INSTALLED:
 			vox->bin_installed[bin] = false;
 			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVALID_BIN_ID:
-		case CLSIC_ERR_INVALID_BIN_DATA:
-			clsic_err(vox->clsic,
-				  "failed to check VTE bin status %d.\n",
-				  msg_rsp.rsp_is_bin_installed.hdr.err);
-			return -EIO;
 		default:
 			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
+				  "failed to check VTE bin status %d.\n",
 				  msg_rsp.rsp_is_bin_installed.hdr.err);
 			return -EIO;
 		}
