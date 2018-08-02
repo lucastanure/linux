@@ -2391,16 +2391,14 @@ static int vox_notification_handler(struct clsic *clsic,
 
 	switch (msgid) {
 	case CLSIC_VOX_MSG_N_LISTEN_ERR:
+		/*
+		 * There was an error while the voice service was listening for
+		 * a trigger.
+		 */
 		trace_clsic_vox_trigger_heard(false);
 
-		/* Failed to trigger. */
-		if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
-			clsic_err(vox->clsic,
-				"trigger detection error on CLSIC.\n");
-		else
-			clsic_err(vox->clsic,
-				  "trigger detection error on CLSIC %d.\n",
-				  msg_nty->nty_listen_err.err);
+		clsic_err(vox->clsic, "trigger detection error on CLSIC %d.\n",
+			  msg_nty->nty_listen_err.err);
 
 		vox->asr_stream.listen_error = true;
 
@@ -2409,13 +2407,18 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_TRGR_DETECT:
+		/*
+		 * On trigger CLSIC has transitioned from LISTEN to STREAM by
+		 * itself.
+		 */
 		trace_clsic_vox_trigger_heard(true);
-
-		/* Normal trigger. */
 		vox->clsic_mode = CLSIC_VOX_MODE_STREAM;
 		vox->asr_stream.listen_error = false;
 
-		/* CLSIC transitions by itself from LISTEN to STREAM. */
+		/*
+		 * Prevent the messaging processor from being powered off while
+		 * streaming
+		 */
 		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
 
 		if (vox->asr_stream.stream)
@@ -2423,33 +2426,11 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_REP_COMPLETE:
-		switch (msg_nty->nty_rep_complete.err) {
-		case CLSIC_ERR_NONE:
+		if (msg_nty->nty_rep_complete.err == CLSIC_ERR_NONE)
 			vox->error_info = VOX_ERROR_SUCCESS;
-			break;
-		case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
-		case CLSIC_ERR_REP_TRGR_TIMEOUT:
-		case CLSIC_ERR_REP_NOISE_LVL:
-		case CLSIC_ERR_REP_SNR:
-		case CLSIC_ERR_REP_SPEECH_RATIO:
-		case CLSIC_ERR_REP_NET_SPEECH:
-		case CLSIC_ERR_REP_SATURATION:
-		case CLSIC_ERR_INPUT_PATH:
-		case CLSIC_ERR_VOICEID:
-		case CLSIC_ERR_REP_UNEXPECTED_TRGR:
-		case CLSIC_ERR_SECURITY_FAIL:
-		case CLSIC_ERR_REP_FEATURE_OVERFLOW:
-		case CLSIC_ERR_REP_PLOSIVE:
-		case CLSIC_ERR_REP_REWIND_OVF:
+		else {
 			vox->clsic_error_code = msg_nty->nty_rep_complete.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_nty->nty_rep_complete.err);
-			vox->error_info = VOX_ERROR_DRIVER;
-			break;
 		}
 
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
