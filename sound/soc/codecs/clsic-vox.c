@@ -1578,31 +1578,12 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	switch (msg_rsp.rsp_install_user_begin.hdr.err) {
-	case CLSIC_ERR_NONE:
+	if (msg_rsp.rsp_install_user_begin.hdr.err == CLSIC_ERR_NONE)
 		vox->error_info = VOX_ERROR_SUCCESS;
-		break;
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_ALREADY_INSTALLING_USER:
-	case CLSIC_ERR_INVAL_USERID:
-	case CLSIC_ERR_INVAL_PHRASEID:
-	case CLSIC_ERR_INVAL_REP_COUNT:
-	case CLSIC_ERR_VOICEID:
-	case CLSIC_ERR_INVALID_ENROL_DURATION:
-	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-		/* Could install the requisite phrase and try again? */
-	case CLSIC_ERR_USER_ALREADY_INSTALLED:
-		/* Could remove the user and try again? */
+	else {
 		vox->clsic_error_code = msg_rsp.rsp_install_user_begin.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
-		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_install_user_begin.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
-		break;
 	}
 
 exit:
