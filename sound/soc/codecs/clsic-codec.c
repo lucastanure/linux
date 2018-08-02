@@ -106,8 +106,8 @@ static void clsic_dsp_memory_disable(struct tacna_priv *priv)
 	}
 }
 
-int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
-		       struct snd_kcontrol *kcontrol, int event)
+static int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
+			      struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
 	struct tacna_priv *priv = snd_soc_codec_get_drvdata(codec);
@@ -2029,7 +2029,7 @@ static int clsic_codec_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-const struct dev_pm_ops clsic_codec_pm_ops = {
+static const struct dev_pm_ops clsic_codec_pm_ops = {
 	SET_RUNTIME_PM_OPS(clsic_codec_runtime_suspend,
 			   clsic_codec_runtime_resume,
 			   NULL)
