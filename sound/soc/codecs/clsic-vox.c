@@ -2067,7 +2067,7 @@ static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
 	if (ucontrol->value.enumerated.item[0] != VOX_ERROR_CLEARED)
 		return -EINVAL;
 
-	vox->error_info = ucontrol->value.enumerated.item[0];
+	vox->error_info = VOX_ERROR_CLEARED;
 	vox->clsic_error_code = CLSIC_ERR_NONE;
 
 	return 0;
