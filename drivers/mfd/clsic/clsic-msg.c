@@ -1700,8 +1700,7 @@ static void clsic_handle_message_inservice(struct clsic *clsic,
 	struct clsic_service *service_handler = NULL;
 
 	if (servinst > CLSIC_SERVICE_MAX) {
-		clsic_dump_message(clsic, msg,
-				   "clsic_handle_message_inservice() out of range");
+		clsic_dump_message(clsic, msg, "service out of range");
 	} else {
 		mutex_lock(&clsic->service_lock);
 		service_handler = clsic->service_handlers[servinst];
@@ -1720,8 +1719,7 @@ static void clsic_handle_message_inservice(struct clsic *clsic,
 		 * There is nothing more than can be done for the message so it
 		 * will be dropped.
 		 */
-		clsic_dump_message(clsic, msg,
-				   "clsic_handle_message_inservice() unhandled");
+		clsic_dump_message(clsic, msg, "message unhandled by service");
 
 		/*
 		 * If this is a bulk response then the FIFO needs to be drained

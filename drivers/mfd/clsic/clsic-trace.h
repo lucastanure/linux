@@ -360,10 +360,10 @@ TRACE_EVENT(clsic_vox_set_mode,
 );
 
 TRACE_EVENT(clsic_vox_set_idle_and_state,
-	TP_PROTO(bool set_clsic_to_idle, unsigned int drv_state),
+	TP_PROTO(int set_clsic_to_idle, unsigned int drv_state),
 	TP_ARGS(set_clsic_to_idle, drv_state),
 	TP_STRUCT__entry(
-			__field(bool, set_clsic_to_idle)
+			__field(int, set_clsic_to_idle)
 			__field(unsigned int, drv_state)
 			),
 	TP_fast_assign(
@@ -687,10 +687,10 @@ TRACE_EVENT(clsic_msgproc_shutdown_schedule,
 );
 
 TRACE_EVENT(clsic_msgproc_shutdown_cancel,
-	TP_PROTO(bool sync, int ret),
+	TP_PROTO(int sync, int ret),
 	TP_ARGS(sync, ret),
 	TP_STRUCT__entry(
-			__field(bool, sync)
+			__field(int, sync)
 			__field(int, ret)
 			),
 	TP_fast_assign(
