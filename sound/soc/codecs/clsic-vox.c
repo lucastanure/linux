@@ -712,7 +712,7 @@ static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
 };
 
 /**
- * vox_safely_set_mode_pm() - set power management options using the CLSIC mode
+ * vox_set_pm_from_mode() - set power management options using the CLSIC mode
  * @vox:	The main instance of struct clsic_vox used in this driver.
  * @new_mode:	New CLSIC mode to change to.
  *
