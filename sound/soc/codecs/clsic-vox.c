@@ -1083,22 +1083,19 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 		return -EIO;
 	}
 
-	/* Response is either bulk in case of success, or not. */
-	if (clsic_get_bulk_bit(msg_rsp.rsp_get_auth_key.hdr.sbc))
+	/* Response is bulk in case of success. */
+	if (clsic_get_bulk_bit(msg_rsp.blkrsp_get_auth_key.hdr.sbc))
 		return 0;
 
-	switch (msg_rsp.rsp_get_auth_key.hdr.err) {
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_KEY_NOT_FOUND:
-		clsic_err(vox->clsic,
-			  "failed to get biometric public key: %d.\n",
-			  msg_rsp.rsp_get_auth_key.hdr.err);
-		return -EIO;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_get_auth_key.hdr.err);
-		return -EIO;
-	}
+	/*
+	 * If it is not a bulk response then it is an fixed size error
+	 * response.
+	 */
+
+	clsic_err(vox->clsic,
+		  "failed to get biometric public key: %d.\n",
+		  msg_rsp.rsp_get_auth_key.hdr.err);
+	return -EIO;
 }
 
 /**
