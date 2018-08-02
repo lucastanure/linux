@@ -1628,32 +1628,18 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
 		ret = -EIO;
-		goto exit;
+	} else {
+		switch (msg_rsp.rsp_rep_start.hdr.err) {
+		case CLSIC_ERR_NONE:
+		case CLSIC_ERR_ONGOING_REP:
+			break;
+		default:
+			vox->clsic_error_code = msg_rsp.rsp_rep_start.hdr.err;
+			vox->error_info = VOX_ERROR_CLSIC;
+			ret = -EIO;
+		}
 	}
 
-	switch (msg_rsp.rsp_rep_start.hdr.err) {
-	case CLSIC_ERR_NONE:
-	case CLSIC_ERR_ONGOING_REP:
-		break;
-	case CLSIC_ERR_REPS_COMPLETE:
-	case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-	case CLSIC_ERR_NOT_INSTALLING_USER:
-	case CLSIC_ERR_INPUT_PATH:
-	case CLSIC_ERR_VOICEID:
-	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
-		vox->clsic_error_code = msg_rsp.rsp_rep_start.hdr.err;
-		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
-		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_rep_start.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
-		break;
-	}
-
-exit:
 	if (ret) {
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
 		vox_send_userspace_event(vox);
