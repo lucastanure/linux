@@ -91,6 +91,9 @@ static int clsic_alg_simple_readregister(struct clsic_alg *alg,
 
 	msg_cmd.cmd_rdreg.addr = address;
 
+	/* Clear err to avoid confusion as it is always included in the trace */
+	msg_rsp.rsp_wrreg.hdr.err = 0;
+
 	ret = clsic_send_msg_sync(alg->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
@@ -121,7 +124,8 @@ static int clsic_alg_simple_readregister(struct clsic_alg *alg,
 	}
 
 	trace_clsic_alg_simple_readregister(msg_cmd.cmd_rdreg.addr,
-					    msg_rsp.rsp_rdreg.value, ret);
+					    msg_rsp.rsp_rdreg.value, ret,
+					    msg_rsp.rsp_rdreg.hdr.err);
 
 	return ret;
 }
@@ -154,6 +158,9 @@ static int clsic_alg_simple_writeregister(struct clsic_alg *alg,
 	msg_cmd.cmd_wrreg.addr = address;
 	msg_cmd.cmd_wrreg.value = value;
 
+	/* Clear err to avoid confusion as it is always included in the trace */
+	msg_rsp.rsp_wrreg.hdr.err = 0;
+
 	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
@@ -176,7 +183,8 @@ static int clsic_alg_simple_writeregister(struct clsic_alg *alg,
 	}
 
 	trace_clsic_alg_simple_writeregister(msg_cmd.cmd_wrreg.addr,
-					     msg_cmd.cmd_wrreg.value, ret);
+					     msg_cmd.cmd_wrreg.value,
+					     ret, msg_rsp.rsp_wrreg.hdr.err);
 	return ret;
 }
 
@@ -209,6 +217,7 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 	size_t frag_sz;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
+	uint8_t err = 0;
 
 	if (alg == NULL)
 		return -EINVAL;
@@ -235,8 +244,6 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 				    CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				    (uint8_t *)val_buf + i, frag_sz);
 
-		trace_clsic_alg_read(msg_cmd.cmd_rdreg_bulk.addr,
-				     msg_cmd.cmd_rdreg_bulk.byte_count, ret);
 		/*
 		 *  Clients to this function can't interpret detailed error
 		 *  codes so map error to -EIO
@@ -248,15 +255,20 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 			    == 0) && (msg_rsp.rsp_rdreg_bulk.hdr.err != 0)) {
 			clsic_dbg(clsic, "rsp addr: 0x%x status %d\n", reg,
 				  msg_rsp.rsp_rdreg_bulk.hdr.err);
+			err = msg_rsp.rsp_rdreg_bulk.hdr.err;
 			ret = -EIO;
 		} else if (msg_rsp.blkrsp_rdreg_bulk.hdr.err != 0) {
 			clsic_dbg(clsic, "blkrsp addr: 0x%x status %d\n", reg,
 				  msg_rsp.blkrsp_rdreg_bulk.hdr.err);
+			err = msg_rsp.blkrsp_rdreg_bulk.hdr.err;
 			ret = -EIO;
 		} else {
 			/* The request succeeded */
 			ret = 0;
 		}
+
+		trace_clsic_alg_read(msg_cmd.cmd_rdreg_bulk.addr,
+		     msg_cmd.cmd_rdreg_bulk.byte_count, ret, err);
 
 		if (ret != 0)
 			return ret;
@@ -269,7 +281,7 @@ static int clsic_alg_read(void *context, const void *reg_buf,
 	for (i = 0; i < (val_size / CLSIC_ALG_VAL_BYTES); ++i)
 		((__be32 *) val_buf)[i] = cpu_to_be32(((u32 *) val_buf)[i]);
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -339,7 +351,12 @@ static int clsic_alg_write(void *context, const void *val_buf,
 		msg_cmd.blkcmd_wrreg_bulk.addr = addr + i;
 		msg_cmd.blkcmd_wrreg_bulk.hdr.bulk_sz = frag_sz;
 
-		memset(&msg_rsp, 0, CLSIC_FIXED_MSG_SZ);
+		/*
+		 * Clear err to avoid confusion as it is always included in the
+		 * trace
+		 */
+		msg_rsp.rsp_wrreg.hdr.err = 0;
+
 		ret = clsic_send_msg_sync(
 				    clsic,
 				    (union t_clsic_generic_message *) &msg_cmd,
@@ -349,7 +366,7 @@ static int clsic_alg_write(void *context, const void *val_buf,
 
 		trace_clsic_alg_write(msg_cmd.blkcmd_wrreg_bulk.addr,
 				      msg_cmd.blkcmd_wrreg_bulk.hdr.bulk_sz,
-				      ret);
+				      ret, msg_rsp.rsp_wrreg_bulk.hdr.err);
 		/*
 		 *  Clients to this function can't interpret detailed error
 		 *  codes so map error to -EIO
