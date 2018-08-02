@@ -969,16 +969,9 @@ static int vox_update_map(struct clsic_vox *vox)
 	case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
 		vox->bio_vte_map_installed = false;
 		break;
-	case CLSIC_ERR_BIOVTE_MAP_INVALID:
-	case CLSIC_ERR_BIOVTE_MAP_SZ_INVALID:
-	case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
-		clsic_err(vox->clsic,
-			  "failed to check biometrics VTE map status %d.\n",
-			  msg_rsp.rsp_is_biovte_map_installed.hdr.err);
-		return -EIO;
 	default:
 		clsic_err(vox->clsic,
-			  "unexpected CLSIC error code %d.\n",
+			  "failed to check biometrics VTE map status %d.\n",
 			  msg_rsp.rsp_is_biovte_map_installed.hdr.err);
 		return -EIO;
 	}
