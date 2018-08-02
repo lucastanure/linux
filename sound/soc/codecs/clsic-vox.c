@@ -1373,26 +1373,16 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			vox->phrase_installed[vox->phrase_id] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVAL_PHRASEID:
-		case CLSIC_ERR_VOICEID:
+		default:
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_phrase.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 			ret = -EIO;
 			break;
 		}
 		break;
 	case VOX_ASSET_TYPE_BIN_VTE:
 	case VOX_ASSET_TYPE_BIN_SSF:
-		/* TODO: check these are all the error codes possible. */
 		switch (msg_rsp.rsp_remove_bin.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_BIN_NOT_INSTALLED:
@@ -1402,24 +1392,14 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			vox->bin_installed[vox->bin_id] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVALID_BIN_ID:
-		case CLSIC_ERR_VOICEID:
+		default:
 			vox->clsic_error_code = msg_rsp.rsp_remove_bin.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 			ret = -EIO;
 			break;
 		}
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
-		/* TODO: check these are all the error codes possible. */
 		switch (msg_rsp.rsp_remove_biovte_map.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
@@ -1429,18 +1409,10 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			vox->bio_vte_map_installed = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_VOICEID:
+		default:
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_biovte_map.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 			ret = -EIO;
 			break;
 		}
