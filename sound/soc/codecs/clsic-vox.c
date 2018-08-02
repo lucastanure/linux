@@ -1749,18 +1749,9 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		 */
 		vox->clsic_error_code = CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED;
 		break;
-	case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
-	case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-	case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
-	case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
+	default:
 		vox->clsic_error_code = vox->auth_error;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
-		goto exit;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  vox->auth_error);
-		vox->error_info = VOX_ERROR_DRIVER;
 		ret = -EIO;
 		goto exit;
 	}
@@ -1788,38 +1779,13 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	/* Response is either bulk in case of success, or not. */
+	/* Response is either bulk in case of success or fixed on failure. */
 	if (clsic_get_bulk_bit(msg_rsp.rsp_auth_user.hdr.sbc)) {
 		vox->error_info = VOX_ERROR_SUCCESS;
 	} else {
-		switch (msg_rsp.rsp_auth_user.hdr.err) {
-		case CLSIC_ERR_NO_USER_IDENTIFIED:
-		case CLSIC_ERR_AUTH_NO_USERS_TO_MATCH:
-		case CLSIC_ERR_AUTH_ABORT_BARGE_IN:
-		case CLSIC_ERR_AUTH_NOT_STARTED_BARGE_IN:
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_CANCELLED:
-		case CLSIC_ERR_TOO_SMALL:
-		case CLSIC_ERR_INVAL_SECURITY_LVL:
-		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-		case CLSIC_ERR_VOICEID:
-		case CLSIC_ERR_INPUT_PATH:
-		case CLSIC_ERR_SECURITY_FAIL:
-		case CLSIC_ERR_INVALID_AUTH_RESULT_FORMAT:
-		case CLSIC_ERR_AUTH_BIOM_DISABLED:
-		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
-			vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
-			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_auth_user.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
-			ret = -EIO;
-			break;
-		}
+		vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
+		ret = -EIO;
 	}
 
 exit:
