@@ -386,20 +386,12 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	}
 
 	/* Response is either bulk in case of success, or not. */
-	if (!clsic_get_bulk_bit(msg_rsp.rsp_get_trgr_info.hdr.sbc))
-		switch (msg_rsp.rsp_get_trgr_info.hdr.err) {
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INPUT_PATH:
-			clsic_err(vox->clsic, "failure %d.\n",
-				  msg_rsp.rsp_get_trgr_info.hdr.err);
-			asr_stream->error = true;
-			return 0;
-		default:
-			clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_get_trgr_info.hdr.err);
-			asr_stream->error = true;
-			return 0;
-		}
+	if (!clsic_get_bulk_bit(msg_rsp.rsp_get_trgr_info.hdr.sbc)) {
+		clsic_err(vox->clsic, "failure %d.\n",
+			  msg_rsp.rsp_get_trgr_info.hdr.err);
+		asr_stream->error = true;
+		return 0;
+	}
 
 	/* Populate the ALSA controls with the trigger information. */
 	vox->trigger_engine_id = trgr_info.engineid;
