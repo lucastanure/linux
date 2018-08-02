@@ -1188,101 +1188,47 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
-		switch (msg_rsp.rsp_install_phrase.hdr.err) {
-		case CLSIC_ERR_NONE:
-			/* Get updated information on enrolled users. */
-			ret = vox_update_user_status(vox, vox->phrase_id,
-						     vox->phrase_id);
-			if (ret) {
-				set_error_info(vox, ret);
-				goto exit;
-			}
+		if (msg_rsp.rsp_install_phrase.hdr.err == CLSIC_ERR_NONE) {
 			vox->phrase_installed[vox->phrase_id] = true;
 			clsic_dbg(vox->clsic,
 				  "successfully installed phrase %d.\n",
 				  vox->phrase_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
-			break;
-		case CLSIC_ERR_BPB_SZ_TOO_SMALL:
-		case CLSIC_ERR_BPB_SZ_UNALIGNED:
-		case CLSIC_ERR_BPB_BAD_HDR:
-		case CLSIC_ERR_BPB_BAD_IMGMAP:
-		case CLSIC_ERR_BPB_SZ_INCONSISTENT:
-		case CLSIC_ERR_BPB_AUTH_FAILED:
-		case CLSIC_ERR_BPB_ASSET_INVAL_VER:
-		case CLSIC_ERR_BPB_ASSET_INVAL_SZ:
-		case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TYPE:
-		case CLSIC_ERR_BPB_ASSET_INVAL_COMP_TABLE_SZ:
-		case CLSIC_ERR_BPB_ASSET_INVAL_FLAGS:
-		case CLSIC_ERR_NO_MEM:
-		case CLSIC_ERR_FLASH:
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVAL_PHRASEID:
-		case CLSIC_ERR_VOICEID:
+
+			/* Get updated information on enrolled users. */
+			if (vox_update_user_status(vox, vox->phrase_id,
+						   vox->phrase_id) != 0)
+				vox->error_info = VOX_ERROR_DRIVER;
+		} else {
+			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_install_phrase.hdr.err;
-			vox->error_info = VOX_ERROR_CLSIC;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 		}
 		break;
 	case VOX_ASSET_TYPE_BIN_VTE:
 	case VOX_ASSET_TYPE_BIN_SSF:
-		/* TODO: check these are all the error codes possible. */
-		switch (msg_rsp.rsp_install_bin.hdr.err) {
-		case CLSIC_ERR_NONE:
+		if (msg_rsp.rsp_install_bin.hdr.err == CLSIC_ERR_NONE) {
 			vox->bin_installed[vox->bin_id] = true;
 			clsic_dbg(vox->clsic,
 				  "successfully installed bin %d.\n",
 				  vox->bin_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
-			break;
-		case CLSIC_ERR_INVALID_BIN_DATA:
-		case CLSIC_ERR_INVALID_BIN_ID:
-		case CLSIC_ERR_NO_MEM:
-		case CLSIC_ERR_FLASH:
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_VOICEID:
-			vox->clsic_error_code = msg_rsp.rsp_install_bin.hdr.err;
+		} else {
 			vox->error_info = VOX_ERROR_CLSIC;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
+			vox->clsic_error_code = msg_rsp.rsp_install_bin.hdr.err;
 		}
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
-		/* TODO: check these are all the error codes possible. */
-		switch (msg_rsp.rsp_install_biovte_map.hdr.err) {
-		case CLSIC_ERR_NONE:
+		if (msg_rsp.rsp_install_biovte_map.hdr.err == CLSIC_ERR_NONE) {
 			vox->bio_vte_map_installed = true;
 			clsic_dbg(vox->clsic,
 				  "successfully installed bin %d.\n",
 				  vox->bin_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
-			break;
-		case CLSIC_ERR_BIOVTE_MAP_SZ_INVALID:
-		case CLSIC_ERR_BIOVTE_MAP_INVALID:
-		case CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST:
-		case CLSIC_ERR_NO_MEM:
-		case CLSIC_ERR_FLASH:
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_VOICEID:
+		} else {
+			vox->error_info = VOX_ERROR_CLSIC;
 			vox->clsic_error_code =
 				msg_rsp.rsp_install_biovte_map.hdr.err;
-			vox->error_info = VOX_ERROR_CLSIC;
-			break;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_remove_phrase.hdr.err);
-			vox->error_info = VOX_ERROR_DRIVER;
 		}
 		break;
 	}
