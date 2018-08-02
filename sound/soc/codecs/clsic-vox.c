@@ -1679,11 +1679,8 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
 		ret = -EIO;
-		goto exit;
-	}
-
-	switch (msg_rsp.rsp_install_user_complete.hdr.err) {
-	case CLSIC_ERR_NONE:
+	} else if (msg_rsp.rsp_install_user_complete.hdr.err ==
+		   CLSIC_ERR_NONE) {
 		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
 				    + vox->user_id] = true;
 		if ((vox->timeout > 0) && (vox->duration > 0))
@@ -1692,24 +1689,13 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 					(CLSIC_VOX_PHRASE_TI * VOX_MAX_USERS)
 					+ vox->user_id] = true;
 		vox->error_info = VOX_ERROR_SUCCESS;
-		break;
-	case CLSIC_ERR_REPS_NOT_ENOUGH_VALID:
-	case CLSIC_ERR_VOICEID:
-	case CLSIC_ERR_FLASH:
+	} else {
 		vox->clsic_error_code =
 			msg_rsp.rsp_install_user_complete.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
-		break;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_install_user_complete.hdr.err);
-		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
-		break;
 	}
 
-exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
 
