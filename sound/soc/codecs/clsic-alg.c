@@ -322,7 +322,7 @@ static int clsic_alg_write(void *context, const void *val_buf,
 	clsic = alg->clsic;
 
 	payload_sz = val_size - CLSIC_ALG_REG_BYTES;
-	if ((val_size % CLSIC_ALG_REG_BYTES) != 0) {
+	if ((val_size & (CLSIC_ALG_REG_BYTES - 1)) != 0) {
 		clsic_err(clsic,
 			  "error: context %p val_buf %p, val_size %d",
 			  context, val_buf, val_size);
