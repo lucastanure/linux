@@ -1062,16 +1062,9 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			    vox->user_installed[(phr * VOX_MAX_USERS) + usr] =
 									false;
 				break;
-			case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-			case CLSIC_ERR_INVAL_USERID:
-			case CLSIC_ERR_INVAL_PHRASEID:
+			default:
 				vox->clsic_error_code =
 					msg_rsp.rsp_is_user_installed.hdr.err;
-				return -EIO;
-			default:
-				clsic_err(vox->clsic,
-					  "unexpected CLSIC error code %d.\n",
-					 msg_rsp.rsp_is_user_installed.hdr.err);
 				return -EIO;
 			}
 		}
