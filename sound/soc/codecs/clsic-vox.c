@@ -3161,8 +3161,8 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 }
 
 static const struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
-	.probe = clsic_vox_codec_probe,
-	.remove = clsic_vox_codec_remove,
+	.probe = &clsic_vox_codec_probe,
+	.remove = &clsic_vox_codec_remove,
 };
 
 /**
@@ -3242,8 +3242,8 @@ static struct platform_driver clsic_vox_driver = {
 		.owner = THIS_MODULE,
 		.of_match_table = clsic_vox_of_match,
 	},
-	.probe = clsic_vox_probe,
-	.remove = clsic_vox_remove,
+	.probe = &clsic_vox_probe,
+	.remove = &clsic_vox_remove,
 };
 
 module_platform_driver(clsic_vox_driver);
