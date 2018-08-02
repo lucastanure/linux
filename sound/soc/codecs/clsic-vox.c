@@ -860,16 +860,10 @@ static int vox_update_phrases(struct clsic_vox *vox)
 		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 			vox->phrase_installed[phr] = false;
 			break;
-		case CLSIC_ERR_INVAL_CMD_FOR_MODE:
-		case CLSIC_ERR_INVAL_PHRASEID:
+		default:
 			clsic_err(vox->clsic,
 				  "failed to check if phrase %d was installed %d.\n",
 				  phr, msg_rsp.rsp_is_phrase_installed.hdr.err);
-			return -EIO;
-		default:
-			clsic_err(vox->clsic,
-				  "unexpected CLSIC error code %d.\n",
-				  msg_rsp.rsp_is_phrase_installed.hdr.err);
 			return -EIO;
 		}
 	}
