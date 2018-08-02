@@ -773,21 +773,15 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 		return -EIO;
 	}
 
-	switch (msg_rsp.rsp_set_mode.hdr.err) {
-	case CLSIC_ERR_NONE:
-		vox_set_pm_from_mode(vox, new_mode);
-		vox->clsic_mode = new_mode;
-
-		return 0;
-	case CLSIC_ERR_INVAL_MODE_TRANSITION:
-	case CLSIC_ERR_INVAL_MODE:
+	if (msg_rsp.rsp_set_mode.hdr.err != CLSIC_ERR_NONE) {
 		vox->clsic_error_code = msg_rsp.rsp_set_mode.hdr.err;
 		return -EINVAL;
-	default:
-		clsic_err(vox->clsic, "unexpected CLSIC error code %d.\n",
-			  msg_rsp.rsp_set_mode.hdr.err);
-		return -EIO;
 	}
+
+	vox_set_pm_from_mode(vox, new_mode);
+	vox->clsic_mode = new_mode;
+
+	return 0;
 }
 
 /**
