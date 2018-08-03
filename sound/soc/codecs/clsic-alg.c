@@ -397,7 +397,7 @@ error:
  * regmap, it translates the context back into a clsic_alg structure so the
  * request can be sent through the messaging layer and fulfilled
  */
-int clsic_alg_reg_write(void *context, unsigned int reg, uint32_t val)
+static int clsic_alg_reg_write(void *context, unsigned int reg, uint32_t val)
 {
 	struct clsic_alg *alg = context;
 
@@ -409,7 +409,7 @@ int clsic_alg_reg_write(void *context, unsigned int reg, uint32_t val)
  * regmap, it translates the context back into a clsic_alg structure so the
  * request can be sent through the messaging layer and fulfilled
  */
-int clsic_alg_reg_read(void *context, unsigned int reg, uint32_t *val)
+static int clsic_alg_reg_read(void *context, unsigned int reg, uint32_t *val)
 {
 	struct clsic_alg *alg = context;
 
@@ -465,7 +465,7 @@ static void clsic_alg_regmap_unlock(void *context)
  *
  * Return: 0 non-readable, 1 readable.
  */
-bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
+static bool clsic_alg_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
 	case 0x02000000 ... 0x0201dff0:	/* DSP1 XM packed */
