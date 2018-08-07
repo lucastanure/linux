@@ -472,9 +472,9 @@ void clsic_maintenance(struct work_struct *data)
 	struct clsic *clsic = container_of(data, struct clsic,
 					   maintenance_handler);
 
-	clsic_info(clsic, "States: %s %d %d %d\n",
+	clsic_info(clsic, "States: %s %d %d\n",
 		   clsic_state_to_string(clsic->state),
-		   clsic->blrequest, clsic->service_states, UINT_MAX);
+		   clsic->blrequest, clsic->service_states);
 
 	if (clsic->blrequest != CLSIC_BL_IDLE) {
 		clsic_bootsrv_state_handler(clsic);
