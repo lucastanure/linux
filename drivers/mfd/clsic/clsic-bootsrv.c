@@ -468,6 +468,9 @@ static ssize_t clsic_store_device_fw_version(struct device *dev,
 		if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED)
 			return -EPERM;
 
+		if (clsic->volatile_memory)
+			return -EPERM;
+
 		/*
 		 * If the device previously failed clear that state so it can
 		 * be powered on (pm resume is prevented in the HALTED state).
