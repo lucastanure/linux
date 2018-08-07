@@ -485,6 +485,12 @@ void clsic_maintenance(struct work_struct *data)
 	    (clsic->state != CLSIC_STATE_DEBUGCONTROL_REQUESTED))
 		return;
 
+	if (clsic->service_states == CLSIC_UNLOADING) {
+		clsic_state_set(clsic,
+				CLSIC_STATE_ON,
+				CLSIC_STATE_CHANGE_LOCKNOTHELD);
+		return;
+	}
 
 	if (clsic_system_service_enumerate(clsic) == 0) {
 		clsic->service_states = CLSIC_ENUMERATED;
@@ -506,6 +512,12 @@ int clsic_dev_exit(struct clsic *clsic)
 		pm_runtime_put_autosuspend(clsic->dev);
 		clsic_irq_enable(clsic);
 	}
+
+	/*
+	 * Setting services state to unloading will allow the device to power
+	 * on but prevent enumeration and reenumeration
+	 */
+	clsic->service_states = CLSIC_UNLOADING;
 
 	/*
 	 * Volatile devices may need to be resumed at this point in time, place

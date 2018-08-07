@@ -334,10 +334,21 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 		return ret;
 	}
 
-	if (clsic->service_states == CLSIC_ENUMERATED)
+	switch (clsic->service_states) {
+	case CLSIC_ENUMERATED:
+		/* Nothing to do (typical power on resume) */
 		return 0;
-	else if (clsic->service_states == CLSIC_REENUMERATION_REQUIRED)
+	case CLSIC_ENUMERATION_REQUIRED:
+		/* Continue and perform first device enumeration */
+		break;
+	case CLSIC_REENUMERATION_REQUIRED:
+		/* Check the services match (after a firmware update) */
 		return clsic_system_service_reenumerate(clsic);
+	default:
+		clsic_info(clsic, "Skipping enumeration; service state %d\n",
+			   clsic->service_states);
+		return -EBUSY;
+	}
 
 	clsic_dbg(clsic, "Sysinfo ret 0x%x 0x%x 0x%x\n",
 		  msg_rsp.rsp_sys_info.hdr.sbc,
