@@ -487,7 +487,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 
 	mutex_lock(&vox->drv_state_lock);
 	if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
-		vox->drv_state = VOX_DRV_STATE_STREAMING;
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
 
 		vox->scc_status &= (~VTE1_ACTIVE);
 		vox->scc_status |= VTE1_TRIGGERED_SINCE_LISTEN;
@@ -586,7 +586,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		/* Fail if any ongoing vox operations. */
 		mutex_lock(&vox->drv_state_lock);
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
-			vox->drv_state = VOX_DRV_STATE_LISTENING;
+			vox_set_idle_and_state(vox, false,
+					       VOX_DRV_STATE_LISTENING);
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
@@ -647,7 +648,6 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		wake_up_process(asr_stream->wait_for_trigger);
 
 		break;
-
 	case SNDRV_PCM_TRIGGER_STOP:
 		clsic_vox_asr_cleanup_states(vox);
 		pm_runtime_put_autosuspend(clsic->dev);
@@ -884,7 +884,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  *
  */
 static void vox_set_idle_and_state(struct clsic_vox *vox,
-				   bool set_clsic_to_idle, int drv_state)
+				   bool set_clsic_to_idle,
+				   int drv_state)
 {
 	int ret = 0;
 
@@ -1841,7 +1842,7 @@ static void vox_stop_bio_results(struct clsic_vox *vox)
 	mutex_lock(&vox->drv_state_lock);
 
 	if (vox->drv_state == VOX_DRV_STATE_STOPPING_BIO_RESULTS)
-		vox->drv_state = VOX_DRV_STATE_STREAMING;
+		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
 
 	vox->error_info = VOX_ERROR_SUCCESS;
 	vox_send_userspace_event(vox);
@@ -2314,7 +2315,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	switch (ucontrol->value.enumerated.item[0]) {
 	case VOX_DRV_STATE_GET_BIO_RESULTS:
 		if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
-			vox->drv_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
+			vox_set_idle_and_state(vox, false,
+					VOX_DRV_STATE_GETTING_BIO_RESULTS);
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
@@ -2342,8 +2344,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			 * Management mode goes from command
 			 * e.g. INSTALL to a state e.g. INSTALLING
 			 */
-			vox->drv_state =
-				ucontrol->value.enumerated.item[0] + 1;
+			vox_set_idle_and_state(vox, false,
+				ucontrol->value.enumerated.item[0] + 1);
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
@@ -2354,8 +2356,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_COMPLETE_ENROL:
 	case VOX_DRV_STATE_TERMINATE_ENROL:
 		if (vox->drv_state == VOX_DRV_STATE_ENROLLING) {
-			vox->drv_state =
-				ucontrol->value.enumerated.item[0] + 1;
+			vox_set_idle_and_state(vox, false,
+				ucontrol->value.enumerated.item[0] + 1);
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
@@ -2682,7 +2684,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
 
 	vox->codec = codec;
-	vox->drv_state = VOX_DRV_STATE_NEUTRAL;
+	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_NEUTRAL);
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
 	mutex_init(&vox->drv_state_lock);
