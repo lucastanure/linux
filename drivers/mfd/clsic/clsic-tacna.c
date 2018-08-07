@@ -135,18 +135,7 @@ static struct platform_driver clsic_tacna_core_driver = {
 	.remove	= &clsic_tacna_remove,
 };
 
-static int __init clsic_tacna_core_init(void)
-{
-	return platform_driver_register(&clsic_tacna_core_driver);
-}
-
-static void __exit clsic_tacna_core_exit(void)
-{
-	platform_driver_unregister(&clsic_tacna_core_driver);
-}
-
-module_init(clsic_tacna_core_init);
-module_exit(clsic_tacna_core_exit);
+module_platform_driver(clsic_tacna_core_driver);
 
 MODULE_AUTHOR("Piotr Stankiewicz <piotrs@opensource.wolfsonmicro.com>");
 MODULE_DESCRIPTION("CLSIC Tacna MFD core");
