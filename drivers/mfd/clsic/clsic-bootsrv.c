@@ -8,6 +8,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/crc32.h>
 #include <linux/firmware.h>
 
 #include <linux/mfd/clsic/core.h>
@@ -227,6 +228,14 @@ static const uint32_t clsic_bootsrv_file_version(struct clsic *clsic,
 	return hdr.version;
 }
 
+/* Structure containing the Boot Service instance data */
+struct clsic_bootsrv_struct {
+	struct clsic *clsic;
+
+	struct clsic_service *srv;
+	u32 fw_crc;
+};
+
 /*
  * Transmits the contents of the given filename as bulk data payload to the
  * bootloader with the given message id.
@@ -244,6 +253,14 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 	union t_clsic_generic_message msg_cmd;
 	struct clsic_fwheader *hdr;
 	uint8_t err;
+	u32 fw_crc;
+	struct clsic_bootsrv_struct *bootsrv =
+		clsic->service_handlers[CLSIC_SRV_INST_BLD]->data;
+
+	if (bootsrv == NULL) {
+		clsic_err(clsic, "No bootldr service data\n");
+		return -EINVAL;
+	}
 
 	ret = request_firmware(&firmware, filename, clsic->dev);
 	if (ret != 0) {
@@ -278,6 +295,17 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 			  filename, type, hdr->type);
 		ret = -EINVAL;
 		goto release_exit;
+	}
+
+	if ((hdr->type == CLSIC_FWTYPE_MAB) && clsic->volatile_memory) {
+		fw_crc = crc32(0, firmware->data, firmware->size);
+		if (fw_crc != bootsrv->fw_crc) {
+			clsic_info(clsic, "mab changed : expected %x got %x\n",
+				bootsrv->fw_crc, fw_crc);
+			if (clsic->service_states == CLSIC_ENUMERATED)
+			   clsic->service_states = CLSIC_REENUMERATION_REQUIRED;
+			bootsrv->fw_crc = fw_crc;
+		}
 	}
 
 	/* Finally send the file as the bulk data payload of the given msgid */
@@ -528,14 +556,27 @@ static void clsic_bootsrv_service_stop(struct clsic *clsic,
 {
 	device_remove_file(clsic->dev, &dev_attr_device_fw_version);
 	device_remove_file(clsic->dev, &dev_attr_file_fw_version);
+	kfree(handler->data);
 }
 
 int clsic_bootsrv_service_start(struct clsic *clsic,
 				struct clsic_service *handler)
 {
+	struct clsic_bootsrv_struct *bootsrv;
+
+	if (handler->data != NULL)
+		return 0;
+
+	bootsrv = kzalloc(sizeof(struct clsic_bootsrv_struct), GFP_KERNEL);
+	if (bootsrv == NULL)
+		return -ENOMEM;
+
+	bootsrv->clsic = clsic;
+	bootsrv->srv = handler;
 
 	handler->callback = &clsic_bootsrv_msghandler;
 	handler->stop = &clsic_bootsrv_service_stop;
+	handler->data = bootsrv;
 
 	device_create_file(clsic->dev, &dev_attr_device_fw_version);
 	device_create_file(clsic->dev, &dev_attr_file_fw_version);
