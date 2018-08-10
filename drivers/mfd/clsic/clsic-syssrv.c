@@ -177,7 +177,8 @@ static int clsic_system_service_reenumerate(struct clsic *clsic)
 				  "id %d %p type read 0x%x != handler 0x%x",
 				  tmp_instance, tmp_handler, read_service_type,
 				  handler_service_type);
-			clsic_err(clsic, "Service configuration changed\n");
+			clsic_err(clsic,
+				  "Service configuration changed - device HALTED\n");
 			clsic_device_error(clsic,
 					   CLSIC_DEVICE_ERROR_LOCKNOTHELD);
 			return -EINVAL;
