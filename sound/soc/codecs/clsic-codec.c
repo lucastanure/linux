@@ -1894,13 +1894,8 @@ static int clsic_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, clsic_codec);
 
-	/*
-	 * share of_node with the clsic device
-	 *
-	 * TODO: may be sensible to have the codec as a sub-node of the clsic
-	 * device in device tree
-	 */
-	pdev->dev.of_node = clsic->dev->of_node;
+	/* share of_node with the clsic device */
+	pdev->dev.of_node = of_node_get(clsic->dev->of_node);
 
 	clsic_codec->clsic = clsic;
 

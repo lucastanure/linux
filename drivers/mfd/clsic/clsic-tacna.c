@@ -83,7 +83,8 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 
 	tacna->type = CS48LX50;
 	tacna->dev = &pdev->dev;
-	tacna->dev->of_node = clsic->dev->of_node;
+	/* share of_node with the tacna device */
+	tacna->dev->of_node = of_node_get(clsic->dev->of_node);
 	tacna->irq = 0;
 	tacna->dev->platform_data = NULL;
 	tacna->regmap = regmapsrv->regmap;
