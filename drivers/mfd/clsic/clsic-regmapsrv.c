@@ -429,7 +429,7 @@ static struct regmap_config regmap_config_ras = {
 	.name = "clsic-ras",
 	.cache_type = REGCACHE_RBTREE,
 	.reg_defaults = clsic_reg_defaults,
-	.num_reg_defaults = 613,
+	.num_reg_defaults = CLSIC_REG_DEFAULTS_SZ,
 };
 
 /*

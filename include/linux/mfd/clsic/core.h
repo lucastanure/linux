@@ -355,6 +355,7 @@ void clsic_deinit_debugfs(struct clsic *clsic);
 bool clsic_readable_register(struct device *dev, unsigned int reg);
 bool clsic_volatile_register(struct device *dev, unsigned int reg);
 extern const struct reg_default clsic_reg_defaults[];
+#define CLSIC_REG_DEFAULTS_SZ	658
 
 /*
  * Simple utility function that pauses until the clsic->state becomes state, if
