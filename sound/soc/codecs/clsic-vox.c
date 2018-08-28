@@ -625,7 +625,7 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 
 	if (asr_stream->cb_error) {
 		clsic_vox_asr_end_streaming(vox);
-		return EFAULT;
+		return -EFAULT;
 	}
 
 	count = min(count, asr_stream->buf.size);
