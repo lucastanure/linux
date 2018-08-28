@@ -383,7 +383,9 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 
 	trace_clsic_vox_asr_stream_data_rcv(payload_sz);
 
+	pm_runtime_put_autosuspend(clsic->dev);
 	module_put(vox->codec->dev->driver->owner);
+
 	return CLSIC_MSG_RELEASED;
 }
 
@@ -414,6 +416,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
+	pm_runtime_get_sync(clsic->dev);
 	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -432,6 +435,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 			snd_compr_fragment_elapsed(asr_stream->stream);
 		mutex_unlock(&asr_stream->stream_lock);
 
+		pm_runtime_put_autosuspend(clsic->dev);
 		module_put(vox->codec->dev->driver->owner);
 		return -EINVAL;
 	}
@@ -494,7 +498,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_GET_TRGR_INFO);
-	ret = clsic_send_msg_sync(clsic,
+	ret = clsic_send_msg_sync_pm(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -591,6 +595,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		msg_cmd.cmd_listen_start.trgr_domain =
 						CLSIC_VOX_TRIG_DOMAIN_INTRNL;
 		msg_cmd.cmd_listen_start.asr_blk_sz = asr_stream->block_sz;
+		pm_runtime_get_sync(clsic->dev);
 		ret = clsic_send_msg_sync(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
@@ -599,12 +604,14 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 		if (ret) {
 			clsic_err(clsic, "Error sending msg: %d\n", ret);
+			pm_runtime_put_autosuspend(clsic->dev);
 			break;
 		} else if (msg_rsp.rsp_listen_start.hdr.err) {
 			clsic_dbg(clsic,
 				  "Failed to start listening: %d\n",
 				  msg_rsp.rsp_listen_start.hdr.err);
 			ret = -EINVAL;
+			pm_runtime_put_autosuspend(clsic->dev);
 			break;
 		}
 
@@ -626,7 +633,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 
 	case SNDRV_PCM_TRIGGER_STOP:
 		clsic_vox_asr_cleanup_states(vox);
-
+		pm_runtime_put_autosuspend(clsic->dev);
 		break;
 	default:
 		return -EINVAL;
@@ -820,7 +827,7 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 			   CLSIC_VOX_MSG_CR_SET_MODE);
 	msg_cmd.cmd_set_mode.mode = new_mode;
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -899,7 +906,7 @@ static int vox_update_phrases(struct clsic_vox *vox)
 				   CLSIC_VOX_MSG_CR_IS_PHRASE_INSTALLED);
 		msg_cmd.cmd_is_phrase_installed.phraseid = phr;
 
-		ret = clsic_send_msg_sync(
+		ret = clsic_send_msg_sync_pm(
 				     vox->clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,
@@ -949,7 +956,7 @@ static int vox_update_bins(struct clsic_vox *vox)
 				   CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED);
 		msg_cmd.cmd_is_bin_installed.binid = bin;
 
-		ret = clsic_send_msg_sync(
+		ret = clsic_send_msg_sync_pm(
 				     vox->clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,
@@ -996,7 +1003,7 @@ static int vox_update_map(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED);
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1079,7 +1086,7 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			msg_cmd.cmd_is_user_installed.userid = usr;
 			msg_cmd.cmd_is_user_installed.phraseid = phr;
 
-			ret = clsic_send_msg_sync(
+			ret = clsic_send_msg_sync_pm(
 				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,
@@ -1130,7 +1137,7 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_GET_AUTH_KEY);
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1340,7 +1347,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		break;
 	}
 
-	ret = clsic_send_msg_sync(clsic,
+	ret = clsic_send_msg_sync_pm(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1455,7 +1462,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	msg_cmd.cmd_remove_user.phraseid = vox->phrase_id;
 	msg_cmd.cmd_remove_user.userid = vox->user_id;
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1566,7 +1573,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 							vox->number_of_reps;
 	}
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1618,7 +1625,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_REP_START);
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1667,7 +1674,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_INSTALL_USER_COMPLETE);
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1756,7 +1763,7 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	msg_cmd.blkcmd_auth_user.security_lvl = vox->security_level;
 	msg_cmd.blkcmd_auth_user.result_format = vox->bio_results_format;
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  (uint8_t *) &vox->challenge,
@@ -2205,7 +2212,7 @@ static int vox_update_barge_in(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance, msgid);
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
