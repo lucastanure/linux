@@ -399,6 +399,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
  */
 static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 {
+	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
 	struct clsic_asr_stream *asr_stream = &vox->asr_stream;
 	int ret;
@@ -413,7 +414,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK);
-	ret = clsic_send_msg_async(vox->clsic,
+	ret = clsic_send_msg_async(clsic,
 				   (union t_clsic_generic_message *) &msg_cmd,
 				   CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				   (uint8_t *) asr_stream->buf.data,
@@ -421,7 +422,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 				   (uint64_t) (uintptr_t) vox,
 				   clsic_vox_asr_stream_data_cb);
 	if (ret) {
-		clsic_err(vox->clsic, "Error sending msg: %d\n", ret);
+		clsic_err(clsic, "Error sending msg: %d\n", ret);
 
 		clsic_vox_asr_end_streaming(vox);
 
@@ -493,7 +494,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_GET_TRGR_INFO);
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
@@ -1063,6 +1064,7 @@ static int vox_update_assets_status(struct clsic_vox *vox)
 static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 				  uint8_t end_phr)
 {
+	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret;
@@ -1078,13 +1080,13 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 			msg_cmd.cmd_is_user_installed.phraseid = phr;
 
 			ret = clsic_send_msg_sync(
-				     vox->clsic,
+				     clsic,
 				     (union t_clsic_generic_message *) &msg_cmd,
 				     (union t_clsic_generic_message *) &msg_rsp,
 				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 			if (ret) {
-				clsic_err(vox->clsic,
+				clsic_err(clsic,
 					  "clsic_send_msg_sync %d.\n", ret);
 				return -EIO;
 			}
@@ -1148,8 +1150,7 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	 * response.
 	 */
 
-	clsic_err(vox->clsic,
-		  "failed to get biometric public key: %d.\n",
+	clsic_err(vox->clsic, "failed to get biometric public key: %d.\n",
 		  msg_rsp.rsp_get_auth_key.hdr.err);
 	return -EIO;
 }
@@ -1165,6 +1166,7 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
  */
 static int vox_install_asset(struct clsic_vox *vox)
 {
+	struct clsic *clsic = vox->clsic;
 	const struct firmware *fw;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1188,16 +1190,15 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 	trace_clsic_vox_install_asset(file, id);
 
-	ret = request_firmware(&fw, file, vox->clsic->dev);
+	ret = request_firmware(&fw, file, clsic->dev);
 	if (ret) {
-		clsic_err(vox->clsic, "request_firmware failed for %s.\n",
-			  file);
+		clsic_err(clsic, "request_firmware failed for %s.\n", file);
 		vox->error_info = VOX_ERROR_DRIVER;
 		goto exit;
 	}
 
 	if (fw->size % CLSIC_ASSET_SIZE_ALIGNMENT) {
-		clsic_err(vox->clsic,
+		clsic_err(clsic,
 			  "firmware file %s size %d is not a multiple of %d.\n",
 			  file, fw->size, CLSIC_ASSET_SIZE_ALIGNMENT);
 		release_firmware(fw);
@@ -1229,7 +1230,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 		break;
 	}
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync_pm(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  fw->data, fw->size,
@@ -1246,8 +1247,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	case VOX_ASSET_TYPE_PHRASE:
 		if (msg_rsp.rsp_install_phrase.hdr.err == CLSIC_ERR_NONE) {
 			vox->phrase_installed[vox->phrase_id] = true;
-			clsic_dbg(vox->clsic,
-				  "successfully installed phrase %d.\n",
+			clsic_dbg(clsic, "successfully installed phrase %d.\n",
 				  vox->phrase_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
 
@@ -1265,8 +1265,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	case VOX_ASSET_TYPE_BIN_SSF:
 		if (msg_rsp.rsp_install_bin.hdr.err == CLSIC_ERR_NONE) {
 			vox->bin_installed[vox->bin_id] = true;
-			clsic_dbg(vox->clsic,
-				  "successfully installed bin %d.\n",
+			clsic_dbg(clsic, "successfully installed bin %d.\n",
 				  vox->bin_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
 		} else {
@@ -1277,8 +1276,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
 		if (msg_rsp.rsp_install_biovte_map.hdr.err == CLSIC_ERR_NONE) {
 			vox->bio_vte_map_installed = true;
-			clsic_dbg(vox->clsic,
-				  "successfully installed bin %d.\n",
+			clsic_dbg(clsic, "successfully installed bin %d.\n",
 				  vox->bin_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
 		} else {
@@ -1307,6 +1305,7 @@ exit:
  */
 static int vox_uninstall_asset(struct clsic_vox *vox)
 {
+	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int ret, usr;
@@ -1341,14 +1340,14 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		break;
 	}
 
-	ret = clsic_send_msg_sync(vox->clsic,
+	ret = clsic_send_msg_sync(clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	if (ret) {
-		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		clsic_err(clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
 		ret = -EIO;
 		goto exit;
@@ -1359,7 +1358,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		switch (msg_rsp.rsp_remove_phrase.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
-			clsic_dbg(vox->clsic,
+			clsic_dbg(clsic,
 				  "successfully uninstalled phrase %d.\n",
 				  vox->phrase_id);
 			/*
@@ -1388,8 +1387,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		switch (msg_rsp.rsp_remove_bin.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_BIN_NOT_INSTALLED:
-			clsic_dbg(vox->clsic,
-				  "successfully uninstalled bin %d.\n",
+			clsic_dbg(clsic, "successfully uninstalled bin %d.\n",
 				  vox->bin_id);
 			vox->bin_installed[vox->bin_id] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
@@ -1405,7 +1403,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		switch (msg_rsp.rsp_remove_biovte_map.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
-			clsic_dbg(vox->clsic,
+			clsic_dbg(clsic,
 				  "successfully uninstalled biometric VTE map %d.\n",
 				  vox->bin_id);
 			vox->bio_vte_map_installed = false;
@@ -1832,43 +1830,41 @@ static void vox_drv_state_handler(struct work_struct *data)
 {
 	struct clsic_vox *vox = container_of(data, struct clsic_vox,
 					     drv_state_work);
+	struct clsic *clsic = vox->clsic;
 	int ret;
 
 	switch (vox->drv_state) {
 	case VOX_DRV_STATE_INSTALLING_ASSET:
 		ret = vox_install_asset(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_install_asset ret %d.\n",
-				  ret);
+			clsic_err(clsic, "vox_install_asset ret %d.\n", ret);
 		break;
 	case VOX_DRV_STATE_UNINSTALLING_ASSET:
 		ret = vox_uninstall_asset(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_uninstall_asset ret %d.\n",
-				  ret);
+			clsic_err(clsic, "vox_uninstall_asset ret %d.\n", ret);
 		break;
 	case VOX_DRV_STATE_REMOVING_USER:
 		ret = vox_remove_user(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_remove_user ret %d.\n", ret);
+			clsic_err(clsic, "vox_remove_user ret %d.\n", ret);
 		break;
 	case VOX_DRV_STATE_STARTING_ENROL:
 		ret = vox_start_enrol_user(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_start_enrol_user ret %d.\n",
-				  ret);
+			clsic_err(clsic, "vox_start_enrol_user ret %d.\n", ret);
 		break;
 	case VOX_DRV_STATE_PERFORMING_ENROL_REP:
 		ret = vox_perform_enrol_rep(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_perform_enrol_rep ret %d.\n",
+			clsic_err(clsic, "vox_perform_enrol_rep ret %d.\n",
 				  ret);
 		break;
 	case VOX_DRV_STATE_COMPLETING_ENROL:
 		ret = vox_complete_enrolment(vox);
 		if (ret)
-			clsic_err(vox->clsic,
-				  "vox_complete_enrolment ret %d.\n", ret);
+			clsic_err(clsic, "vox_complete_enrolment ret %d.\n",
+				  ret);
 		break;
 	case VOX_DRV_STATE_TERMINATING_ENROL:
 		vox->error_info = VOX_ERROR_SUCCESS;
@@ -1878,14 +1874,13 @@ static void vox_drv_state_handler(struct work_struct *data)
 	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
 		ret = vox_get_bio_results(vox);
 		if (ret)
-			clsic_err(vox->clsic, "vox_get_bio_results ret %d.\n",
-				  ret);
+			clsic_err(clsic, "vox_get_bio_results ret %d.\n", ret);
 		break;
 	case VOX_DRV_STATE_STOPPING_BIO_RESULTS:
 		vox_stop_bio_results(vox);
 		break;
 	default:
-		clsic_err(vox->clsic, "unknown state %d for scheduled work.\n",
+		clsic_err(clsic, "unknown state %d for scheduled work.\n",
 			  vox->drv_state);
 	}
 }
@@ -2389,7 +2384,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		 */
 		trace_clsic_vox_trigger_heard(false);
 
-		clsic_err(vox->clsic, "trigger detection error on CLSIC %d.\n",
+		clsic_err(clsic, "trigger detection error on CLSIC %d.\n",
 			  msg_nty->nty_listen_err.err);
 
 		vox->asr_stream.listen_error = true;
@@ -2408,7 +2403,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		 * Prevent the messaging processor from being powered off while
 		 * streaming
 		 */
-		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
+		clsic_msgproc_use(clsic, vox->service->service_instance);
 
 		complete(&vox->asr_stream.completion);
 
@@ -2555,8 +2550,8 @@ static int vox_ctrl_scc_get(struct snd_kcontrol *kcontrol,
 	else if (s_bytes_scc == &vox->s_bytes_scc_phraseid)
 		rgstr = vox->trigger_phrase_id;
 	else {
-		clsic_err(vox->clsic,
-			  "unrecognised accessor %p\n", s_bytes_scc);
+		clsic_err(vox->clsic, "unrecognised accessor %p\n",
+			  s_bytes_scc);
 		return -EINVAL;
 	}
 
