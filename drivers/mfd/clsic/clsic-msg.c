@@ -655,8 +655,9 @@ static int clsic_debugcontrol_write(void *data, u64 val)
 			clsic_state_set(clsic, CLSIC_STATE_DEBUGCONTROL_GRANTED,
 					CLSIC_STATE_CHANGE_LOCKHELD);
 			/*
-			 * purge the message queues to clear the message which is
-			 * pushed to queue but worker thread is not yet scheduled.
+			 * Purge the message queues to clear any messages that
+			 * have been added to the waiting to send queue but the
+			 * worker thread has not started processing.
 			 */
 			clsic_purge_message_queues(clsic);
 

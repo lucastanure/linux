@@ -303,7 +303,8 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 			clsic_info(clsic, "mab changed : expected %x got %x\n",
 				bootsrv->fw_crc, fw_crc);
 			if (clsic->service_states == CLSIC_ENUMERATED)
-			   clsic->service_states = CLSIC_REENUMERATION_REQUIRED;
+				clsic->service_states =
+				   CLSIC_REENUMERATION_REQUIRED;
 			bootsrv->fw_crc = fw_crc;
 		}
 	}
