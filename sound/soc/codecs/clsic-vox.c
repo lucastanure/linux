@@ -1334,7 +1334,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		msg_cmd.cmd_remove_bin.binid = vox->bin_id;
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
-		trace_clsic_vox_uninstall_bio_vte_map(vox->phrase_id);
+		trace_clsic_vox_uninstall_bio_vte_map(0);
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP);
