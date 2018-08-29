@@ -211,7 +211,9 @@ enum clsic_err {
 	CLSIC_ERR_BIOVTE_MAP_SZ_INVALID 	= 83,
 	CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED	= 84,
 	CLSIC_ERR_BIOVTE_MAPPING_DOES_NOT_EXIST = 85,
-	CLSIC_ERR_IOCTL_EXT_CODEC		= 86,
+	CLSIC_ERR_IOCTL_EXT_CODEC 		= 86,
+	CLSIC_ERR_BPB_PHRASE_CFG_FORMAT		= 87,
+	CLSIC_ERR_BPB_PHRASE_CFG_KEY_ERR	= 88,
 	CLSIC_ERR_BL_AUTH_FAILED		= 200,
 	CLSIC_ERR_BL_INVAL_VERSION		= 201,
 	CLSIC_ERR_BL_FLASH_WRITE_FAILED		= 202,
@@ -225,6 +227,15 @@ enum clsic_err {
 	CLSIC_ERR_BL_FLASH_READ_FAILED		= 210,
 	CLSIC_ERR_BL_NBS2_NOT_1ST_IN_CAB	= 211,
 	CLSIC_ERR_BL_OSAPP_NOT_2ND_IN_CAB	= 212,
+};
+
+/**
+ *  Global message identifiers for messages that can be sent to any service.
+ */
+enum clsic_gbl_msg_id {
+	CLSIC_GBL_MSG_CR_GET_DI_CATEGORY_COUNT	= 253,
+	CLSIC_GBL_MSG_CR_GET_DI_PAGE_COUNT	= 254,
+	CLSIC_GBL_MSG_CR_GET_DEBUG_INFO		= 255,
 };
 
 /**
@@ -355,11 +366,14 @@ enum clsic_sys_msg_id {
 	CLSIC_SYS_MSG_N_INVAL_CMD		= 4,
 	CLSIC_SYS_MSG_N_PANIC			= 5,
 	CLSIC_SYS_MSG_CR_SET_TRACE_FILTER	= 6,
-	CLSIC_SYS_MSG_CR_GET_DEBUG_INFO		= 7,
+	CLSIC_SYS_MSG_CR_DEPRECATED_1		= 7,
 	CLSIC_SYS_MSG_CR_GET_KEY_VAL		= 8,
-	CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT	= 9,
-	CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT	= 10,
+	CLSIC_SYS_MSG_CR_DEPRECATED_2		= 9,
+	CLSIC_SYS_MSG_CR_DEPRECATED_3		= 10,
 	CLSIC_SYS_MSG_CR_IOCTL			= 11,
+	CLSIC_SYS_MSG_CR_GET_DI_CATEGORY_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_CATEGORY_COUNT,
+	CLSIC_SYS_MSG_CR_GET_DI_PAGE_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_PAGE_COUNT,
+	CLSIC_SYS_MSG_CR_GET_DEBUG_INFO 	= CLSIC_GBL_MSG_CR_GET_DEBUG_INFO,
 };
 
 /**
@@ -465,7 +479,7 @@ union clsic_sys_msg {
 	 *  CLSIC_SYS_MSG_CR_SET_TRACE_FILTER response structure.
 	 */
 	struct {
-		struct clsic_cmd_hdr hdr;
+		struct clsic_rsp_hdr hdr;
 		uint32_t old_level;
 		uint32_t old_mask;
 	} PACKED rsp_set_trace_filter;
@@ -626,13 +640,16 @@ struct clsic_sys_registry_value {
 enum clsic_ras_msg_id {
 	CLSIC_RAS_MSG_CR_RDREG			= 1,
 	CLSIC_RAS_MSG_CR_WRREG			= 2,
-	CLSIC_RAS_MSG_CR_GET_DEBUG_INFO		= 3,
+	CLSIC_RAS_MSG_CR_DEPRECATED_1		= 3,
 	CLSIC_RAS_MSG_CR_RDREG_BULK		= 4,
 	CLSIC_RAS_MSG_CR_WRREG_BULK		= 5,
 	CLSIC_RAS_MSG_CR_SET_IRQ_NTY_MODE	= 6,
 	CLSIC_RAS_MSG_N_IRQ			= 7,
-	CLSIC_RAS_MSG_CR_GET_DI_CATEGORY_COUNT	= 8,
-	CLSIC_RAS_MSG_CR_GET_DI_PAGE_COUNT	= 9,
+	CLSIC_RAS_MSG_CR_DEPRECATED_2		= 8,
+	CLSIC_RAS_MSG_CR_DEPRECATED_3		= 9,
+	CLSIC_RAS_MSG_CR_GET_DI_CATEGORY_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_CATEGORY_COUNT,
+	CLSIC_RAS_MSG_CR_GET_DI_PAGE_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_PAGE_COUNT,
+	CLSIC_RAS_MSG_CR_GET_DEBUG_INFO 	= CLSIC_GBL_MSG_CR_GET_DEBUG_INFO,
 };
 
 enum clsic_ras_irq_nty_mode {
@@ -825,9 +842,12 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_GET_MODE		= 1,
 	CLSIC_VOX_MSG_CR_BARGE_IN_ENA		= 2,
 	CLSIC_VOX_MSG_CR_BARGE_IN_DIS		= 3,
-	CLSIC_VOX_MSG_CR_GET_DEBUG_INFO		= 26,
-	CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT	= 28,
-	CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT	= 29,
+	CLSIC_VOX_MSG_CR_DEPRECATED_1		= 26,
+	CLSIC_VOX_MSG_CR_DEPRECATED_2		= 28,
+	CLSIC_VOX_MSG_CR_DEPRECATED_3		= 29,
+	CLSIC_VOX_MSG_CR_GET_DI_CATEGORY_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_CATEGORY_COUNT,
+	CLSIC_VOX_MSG_CR_GET_DI_PAGE_COUNT 	= CLSIC_GBL_MSG_CR_GET_DI_PAGE_COUNT,
+	CLSIC_VOX_MSG_CR_GET_DEBUG_INFO 	= CLSIC_GBL_MSG_CR_GET_DEBUG_INFO,
 
 	/**
 	 *  VOX Messages for Enrol mode.
@@ -997,6 +1017,19 @@ enum clsic_vox_auth_result_format {
 	CLSIC_VOX_AUTH_RESULT_EXTENDED2		= 0x2,
 };
 
+/**
+ *  VOX Service flags send out in CLSIC_VOX_MSG_N_TRGR_DETECT msg.
+ *  If no flag is set then biometrics will not be executed, if
+ *  CLSIC_VOX_BIOM_TD flag is set then biometrics will be done on
+ *  trigger part, if CLSIC_VOX_BIOM_TI flag is set then biometrics
+ *  will done on command part. If both CLSIC_VOX_BIOM_TD and
+ *  CLSIC_VOX_BIOM_TI are set then biometrics will be done on both
+ *  trigger and command parts.
+ */
+enum clsic_vox_biom_flags {
+	CLSIC_VOX_BIOM_TD		= 0x1,
+	CLSIC_VOX_BIOM_TI		= 0x2,
+};
 
 /**
  *  VOX Service messages.
@@ -1230,6 +1263,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_nty_hdr hdr;
+		uint8_t biom_flags;
 	} PACKED nty_trgr_detect;
 
 	/**
