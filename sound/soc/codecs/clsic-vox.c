@@ -127,6 +127,7 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(rtd->codec);
+	struct clsic *clsic = vox->clsic;
 	int ret = 0;
 
 	/*
@@ -140,7 +141,7 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	if (!try_module_get(vox->codec->component.card->owner))
 		return -EBUSY;
 
-	if (!try_module_get(vox->clsic->dev->driver->owner)) {
+	if (!try_module_get(clsic->dev->driver->owner)) {
 		module_put(vox->codec->component.card->owner);
 		return -EBUSY;
 	}
@@ -165,6 +166,8 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 		ret = -EINVAL;
 		goto error_return;
 	}
+
+	pm_runtime_get_sync(clsic->dev);
 
 	vox->asr_stream.stream = stream;
 
@@ -193,6 +196,7 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 	struct clsic_vox *vox = container_of(asr_stream, struct clsic_vox,
 					     asr_stream);
+	struct clsic *clsic = vox->clsic;
 
 	trace_clsic_vox_asr_stream_free(stream->direction,
 					asr_stream->copied_total);
@@ -209,7 +213,8 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 	asr_stream->stream = NULL;
 	mutex_unlock(&asr_stream->stream_lock);
 
-	module_put(vox->clsic->dev->driver->owner);
+	pm_runtime_put_autosuspend(clsic->dev);
+	module_put(clsic->dev->driver->owner);
 	module_put(vox->codec->component.card->owner);
 
 	return 0;
