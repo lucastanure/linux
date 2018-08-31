@@ -75,7 +75,7 @@ static void vox_send_userspace_event(struct clsic_vox *vox)
 }
 
 /**
- * clsic_vox_asr_streaming_failed() - set CLSIC back to IDLE after a problem.
+ * clsic_vox_asr_end_streaming() - set CLSIC back to IDLE after a problem.
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
  * When the audio path has closed, the last operation to be running needs to
@@ -298,6 +298,17 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 	return 0;
 }
 
+/**
+ * clsic_vox_asr_stream_data_cb() - asynchronous message callback for ASR
+ * @clsic:	The main shared instance of struct clsic used in the CLSIC
+ *		drivers.
+ * @msg:	The message notification itself as received from CLSIC.
+ *
+ * This is the callback that is called when the asynchronous message to copy
+ * ASR data during streaming has completed.
+ *
+ * Return: CLSIC_HANDLED or CLSIC_UNHANDLED.
+ */
 static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 						      struct clsic *clsic,
 						      struct clsic_message *msg)
@@ -344,6 +355,16 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	return CLSIC_MSG_RELEASED;
 }
 
+/**
+ * clsic_vox_asr_queue_async() - helper function for copying ASR data
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * This function handles creating and sending an asynchronous message to copy
+ * ASR data during streaming. It also sensibly reacts if the message sending
+ * fails.
+ *
+ * Return: errno.
+ */
 static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
@@ -714,7 +735,6 @@ static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
  *
  * Mark CLSIC as in use dependent on what CLSIC mode transition is occurring.
  *
- * Return: void.
  */
 static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
 					enum clsic_vox_mode new_mode)
@@ -1865,7 +1885,7 @@ static int vox_ctrl_error_info_put(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to get the relevant internal variable
  * existing in the driver vox struct.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
@@ -1887,7 +1907,7 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to set the relevant internal variable
  * existing in the driver vox struct.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
@@ -1909,7 +1929,7 @@ static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to get the relevant internal variable
  * existing in the driver vox struct.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int vox_ctrl_enum_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
@@ -1930,7 +1950,7 @@ static int vox_ctrl_enum_get(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to set the relevant internal variable
  * existing in the driver vox struct.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
@@ -2166,6 +2186,7 @@ static int vox_update_barge_in(struct clsic_vox *vox)
 			  msg_rsp.rsp_barge_in_ena.hdr.err);
 		return -EIO;
 	}
+
 	return 0;
 }
 
@@ -2386,8 +2407,14 @@ static int vox_notification_handler(struct clsic *clsic,
 	return ret;
 }
 
-/*
- * Callback to provide information of vox integer controls
+/**
+ * vox_ctrl_int_info() - callback to provide information of vox integer controls
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @uinfo:	struct snd_ctl_elem_info as used by the ALSA infrastructure.
+ *
+ * Allow userspace to write virtual SCC control registers.
+ *
+ * Return: 0 always.
  */
 static int vox_ctrl_int_info(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_info *uinfo)
@@ -2403,6 +2430,17 @@ static int vox_ctrl_int_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_int_helper() - set up an integer ALSA control
+ * @kc:			struct snd_kcontrol_new as used by the ALSA
+ *			infrastructure.
+ * @control_name:	Name of this ALSA control.
+ * @private_value:	struct soc_mixer_control to embed in the control, as
+ *			used by the put and get functions.
+ *
+ * Helper function to speed up creation of an ALSA control.
+ *
+ */
 static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
 				const char *control_name,
 				unsigned long private_value)
@@ -2417,6 +2455,17 @@ static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
 		     SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 }
 
+/**
+ * vox_ctrl_enum_helper() - set up an enum ALSA control
+ * @kc:			struct snd_kcontrol_new as used by the ALSA
+ *			infrastructure.
+ * @control_name:	Name of this ALSA control.
+ * @private_value:	struct soc_mixer_control to embed in the control, as
+ *			used by the put and get functions.
+ *
+ * Helper function to speed up creation of an ALSA control.
+ *
+ */
 static void vox_ctrl_enum_helper(struct snd_kcontrol_new *kc,
 				 const char *control_name,
 				 unsigned long private_value)
@@ -2514,6 +2563,19 @@ static int vox_ctrl_scc_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/**
+ * vox_ctrl_scc_helper() - set up an ALSA control for use by the SCC userspace
+ *			   infrastructure
+ * @kcontrol:		struct snd_kcontrol as used by the ALSA infrastructure.
+ * @control_name:	Name of this ALSA control.
+ * @private_value:	struct soc_mixer_control to embed in the control, as
+ *			used by the put and get functions.
+ *
+ * Helper function to speed up creation of an ALSA control for use by the
+ * userspace SCC libraries - these are specified to have a particular size and
+ * type.
+ *
+ */
 static void vox_ctrl_scc_helper(struct snd_kcontrol_new *kc,
 				const char *control_name,
 				struct soc_bytes_ext *s_bytes_var,
