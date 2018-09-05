@@ -30,6 +30,7 @@
 #include "../../../drivers/mfd/clsic/clsic-trace.h"
 #include <linux/mfd/clsic/core.h>
 #include "clsic-vox-msg.h"
+#include "clsic-vox-trace.h"
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/irq.h>
 
