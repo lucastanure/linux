@@ -11,6 +11,8 @@
 #ifndef CIRRUS_CLSIC_DEBUGSRV_H
 #define CIRRUS_CLSIC_DEBUGSRV_H
 
+#include <linux/mfd/clsic/clsicmessagedefinesdiagnostics_DBG.h>
+
 int clsic_debug_service_start(struct clsic *clsic,
 			      struct clsic_service *handler);
 #endif

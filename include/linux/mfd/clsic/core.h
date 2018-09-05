@@ -113,7 +113,7 @@ static inline const char *clsic_mode_to_string(enum clsic_states state)
 }
 
 struct clsic_panic {
-	union clsic_sys_msg msg;
+	uint8_t msg[CLSIC_FIXED_MSG_SZ];
 	struct clsic_debug_info di;
 };
 

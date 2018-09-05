@@ -11,6 +11,8 @@
 #ifndef CIRRUS_CLSIC_RASSRV_H
 #define CIRRUS_CLSIC_RASSRV_H
 
+#include <linux/mfd/clsic/clsicmessagedefines_RAS.h>
+
 struct clsic_ras_struct {
 	struct clsic *clsic;
 	uint8_t service_instance;

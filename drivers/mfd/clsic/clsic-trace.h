@@ -14,6 +14,7 @@
 #if !defined(CLSIC_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define CLSIC_TRACE_H
 
+#include <linux/mfd/clsic/clsicmessagedefines.h>
 #include <linux/mfd/clsic/message.h>
 #include <linux/tracepoint.h>
 #include <uapi/sound/compress_offload.h>

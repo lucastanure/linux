@@ -13,6 +13,7 @@
 #include <linux/mfd/clsic/irq.h>
 #include <linux/mfd/clsic/debugcontrol.h>
 #include <linux/mfd/clsic/syssrv.h>
+#include <linux/mfd/clsic/clsicmessagedefines_BLD.h>
 
 /*
  * When there are messages in the queues (waiting for response or waiting to
@@ -2139,7 +2140,7 @@ int clsic_send_msg_sync(struct clsic *clsic,
 		 * check whether this message was rejected as invalid or failed
 		 * for a different reason
 		 */
-		if (clsic_is_inval(&msg->response,
+		if (clsic_system_cmd_is_inval(&msg->response,
 				   clsic_get_srv_inst(msg->fsm.cmd.hdr.sbc),
 				   msg->fsm.cmd.hdr.msgid))
 			/* Device indicated invalid message */
