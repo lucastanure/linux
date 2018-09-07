@@ -2418,7 +2418,8 @@ static int vox_notification_handler(struct clsic *clsic,
 		 * There was an error while the voice service was listening for
 		 * a trigger.
 		 */
-		trace_clsic_vox_trigger_heard(false);
+		trace_clsic_vox_trigger_heard(msgid,
+					      msg_nty->nty_listen_err.err);
 
 		clsic_err(clsic, "trigger detection error on CLSIC %d.\n",
 			  msg_nty->nty_listen_err.err);
@@ -2432,7 +2433,8 @@ static int vox_notification_handler(struct clsic *clsic,
 		 * On trigger CLSIC has transitioned from LISTEN to STREAM by
 		 * itself.
 		 */
-		trace_clsic_vox_trigger_heard(true);
+		trace_clsic_vox_trigger_heard(msgid,
+					msg_nty->nty_trgr_detect.biom_flags);
 		vox->clsic_mode = CLSIC_VOX_MODE_STREAM;
 
 		/*
@@ -2440,6 +2442,10 @@ static int vox_notification_handler(struct clsic *clsic,
 		 * streaming
 		 */
 		clsic_msgproc_use(clsic, vox->service->service_instance);
+
+		if (msg_nty->nty_trgr_detect.biom_flags == 0)
+			/* No biometrics possible. */
+			vox->auth_error = CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED;
 
 		complete(&vox->asr_stream.completion);
 

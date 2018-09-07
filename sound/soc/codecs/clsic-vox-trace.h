@@ -43,13 +43,23 @@ TRACE_EVENT(clsic_vox_modechange,
 );
 
 TRACE_EVENT(clsic_vox_trigger_heard,
-	TP_PROTO(u8 trigger),
-	TP_ARGS(trigger),
-	TP_STRUCT__entry(__field(u8, trigger)),
+	TP_PROTO(u8 msgid,
+		 u8 flags),
+	TP_ARGS(msgid, flags),
+	TP_STRUCT__entry(
+			 __field(u8, msgid)
+			 __field(u8, flags)
+			),
 	TP_fast_assign(
-			__entry->trigger = trigger;
+			__entry->msgid = msgid;
+			__entry->flags = flags;
 		),
-	TP_printk("end of triggering with trigger state %d", __entry->trigger)
+	TP_printk(
+		  "end of triggering with %s %d",
+		  (__entry->msgid == CLSIC_VOX_MSG_N_LISTEN_ERR) ?
+			"error" : "biometric TD|TI flags",
+		  __entry->flags
+		  )
 );
 
 TRACE_EVENT(clsic_vox_asr_stream_open,
