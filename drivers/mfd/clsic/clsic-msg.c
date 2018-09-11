@@ -1415,7 +1415,7 @@ static int clsic_send_message_core(struct clsic *clsic,
 
 	/*
 	 * Check that no message exists in the system with the current service
-	 * instance or message id.
+	 * instance and message id.
 	 */
 	if (clsic_findmessage(clsic, clsic_get_srv_inst(msg->fsm.cmd.hdr.sbc),
 			      msg->fsm.cmd.hdr.msgid) != NULL) {
