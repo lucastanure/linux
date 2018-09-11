@@ -1,7 +1,8 @@
 /*
  * clsic-tacna.c -- Core MFD support for codec aspect of CLSIC devices
  *
- * Copyright 2016-2018 Cirrus Logic
+ * Copyright (C) 2015-2018 Cirrus Logic, Inc. and
+ *			   Cirrus Logic International Semiconductor Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as

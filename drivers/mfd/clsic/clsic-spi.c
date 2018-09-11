@@ -1,7 +1,8 @@
 /*
  * clsic-spi.c -- CLSIC SPI bus interface
  *
- * Copyright 2017 CirrusLogic, Inc.
+ * Copyright (C) 2015-2018 Cirrus Logic, Inc. and
+ *			   Cirrus Logic International Semiconductor Ltd.
  *
  * Author: Simon Trimmer <simont@opensource.cirrus.com>
  *
