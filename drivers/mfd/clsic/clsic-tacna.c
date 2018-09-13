@@ -9,7 +9,7 @@
  */
 
 #include <linux/mfd/clsic/core.h>
-#include <linux/mfd/clsic/regmapsrv.h>
+#include <linux/mfd/clsic/rassrv.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/tacna/core.h>
 #include <linux/module.h>
@@ -59,13 +59,12 @@ static int clsic_tacna_pinctrl_setactive(struct tacna *tacna)
 static int clsic_tacna_probe(struct platform_device *pdev)
 {
 	struct clsic *clsic = dev_get_drvdata(pdev->dev.parent);
-	struct clsic_regmapsrv_struct *regmapsrv =
-		dev_get_platdata(&pdev->dev);
+	struct clsic_ras_struct *ras = dev_get_platdata(&pdev->dev);
 	struct tacna *tacna;
 	u32 devid;
 	int ret = 0;
 
-	ret = regmap_read(regmapsrv->regmap, TACNA_DEVID, &devid);
+	ret = regmap_read(ras->regmap, TACNA_DEVID, &devid);
 	dev_dbg(&pdev->dev, "%s() regmap access test: devid 0x%x (%d)\n",
 		__func__, devid, ret);
 
@@ -87,7 +86,7 @@ static int clsic_tacna_probe(struct platform_device *pdev)
 	tacna->dev->of_node = of_node_get(clsic->dev->of_node);
 	tacna->irq = 0;
 	tacna->dev->platform_data = NULL;
-	tacna->regmap = regmapsrv->regmap;
+	tacna->regmap = ras->regmap;
 
 	dev_set_drvdata(tacna->dev, tacna);
 

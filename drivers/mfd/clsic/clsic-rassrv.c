@@ -1,5 +1,5 @@
 /*
- * clsic-regmapsrv.c -- CLSIC Register Access Service
+ * clsic-rassrv.c -- CLSIC Register Access Service
  *
  * Copyright 2016-2018 Cirrus Logic
  *
@@ -14,7 +14,7 @@
 #include "clsic-trace.h"
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/irq.h>
-#include <linux/mfd/clsic/regmapsrv.h>
+#include <linux/mfd/clsic/rassrv.h>
 
 /*
  * The regmap we expose is 32bits address and data width
@@ -34,10 +34,9 @@
  * This service uses the handler data pointer to stash a instance specific data
  * structure so it must be released when the service is stopped.
  */
-static void clsic_regmap_service_stop(struct clsic *clsic,
-				      struct clsic_service *handler)
+static void clsic_ras_stop(struct clsic *clsic, struct clsic_service *handler)
 {
-	struct clsic_regmapsrv_struct *regmapsrv_struct;
+	struct clsic_ras_struct *ras;
 
 	if (handler->data != NULL) {
 		/*
@@ -45,8 +44,8 @@ static void clsic_regmap_service_stop(struct clsic *clsic,
 		 * the driver unloads. Make the regmap cache only so clients
 		 * don't receive errors.
 		 */
-		regmapsrv_struct = handler->data;
-		regcache_cache_only(regmapsrv_struct->regmap, true);
+		ras = handler->data;
+		regcache_cache_only(ras->regmap, true);
 		handler->data = NULL;
 	}
 }
@@ -56,23 +55,22 @@ static void clsic_regmap_service_stop(struct clsic *clsic,
  * remote access service and they translates a simple register accesses into
  * messages sent to the remote access service present in the device.
  */
-static int clsic_ras_simple_readregister(
-				       struct clsic_regmapsrv_struct *regmapsrv,
-				       uint32_t address, __be32 *value)
+static int clsic_ras_simple_readregister(struct clsic_ras_struct *ras,
+					 uint32_t address, __be32 *value)
 {
 	struct clsic *clsic;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
 	int ret = 0;
 
-	if (regmapsrv == NULL)
+	if (ras == NULL)
 		return -EINVAL;
 
-	clsic = regmapsrv->clsic;
+	clsic = ras->clsic;
 
 	/* Format and send a message to the remote access service */
 	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-			   regmapsrv->service_instance,
+			   ras->service_instance,
 			   CLSIC_RAS_MSG_CR_RDREG);
 	msg_cmd.cmd_rdreg.addr = address;
 
@@ -114,23 +112,22 @@ static int clsic_ras_simple_readregister(
 	return ret;
 }
 
-static int clsic_ras_simple_writeregister(
-				       struct clsic_regmapsrv_struct *regmapsrv,
-				       uint32_t address, uint32_t value)
+static int clsic_ras_simple_writeregister(struct clsic_ras_struct *ras,
+					  uint32_t address, uint32_t value)
 {
 	struct clsic *clsic;
 	union clsic_ras_msg msg_cmd;
 	union clsic_ras_msg msg_rsp;
 	int ret = 0;
 
-	if (regmapsrv == NULL)
+	if (ras == NULL)
 		return -EINVAL;
 
-	clsic = regmapsrv->clsic;
+	clsic = ras->clsic;
 
 	/* Format and send a message to the remote access service */
 	clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-			   regmapsrv->service_instance,
+			   ras->service_instance,
 			   CLSIC_RAS_MSG_CR_WRREG);
 	msg_cmd.cmd_wrreg.addr = address;
 	msg_cmd.cmd_wrreg.value = value;
@@ -167,26 +164,26 @@ static int clsic_ras_simple_writeregister(
 
 /*
  * This function is called when a single register write is performed on the
- * regmap, it translates the context back into a regmapsrv structure so the
+ * regmap, it translates the context back into a ras structure so the
  * request can be sent through the messaging layer and fulfilled
  */
 int clsic_ras_reg_write(void *context, unsigned int reg, uint32_t val)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 
-	return clsic_ras_simple_writeregister(regmapsrv, reg, val);
+	return clsic_ras_simple_writeregister(ras, reg, val);
 }
 
 /*
  * This function is called when a single register read is performed on the
- * regmap, it translates the context back into a regmapsrv structure so the
+ * regmap, it translates the context back into a ras structure so the
  * request can be sent through the messaging layer and fulfilled
  */
 int clsic_ras_reg_read(void *context, unsigned int reg, uint32_t *val)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 
-	return clsic_ras_simple_readregister(regmapsrv, reg, (__be32 *) val);
+	return clsic_ras_simple_readregister(ras, reg, (__be32 *) val);
 }
 
 /*
@@ -206,7 +203,7 @@ static int clsic_ras_read(void *context, const void *reg_buf,
 			  const size_t reg_size, void *val_buf,
 			  const size_t val_size)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 	struct clsic *clsic;
 	int ret = 0;
 	u32 reg = be32_to_cpu(*(const __be32 *) reg_buf);
@@ -215,19 +212,19 @@ static int clsic_ras_read(void *context, const void *reg_buf,
 	union clsic_ras_msg msg_rsp;
 	uint8_t err = 0;
 
-	if (regmapsrv == NULL)
+	if (ras == NULL)
 		return -EINVAL;
 
-	clsic = regmapsrv->clsic;
+	clsic = ras->clsic;
 
 	if (val_size == CLSIC_RAS_VAL_BYTES)
-		return clsic_ras_simple_readregister(regmapsrv, reg,
+		return clsic_ras_simple_readregister(ras, reg,
 						     (__be32 *) val_buf);
 
 	for (i = 0; i < val_size; i += CLSIC_RAS_MAX_BULK_SZ) {
 		/* Format and send a message to the remote access service */
 		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   regmapsrv->service_instance,
+				   ras->service_instance,
 				   CLSIC_RAS_MSG_CR_RDREG_BULK);
 		frag_sz = min(val_size - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
 		msg_cmd.cmd_rdreg_bulk.addr = reg + i;
@@ -282,7 +279,7 @@ static int clsic_ras_read(void *context, const void *reg_buf,
 static int clsic_ras_write(void *context, const void *val_buf,
 			   const size_t val_size)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 	struct clsic *clsic;
 	const __be32 *buf = val_buf;
 	u32 addr = be32_to_cpu(buf[0]);
@@ -293,10 +290,10 @@ static int clsic_ras_write(void *context, const void *val_buf,
 	union clsic_ras_msg msg_rsp;
 	u32 *values;
 
-	if (regmapsrv == NULL)
+	if (ras == NULL)
 		return -EINVAL;
 
-	clsic = regmapsrv->clsic;
+	clsic = ras->clsic;
 
 	payload_sz = val_size - CLSIC_RAS_REG_BYTES;
 	if ((val_size & (CLSIC_RAS_REG_BYTES - 1)) != 0) {
@@ -309,7 +306,7 @@ static int clsic_ras_write(void *context, const void *val_buf,
 	}
 
 	if (val_size == (CLSIC_RAS_VAL_BYTES + CLSIC_RAS_REG_BYTES))
-		return clsic_ras_simple_writeregister(regmapsrv,
+		return clsic_ras_simple_writeregister(ras,
 						      addr,
 						      be32_to_cpu(buf[1]));
 
@@ -323,7 +320,7 @@ static int clsic_ras_write(void *context, const void *val_buf,
 	for (i = 0; i < payload_sz; i += CLSIC_RAS_MAX_BULK_SZ) {
 		/* Format and send a message to the remote access service */
 		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   regmapsrv->service_instance,
+				   ras->service_instance,
 				   CLSIC_RAS_MSG_CR_WRREG_BULK);
 		frag_sz = min(payload_sz - i, (size_t) CLSIC_RAS_MAX_BULK_SZ);
 		msg_cmd.blkcmd_wrreg_bulk.addr = addr + i;
@@ -396,16 +393,16 @@ static struct regmap_bus regmap_bus_ras = {
  */
 static void clsic_ras_regmap_lock(void *context)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 
-	mutex_lock(&regmapsrv->regmap_mutex);
+	mutex_lock(&ras->regmap_mutex);
 }
 
 static void clsic_ras_regmap_unlock(void *context)
 {
-	struct clsic_regmapsrv_struct *regmapsrv = context;
+	struct clsic_ras_struct *ras = context;
 
-	mutex_unlock(&regmapsrv->regmap_mutex);
+	mutex_unlock(&ras->regmap_mutex);
 }
 
 /*
@@ -450,25 +447,24 @@ static struct mfd_cell clsic_devs[] = {
  * On resume, marking the cache as dirty and calling sync recommits the
  * previous contents of the regmap cache
  */
-static int clsic_regmap_service_pm_handler(struct clsic_service *handler,
-					   int pm_event)
+static int clsic_ras_pm_handler(struct clsic_service *handler, int pm_event)
 {
-	struct clsic_regmapsrv_struct *regmapsrv;
+	struct clsic_ras_struct *ras;
 
 	/* Will always be populated when this handler could be called */
-	regmapsrv = handler->data;
+	ras = handler->data;
 
 	switch (pm_event) {
 	case PM_EVENT_SUSPEND:
 		break;
 
 	case PM_EVENT_RESUME:
-		regcache_mark_dirty(regmapsrv->regmap);
-		regcache_sync(regmapsrv->regmap);
+		regcache_mark_dirty(ras->regmap);
+		regcache_sync(ras->regmap);
 		break;
 
 	default:
-		clsic_err(regmapsrv->clsic, "Unknown PM event %d",
+		clsic_err(ras->clsic, "Unknown PM event %d",
 			  pm_event);
 		break;
 	}
@@ -485,10 +481,9 @@ static int clsic_regmap_service_pm_handler(struct clsic_service *handler,
  * It starts MFD child devices and creates a regmap bus that they can use to
  * communicate back to this instance of the device.
  */
-int clsic_regmap_service_start(struct clsic *clsic,
-			       struct clsic_service *handler)
+int clsic_ras_start(struct clsic *clsic, struct clsic_service *handler)
 {
-	struct clsic_regmapsrv_struct *regmapsrv_struct;
+	struct clsic_ras_struct *ras;
 	int ret = 0;
 
 	/*
@@ -496,15 +491,15 @@ int clsic_regmap_service_start(struct clsic *clsic,
 	 * correctly configured as the core service infrastructure will call
 	 * stop() on services if they change.
 	 */
-	if ((handler->stop == &clsic_regmap_service_stop) &&
+	if ((handler->stop == &clsic_ras_stop) &&
 	    (handler->data != NULL)) {
-		regmapsrv_struct = handler->data;
+		ras = handler->data;
 
 		/*
 		 * Check the private data structure is correct
 		 */
-		if ((regmapsrv_struct->clsic == clsic) &&
-		    (regmapsrv_struct->service_instance ==
+		if ((ras->clsic == clsic) &&
+		    (ras->service_instance ==
 		     handler->service_instance)) {
 			clsic_dbg(clsic, "%p handler structure is a full match",
 				  handler);
@@ -514,9 +509,9 @@ int clsic_regmap_service_start(struct clsic *clsic,
 			 * hardware - this recommits the last known client
 			 * state.
 			 */
-			regcache_mark_dirty(regmapsrv_struct->regmap);
-			regcache_cache_only(regmapsrv_struct->regmap, false);
-			regcache_sync(regmapsrv_struct->regmap);
+			regcache_mark_dirty(ras->regmap);
+			regcache_cache_only(ras->regmap, false);
+			regcache_sync(ras->regmap);
 
 			return 0;
 		}
@@ -524,8 +519,8 @@ int clsic_regmap_service_start(struct clsic *clsic,
 		return -EINVAL;
 	}
 
-	regmapsrv_struct = kzalloc(sizeof(*regmapsrv_struct), GFP_KERNEL);
-	if (regmapsrv_struct == NULL)
+	ras = kzalloc(sizeof(*ras), GFP_KERNEL);
+	if (ras == NULL)
 		return -ENOMEM;
 
 	/*
@@ -533,27 +528,27 @@ int clsic_regmap_service_start(struct clsic *clsic,
 	 * catch any messages from other clients accessing the service on the
 	 * device so it does not need to register a callback.
 	 */
-	handler->stop = &clsic_regmap_service_stop;
+	handler->stop = &clsic_ras_stop;
 
 	/* set pm handler for RAS to manage reg-cache */
-	handler->pm_handler = &clsic_regmap_service_pm_handler;
+	handler->pm_handler = &clsic_ras_pm_handler;
 
-	mutex_init(&regmapsrv_struct->regmap_mutex);
-	regmap_config_ras.lock_arg = regmapsrv_struct;
+	mutex_init(&ras->regmap_mutex);
+	regmap_config_ras.lock_arg = ras;
 
-	regmapsrv_struct->clsic = clsic;
-	handler->data = regmapsrv_struct;
-	regmapsrv_struct->service_instance = handler->service_instance;
-	regmapsrv_struct->regmap = devm_regmap_init(clsic->dev,
-						    &regmap_bus_ras,
-						    regmapsrv_struct,
-						    &regmap_config_ras);
+	ras->clsic = clsic;
+	handler->data = ras;
+	ras->service_instance = handler->service_instance;
+	ras->regmap = devm_regmap_init(clsic->dev,
+				       &regmap_bus_ras,
+				       ras,
+				       &regmap_config_ras);
 
 	clsic_dbg(clsic, "srv: %p regmap: %p\n",
-		  regmapsrv_struct, regmapsrv_struct->regmap);
+		  ras, ras->regmap);
 
-	clsic_devs[0].platform_data = regmapsrv_struct;
-	clsic_devs[0].pdata_size = sizeof(struct clsic_regmapsrv_struct);
+	clsic_devs[0].platform_data = ras;
+	clsic_devs[0].pdata_size = sizeof(struct clsic_ras_struct);
 
 	clsic_dbg(clsic, "mfd cell 0: %p %s %p %d\n",
 		  &clsic_devs[0],

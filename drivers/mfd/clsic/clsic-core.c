@@ -18,7 +18,7 @@
 #include <linux/mfd/clsic/irq.h>
 #include <linux/mfd/clsic/bootsrv.h>
 #include <linux/mfd/clsic/syssrv.h>
-#include <linux/mfd/clsic/regmapsrv.h>
+#include <linux/mfd/clsic/rassrv.h>
 
 static void clsic_init_sysfs(struct clsic *clsic);
 static void clsic_deinit_sysfs(struct clsic *clsic);

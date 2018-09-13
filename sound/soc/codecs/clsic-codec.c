@@ -28,7 +28,7 @@
 #include "tacna.h"
 
 #include <linux/mfd/clsic/core.h>
-#include <linux/mfd/clsic/regmapsrv.h>
+#include <linux/mfd/clsic/rassrv.h>
 
 #define CLSIC_N_FLL			2
 #define CLSIC_NUM_DSP			2

@@ -19,7 +19,7 @@
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/irq.h>
 #include <linux/mfd/clsic/syssrv.h>
-#include <linux/mfd/clsic/regmapsrv.h>
+#include <linux/mfd/clsic/rassrv.h>
 #include <linux/mfd/clsic/debugsrv.h>
 #include <linux/mfd/clsic/bootsrv.h>
 #include "clsic-trace.h"
@@ -467,7 +467,7 @@ int clsic_system_service_enumerate(struct clsic *clsic)
 						    service_instance,
 						    service_type,
 						    service_version,
-						    clsic_regmap_service_start);
+						    clsic_ras_start);
 			break;
 		case CLSIC_SRV_TYPE_DBG:
 			clsic_register_service_handler(clsic,

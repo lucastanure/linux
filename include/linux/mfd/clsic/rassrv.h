@@ -1,5 +1,5 @@
 /*
- * regmapsrv.h -- CLSIC Register Access Service
+ * rassrv.h -- CLSIC Register Access Service
  *
  * Copyright 2016-2018 Cirrus Logic
  *
@@ -8,10 +8,10 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef CIRRUS_CLSIC_REGMAPSRV_H
-#define CIRRUS_CLSIC_REGMAPSRV_H
+#ifndef CIRRUS_CLSIC_RASSRV_H
+#define CIRRUS_CLSIC_RASSRV_H
 
-struct clsic_regmapsrv_struct {
+struct clsic_ras_struct {
 	struct clsic *clsic;
 	uint8_t service_instance;
 
@@ -19,8 +19,7 @@ struct clsic_regmapsrv_struct {
 	struct mutex regmap_mutex;
 };
 
-int clsic_regmap_service_start(struct clsic *clsic,
-			       struct clsic_service *handler);
+int clsic_ras_start(struct clsic *clsic, struct clsic_service *handler);
 
 int clsic_ras_reg_write(void *context, unsigned int reg, unsigned int val);
 int clsic_ras_reg_read(void *context, unsigned int reg, unsigned int *val);
