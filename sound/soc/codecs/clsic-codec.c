@@ -1921,7 +1921,7 @@ static int clsic_probe(struct platform_device *pdev)
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to initialise DSP1.\n");
 
-	/* Number of dsp1 channels set to 0 as under management of ARM core */
+	/* Number of dsp1 channels set to 0 as under management of VPU core */
 	dsp->n_rx_channels = 0;
 	dsp->n_tx_channels = 0;
 

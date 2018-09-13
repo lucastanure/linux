@@ -753,7 +753,7 @@ static int clsic_alg_init_dsps(struct device *dev, struct clsic_alg *alg)
 	if (ret != 0)
 		clsic_err(alg->clsic, "Failed to initialise DSP2\n");
 
-	/* Number of dsp2 channels set to 0 as under management of ARM core */
+	/* Number of dsp2 channels set to 0 as under management of VPU core */
 	dsp->n_rx_channels = 0;
 	dsp->n_tx_channels = 0;
 
