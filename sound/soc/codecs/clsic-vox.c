@@ -544,7 +544,8 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 	trace_clsic_vox_asr_stream_queue_read(asr_stream->copied_total);
 
 	/* Queue up the first read. */
-	clsic_vox_asr_queue_async(vox);
+	if (clsic_vox_asr_queue_async(vox))
+		return -EIO;
 
 	return 0;
 }
