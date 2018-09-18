@@ -164,6 +164,43 @@ TRACE_EVENT(clsic_vox_asr_stream_copy_end,
 		  __entry->count, __entry->copied_total)
 );
 
+TRACE_EVENT(clsic_vox_asr_stream_trigger,
+	TP_PROTO(int cmd),
+	TP_ARGS(cmd),
+	TP_STRUCT__entry(__field(int, cmd)),
+	TP_fast_assign(__entry->cmd = cmd;),
+	TP_printk("command %s (%d)",
+		  (__entry->cmd == 1) ? "SNDRV_PCM_TRIGGER_START" :
+		  "SNDRV_PCM_TRIGGER_STOP", __entry->cmd)
+);
+
+TRACE_EVENT(clsic_vox_asr_stream_pointer,
+	TP_PROTO(unsigned int copied_total, unsigned int sample_rate),
+	TP_ARGS(copied_total, sample_rate),
+	TP_STRUCT__entry(__field(unsigned int, copied_total)
+			 __field(unsigned int, sample_rate)),
+	TP_fast_assign(__entry->copied_total = copied_total;
+		       __entry->sample_rate = sample_rate),
+	TP_printk("copied total: %zu bytes sample rate: %zu Hz",
+		  __entry->copied_total, __entry->sample_rate)
+);
+
+DECLARE_EVENT_CLASS(clsic_vox_generic,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy),
+	TP_STRUCT__entry(
+			__field(uint8_t, dummy)
+			),
+	TP_fast_assign(
+		),
+	TP_printk("%s", " ")
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_asr_stream_get_caps,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
 TRACE_EVENT(clsic_vox_set_mode,
 	TP_PROTO(enum clsic_vox_mode old_mode, enum clsic_vox_mode new_mode),
 	TP_ARGS(old_mode, new_mode),
@@ -244,17 +281,6 @@ TRACE_EVENT(clsic_vox_start_enrol_user,
 		  __entry->timeout,
 		  __entry->number_of_reps
 		)
-);
-
-DECLARE_EVENT_CLASS(clsic_vox_generic,
-	TP_PROTO(uint8_t dummy),
-	TP_ARGS(dummy),
-	TP_STRUCT__entry(
-			__field(uint8_t, dummy)
-			),
-	TP_fast_assign(
-		),
-	TP_printk("%s", " ")
 );
 
 DEFINE_EVENT(clsic_vox_generic, clsic_vox_perform_enrol_rep,

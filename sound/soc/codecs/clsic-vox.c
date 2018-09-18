@@ -573,6 +573,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 	union clsic_vox_msg msg_rsp;
 	int ret = 0;
 
+	trace_clsic_vox_asr_stream_trigger(cmd);
+
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		if (asr_stream->buf.size == 0) {
@@ -675,6 +677,9 @@ static int clsic_vox_asr_stream_pointer(struct snd_compr_stream *stream,
 {
 	struct clsic_asr_stream *asr_stream = stream->runtime->private_data;
 
+	trace_clsic_vox_asr_stream_pointer(asr_stream->copied_total,
+					   asr_stream->sample_rate);
+
 	tstamp->copied_total = asr_stream->copied_total;
 	tstamp->sampling_rate = asr_stream->sample_rate;
 
@@ -743,6 +748,8 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 static int clsic_vox_asr_stream_get_caps(struct snd_compr_stream *stream,
 					 struct snd_compr_caps *caps)
 {
+	trace_clsic_vox_asr_stream_get_caps(0);
+
 	caps->codecs[0] = clsic_asr_stream_caps.id;
 	caps->direction = SND_COMPRESS_CAPTURE;
 	caps->min_fragment_size = VOX_ASR_MIN_FRAGMENT_SZ;
