@@ -3051,6 +3051,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 
 	vox->clsic = clsic;
 	vox->service = clsic->service_handlers[vox_service->service_instance];
+	vox->service->supports_debuginfo = true;
 
 	platform_set_drvdata(pdev, vox);
 
