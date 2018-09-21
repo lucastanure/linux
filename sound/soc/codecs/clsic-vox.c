@@ -526,6 +526,15 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 		return -EIO;
 	}
 
+#ifdef CONFIG_DEBUG_FS
+	/* Save the trigger data for later analysis */
+	memcpy(&vox->last_trigger.msg, &msg_rsp, sizeof(union clsic_vox_msg));
+	memcpy(&vox->last_trigger.info, &trgr_info,
+	       sizeof(struct clsic_vox_trgr_info));
+	vox->last_trigger.blob.size = sizeof(vox->last_trigger.msg) +
+		sizeof(vox->last_trigger.info);
+#endif
+
 	/* Populate the ALSA controls with the trigger information. */
 	vox->trigger_engine_id = trgr_info.engineid;
 	vox->trigger_phrase_id = trgr_info.phraseid;
@@ -1785,6 +1794,17 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	/* Response is either bulk in case of success or fixed on failure. */
 	if (clsic_get_bulk_bit(msg_rsp.rsp_auth_user.hdr.sbc)) {
 		vox->error_info = VOX_ERROR_SUCCESS;
+#ifdef CONFIG_DEBUG_FS
+		/* Save the auth data for later analysis */
+		memcpy(&vox->last_auth.msg, &msg_rsp,
+		       sizeof(union clsic_vox_msg));
+		memcpy(&vox->last_auth.result, &vox->biometric_results,
+		       size_of_bio_results(vox->bio_results_format));
+		vox->last_auth.result_format = vox->bio_results_format;
+		vox->last_auth.security_lvl = vox->security_level;
+		vox->last_auth.blob.size = sizeof(vox->last_auth.msg) +
+			size_of_bio_results(vox->bio_results_format);
+#endif
 	} else {
 		vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
@@ -3069,6 +3089,24 @@ static int clsic_vox_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+#ifdef CONFIG_DEBUG_FS
+	vox->debugfs_vox = debugfs_create_dir("vox", clsic->debugfs_root);
+
+	vox->last_trigger.blob.data = &vox->last_trigger;
+	vox->last_trigger.blob.size = 0;
+	debugfs_create_blob("last_trigger", 0440, vox->debugfs_vox,
+			    &vox->last_trigger.blob);
+
+	vox->last_auth.blob.data = &vox->last_auth;
+	vox->last_auth.blob.size = 0;
+	debugfs_create_blob("last_auth", 0440, vox->debugfs_vox,
+			    &vox->last_auth.blob);
+	debugfs_create_u8("last_auth_lvl", 0440, vox->debugfs_vox,
+			  &vox->last_auth.security_lvl);
+	debugfs_create_u8("last_auth_fmt", 0440, vox->debugfs_vox,
+			  &vox->last_auth.result_format);
+#endif
+
 	dev_info(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
 		 &pdev->dev, ret);
 
@@ -3092,6 +3130,10 @@ static int clsic_vox_remove(struct platform_device *pdev)
 
 	if (vox->clsic_mode != CLSIC_VOX_MODE_IDLE)
 		return -EBUSY;
+
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(vox->debugfs_vox);
+#endif
 
 	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_codec(&pdev->dev);

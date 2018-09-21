@@ -96,6 +96,22 @@ union bio_results_u {
 	struct clsic_vox_auth_result_ex2 result_ex2;
 };
 
+#ifdef CONFIG_DEBUG_FS
+struct vox_last_trigger {
+	union clsic_vox_msg msg;
+	struct clsic_vox_trgr_info info;
+	struct debugfs_blob_wrapper blob;
+};
+
+struct vox_last_auth {
+	union clsic_vox_msg msg;
+	union bio_results_u result;
+	uint8_t security_lvl;
+	uint8_t result_format;
+	struct debugfs_blob_wrapper blob;
+};
+#endif
+
 /**
  * struct clsic_vox - the major struct used within the vox driver
  *
@@ -185,6 +201,12 @@ struct clsic_vox {
 	struct snd_kcontrol *error_info_kctrl;
 
 	struct completion new_bio_results_completion;
+
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *debugfs_vox;
+	struct vox_last_trigger last_trigger;
+	struct vox_last_auth last_auth;
+#endif
 };
 
 static const struct {
