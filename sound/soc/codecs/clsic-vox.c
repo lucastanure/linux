@@ -1115,12 +1115,10 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 
 			switch (msg_rsp.rsp_is_user_installed.hdr.err) {
 			case CLSIC_ERR_NONE:
-			    vox->user_installed[(phr * VOX_MAX_USERS) + usr] =
-									true;
+				vox->user_installed[phr][usr] = true;
 				break;
 			case CLSIC_ERR_USER_NOT_INSTALLED:
-			    vox->user_installed[(phr * VOX_MAX_USERS) + usr] =
-									false;
+				vox->user_installed[phr][usr] = false;
 				break;
 			default:
 				vox->clsic_error_code =
@@ -1390,9 +1388,8 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			for (usr = CLSIC_VOX_USER1;
 			     usr <= CLSIC_VOX_USER3;
 			     usr++)
-				vox->user_installed[
-						(vox->phrase_id * VOX_MAX_USERS)
-						+ usr] = false;
+				vox->user_installed[vox->phrase_id][usr] =
+									false;
 			vox->phrase_installed[vox->phrase_id] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
@@ -1492,8 +1489,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	switch (msg_rsp.rsp_remove_user.hdr.err) {
 	case CLSIC_ERR_NONE:
 	case CLSIC_ERR_USER_NOT_INSTALLED:
-		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
-				    + vox->user_id] = false;
+		vox->user_installed[vox->phrase_id][vox->user_id] = false;
 		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	default:
@@ -1703,13 +1699,11 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 		ret = -EIO;
 	} else if (msg_rsp.rsp_install_user_complete.hdr.err ==
 		   CLSIC_ERR_NONE) {
-		vox->user_installed[(vox->phrase_id * VOX_MAX_USERS)
-				    + vox->user_id] = true;
+		vox->user_installed[vox->phrase_id][vox->user_id] = true;
 		if ((vox->timeout > 0) && (vox->duration > 0))
 			/* Implied combined enrolment. */
-			vox->user_installed[
-					(CLSIC_VOX_PHRASE_TI * VOX_MAX_USERS)
-					+ vox->user_id] = true;
+			vox->user_installed[CLSIC_VOX_PHRASE_TI][vox->user_id] =
+									true;
 		vox->error_info = VOX_ERROR_SUCCESS;
 	} else {
 		vox->clsic_error_code =
@@ -2208,7 +2202,7 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
 
 	ucontrol->value.integer.value[0] =
-	   vox->user_installed[(vox->phrase_id * VOX_MAX_USERS) + vox->user_id];
+			vox->user_installed[vox->phrase_id][vox->user_id];
 
 	return 0;
 }

@@ -193,7 +193,7 @@ struct clsic_vox {
 	struct soc_bytes_ext s_bytes_scc_phraseid;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
-	bool user_installed[VOX_MAX_PHRASES * VOX_MAX_USERS];
+	bool user_installed[VOX_MAX_PHRASES][VOX_MAX_USERS];
 	bool bin_installed[CLSIC_VOX_BIN_CNT];
 	bool bio_vte_map_installed;
 
