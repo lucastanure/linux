@@ -123,10 +123,10 @@ static void clsic_debug_service_handle_bulk_notif(struct clsic *clsic,
 		clsic_dbg(clsic, "clsic_fifo_readbulk_payload() returns %d\n",
 			  ret);
 
-		if (ret == BULK_SZ_EXPECTED)
-			if (memcmp(bulk_data, bulk_data_expected,
-				  BULK_SZ_EXPECTED) != 0)
-				clsic_dbg(clsic, "Bulk data mismatch\n");
+		if ((ret == BULK_SZ_EXPECTED) &&
+		    (memcmp(bulk_data, bulk_data_expected,
+			    BULK_SZ_EXPECTED) != 0))
+			clsic_dbg(clsic, "Bulk data mismatch\n");
 	}
 }
 
