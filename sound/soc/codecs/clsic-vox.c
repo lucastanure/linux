@@ -785,13 +785,13 @@ static struct snd_soc_dai_driver clsic_vox_dai[] = {
 };
 
 static const struct snd_compr_ops clsic_vox_compr_ops = {
-	.open = clsic_vox_asr_stream_open,
-	.free = clsic_vox_asr_stream_free,
-	.set_params = clsic_vox_asr_stream_set_params,
-	.trigger = clsic_vox_asr_stream_trigger,
-	.pointer = clsic_vox_asr_stream_pointer,
-	.copy = clsic_vox_asr_stream_copy,
-	.get_caps = clsic_vox_asr_stream_get_caps,
+	.open = &clsic_vox_asr_stream_open,
+	.free = &clsic_vox_asr_stream_free,
+	.set_params = &clsic_vox_asr_stream_set_params,
+	.trigger = &clsic_vox_asr_stream_trigger,
+	.pointer = &clsic_vox_asr_stream_pointer,
+	.copy = &clsic_vox_asr_stream_copy,
+	.get_caps = &clsic_vox_asr_stream_get_caps,
 };
 
 static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
