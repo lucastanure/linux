@@ -2045,8 +2045,9 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
 {
 	struct soc_mixer_control *e =
 			(struct soc_mixer_control *) kcontrol->private_value;
+	struct vox_value *vv = (struct vox_value *) e->dobj.private;
 
-	ucontrol->value.enumerated.item[0] = *(unsigned int *) e->dobj.private;
+	ucontrol->value.enumerated.item[0] = *(unsigned int *) vv->value;
 
 	return 0;
 }
@@ -2067,10 +2068,15 @@ static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 {
 	struct soc_mixer_control *e =
 			(struct soc_mixer_control *) kcontrol->private_value;
+	struct vox_value *vv = (struct vox_value *) e->dobj.private;
 
-	*(unsigned int *) e->dobj.private = ucontrol->value.enumerated.item[0];
+	if (vv->vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
+		*(unsigned int *) vv->value =
+					ucontrol->value.enumerated.item[0];
+		return 0;
+	}
 
-	return 0;
+	return -EBUSY;
 }
 
 /**
@@ -2617,14 +2623,25 @@ static int vox_ctrl_int_info(struct snd_kcontrol *kcontrol,
  */
 static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
 				const char *control_name,
-				unsigned long private_value)
+				struct soc_mixer_control *mixer_control,
+				struct clsic_vox *vox,
+				void *value)
 {
+	struct vox_value *vv = devm_kzalloc(vox->codec->dev,
+					    sizeof(struct vox_value),
+					    GFP_KERNEL);
+
+	vv->vox = vox;
+	vv->value = value;
+
+	mixer_control->dobj.private = vv;
+
 	kc->name = control_name;
 	kc->info = vox_ctrl_int_info;
 	kc->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	kc->get = vox_ctrl_int_get;
 	kc->put = vox_ctrl_int_put;
-	kc->private_value = private_value;
+	kc->private_value = (unsigned long) mixer_control;
 	kc->access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 		     SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 }
@@ -2827,30 +2844,28 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->clsic_error_code = CLSIC_ERR_NONE;
 
-	memset(&vox->clsic_error_mixer_ctrl, 0,
-	       sizeof(vox->clsic_error_mixer_ctrl));
 	vox->clsic_error_mixer_ctrl.min = CLSIC_ERR_NONE;
 	vox->clsic_error_mixer_ctrl.max = CLSIC_ERR_BL_OSAPP_NOT_2ND_IN_CAB;
 	vox->clsic_error_mixer_ctrl.platform_max =
 					CLSIC_ERR_BL_OSAPP_NOT_2ND_IN_CAB;
-	vox->clsic_error_mixer_ctrl.dobj.private = &vox->clsic_error_code;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox CLSIC Error Code",
-			    (unsigned long) &vox->clsic_error_mixer_ctrl);
+			    &vox->clsic_error_mixer_ctrl,
+			    vox,
+			    &vox->clsic_error_code);
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
 	vox->phrase_id = CLSIC_VOX_PHRASE_VDT1;
 
-	memset(&vox->phrase_id_mixer_ctrl, 0,
-	       sizeof(vox->phrase_id_mixer_ctrl));
 	vox->phrase_id_mixer_ctrl.min = 0;
 	vox->phrase_id_mixer_ctrl.max = VOX_MAX_PHRASES - 1;
 	vox->phrase_id_mixer_ctrl.platform_max = VOX_MAX_PHRASES - 1;
-	vox->phrase_id_mixer_ctrl.dobj.private = &vox->phrase_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Phrase ID",
-			    (unsigned long) &vox->phrase_id_mixer_ctrl);
+			    &vox->phrase_id_mixer_ctrl,
+			    vox,
+			    &vox->phrase_id);
 
 	ctl_id++;
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -2873,14 +2888,14 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->user_id = CLSIC_VOX_USER1;
 
-	memset(&vox->user_id_mixer_ctrl, 0, sizeof(vox->user_id_mixer_ctrl));
 	vox->user_id_mixer_ctrl.min = CLSIC_VOX_USER1;
 	vox->user_id_mixer_ctrl.max = CLSIC_VOX_USER3;
 	vox->user_id_mixer_ctrl.platform_max = CLSIC_VOX_USER3;
-	vox->user_id_mixer_ctrl.dobj.private = &vox->user_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox User ID",
-			    (unsigned long) &vox->user_id_mixer_ctrl);
+			    &vox->user_id_mixer_ctrl,
+			    vox,
+			    &vox->user_id);
 
 	ctl_id++;
 	ret = vox_update_user_status(vox, CLSIC_VOX_PHRASE_VDT1,
@@ -2900,38 +2915,38 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->duration = VOX_DEFAULT_DURATION;
 
-	memset(&vox->duration_mixer_ctrl, 0, sizeof(vox->duration_mixer_ctrl));
 	vox->duration_mixer_ctrl.min = 0;
 	vox->duration_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
 	vox->duration_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
-	vox->duration_mixer_ctrl.dobj.private = &vox->duration;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Duration in ms",
-			    (unsigned long) &vox->duration_mixer_ctrl);
+			    &vox->duration_mixer_ctrl,
+			    vox,
+			    &vox->duration);
 
 	ctl_id++;
 	vox->timeout = VOX_DEFAULT_TIMEOUT;
 
-	memset(&vox->timeout_mixer_ctrl, 0, sizeof(vox->timeout_mixer_ctrl));
 	vox->timeout_mixer_ctrl.min = 0;
 	vox->timeout_mixer_ctrl.max = VOX_MAX_DURATION_TIMEOUT;
 	vox->timeout_mixer_ctrl.platform_max = VOX_MAX_DURATION_TIMEOUT;
-	vox->timeout_mixer_ctrl.dobj.private = &vox->timeout;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Timeout in ms",
-			    (unsigned long) &vox->timeout_mixer_ctrl);
+			    &vox->timeout_mixer_ctrl,
+			    vox,
+			    &vox->timeout);
 
 	ctl_id++;
 	vox->number_of_reps = VOX_DEFAULT_NUM_REPS;
 
-	memset(&vox->reps_mixer_ctrl, 0, sizeof(vox->reps_mixer_ctrl));
 	vox->reps_mixer_ctrl.min = 1;
 	vox->reps_mixer_ctrl.max = VOX_MAX_NUM_REPS;
 	vox->reps_mixer_ctrl.platform_max = VOX_MAX_NUM_REPS;
-	vox->reps_mixer_ctrl.dobj.private = &vox->number_of_reps;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Number of Enrolment Repetitions",
-			    (unsigned long) &vox->reps_mixer_ctrl);
+			    &vox->reps_mixer_ctrl,
+			    vox,
+			    &vox->number_of_reps);
 
 	ctl_id++;
 	vox->security_level = VOX_SEC_LEVEL_LOW;
@@ -3026,14 +3041,14 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->bin_id = CLSIC_VOX_BIN_VTE1;
 
-	memset(&vox->bin_id_mixer_ctrl, 0, sizeof(vox->bin_id_mixer_ctrl));
 	vox->bin_id_mixer_ctrl.min = 0;
 	vox->bin_id_mixer_ctrl.max = CLSIC_VOX_BIN_CNT - 1;
 	vox->bin_id_mixer_ctrl.platform_max = CLSIC_VOX_BIN_CNT - 1;
-	vox->bin_id_mixer_ctrl.dobj.private = &vox->bin_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Bin ID",
-			    (unsigned long) &vox->bin_id_mixer_ctrl);
+			    &vox->bin_id_mixer_ctrl,
+			    vox,
+			    &vox->bin_id);
 
 	ctl_id++;
 	vox->asset_type = VOX_ASSET_TYPE_PHRASE;
@@ -3049,41 +3064,40 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->file_id = 0;
 
-	memset(&vox->file_id_mixer_ctrl, 0, sizeof(vox->file_id_mixer_ctrl));
 	vox->file_id_mixer_ctrl.min = 0;
 	vox->file_id_mixer_ctrl.max = INT_MAX;
 	vox->file_id_mixer_ctrl.platform_max = INT_MAX;
 	vox->file_id_mixer_ctrl.dobj.private = &vox->file_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Asset Filename ID",
-			    (unsigned long) &vox->file_id_mixer_ctrl);
+			    &vox->file_id_mixer_ctrl,
+			    vox,
+			    &vox->file_id);
 
 	ctl_id++;
 	vox->trigger_phrase_id = VOX_TRGR_INVALID;
 
-	memset(&vox->trgr_phrase_id_mixer_ctrl, 0,
-	       sizeof(vox->trgr_phrase_id_mixer_ctrl));
 	vox->trgr_phrase_id_mixer_ctrl.min = INT_MIN;
 	vox->trgr_phrase_id_mixer_ctrl.max = INT_MAX;
 	vox->trgr_phrase_id_mixer_ctrl.platform_max = INT_MAX;
-	vox->trgr_phrase_id_mixer_ctrl.dobj.private = &vox->trigger_phrase_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Trigger Phrase ID",
-			    (unsigned long) &vox->trgr_phrase_id_mixer_ctrl);
+			    &vox->trgr_phrase_id_mixer_ctrl,
+			    vox,
+			    &vox->trigger_phrase_id);
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
 	vox->trigger_engine_id = VOX_TRGR_INVALID;
 
-	memset(&vox->trgr_engine_id_mixer_ctrl, 0,
-	       sizeof(vox->trgr_engine_id_mixer_ctrl));
 	vox->trgr_engine_id_mixer_ctrl.min = INT_MIN;
 	vox->trgr_engine_id_mixer_ctrl.max = INT_MAX;
 	vox->trgr_engine_id_mixer_ctrl.platform_max = INT_MAX;
-	vox->trgr_engine_id_mixer_ctrl.dobj.private = &vox->trigger_engine_id;
 	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
 			    "Vox Trigger Engine ID",
-			    (unsigned long) &vox->trgr_engine_id_mixer_ctrl);
+			    &vox->trgr_engine_id_mixer_ctrl,
+			    vox,
+			    &vox->trigger_engine_id);
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;

@@ -212,6 +212,17 @@ struct clsic_vox {
 #endif
 };
 
+/**
+ * struct vox_value - container struct for use in creating mixer controls
+ *
+ * This struct is used to pass a pointer to a value and the vox pointer into
+ * ALSA control put and get functions.
+ */
+struct vox_value {
+	struct clsic_vox *vox;
+	void *value;
+};
+
 static const struct {
 	u32 id;
 	struct snd_codec_desc desc;
