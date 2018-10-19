@@ -311,8 +311,10 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 
 	for (i = 0; i < clsic_asr_stream_caps.desc.num_sample_rates; ++i)
 		if (clsic_asr_stream_caps.desc.sample_rates[i] ==
-				params->codec.sample_rate)
+				params->codec.sample_rate) {
+			asr_stream->sample_rate = params->codec.sample_rate;
 			break;
+		}
 
 	if (i >= clsic_asr_stream_caps.desc.num_sample_rates) {
 		clsic_err(clsic,
