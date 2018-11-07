@@ -1,0 +1,23 @@
+Cirrus Logic CLSIC Voice Biometrics Codec
+
+The CLSIC MFD device driver starts a clsic-vox codec driver to manage the Vox
+service present within CS48LX50 devices. The Vox service combines a low power
+voice trigger engine with biometric recognition for seamless authenticated wake
+on command usecases.
+
+The clsic-vox codec exposes a DAI offering a faster-than-realtime audio stream
+for a speech recognition system to interpret and a number of ALSA controls that
+represent configurable features of the Vox service.
+
+Required properties:
+- compatible : "cirrus,clsic-vox"
+- #sound-dai-cells : "<1>"
+
+Example:
+cs48lx50: cs48lx50@0 {
+	compatible = "cirrus,clsic";
+	cs48lx50_vox: cs48lx50_vox@0 {
+		compatible = "cirrus,clsic-vox";
+		#sound-dai-cells = <1>;
+	};
+};
