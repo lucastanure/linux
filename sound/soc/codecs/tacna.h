@@ -126,6 +126,7 @@
 #define TACNA_SAMPLE_RATE_ENUM_SIZE	17
 #define TACNA_DFC_TYPE_ENUM_SIZE	5
 #define TACNA_DFC_WIDTH_ENUM_SIZE	25
+#define TACNA_DMODE_TEXTS_SIZE		2
 
 #define TACNA_US_FREQ_ENUM_SIZE		4
 
@@ -426,6 +427,7 @@ extern const struct soc_enum tacna_sample_rate[];
 extern const struct soc_enum tacna_sample_rate_async[];
 
 extern const struct snd_kcontrol_new tacna_inmux[];
+extern const char * const tacna_dmode_texts[TACNA_DMODE_TEXTS_SIZE];
 extern const struct snd_kcontrol_new tacna_dmode_mux[];
 
 extern const char * const tacna_us_freq_texts[TACNA_US_FREQ_ENUM_SIZE];
