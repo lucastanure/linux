@@ -137,7 +137,7 @@ struct clsic_vox {
 	unsigned int error_info;
 	unsigned int asset_type;
 
-	unsigned int phrase_id;
+	unsigned int phrase_id_enum;
 	unsigned int user_id;
 	unsigned int bin_id;
 	unsigned int file_id;	/* For filename determination. */
@@ -172,8 +172,8 @@ struct clsic_vox {
 	struct soc_enum soc_enum_bio_res_type;
 	struct soc_enum soc_enum_barge_in;
 	struct soc_enum soc_enum_asset_type;
+	struct soc_enum soc_enum_phrase_id;
 
-	struct soc_mixer_control phrase_id_mixer_ctrl;
 	struct soc_mixer_control user_id_mixer_ctrl;
 	struct soc_mixer_control duration_mixer_ctrl;
 	struct soc_mixer_control timeout_mixer_ctrl;
@@ -305,6 +305,18 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_DRIVER]		= "Driver Error",
 	[VOX_ERROR_CLSIC]		= "CLSIC Error",
 	[VOX_ERROR_CLEARED]		= "Cleared",
+};
+
+#define VOX_NUM_PHRASES			3
+
+#define VOX_PHRASE_VDT1			0
+#define VOX_PHRASE_VDT2			1
+#define VOX_PHRASE_TI			2
+
+static const char *vox_phrase_id_text[VOX_NUM_PHRASES] = {
+	[VOX_PHRASE_VDT1]		= "VDT1",
+	[VOX_PHRASE_VDT2]		= "VDT2",
+	[VOX_PHRASE_TI]			= "TI",
 };
 
 #define VOX_NUM_BIO_RESULTS_FORMATS	3

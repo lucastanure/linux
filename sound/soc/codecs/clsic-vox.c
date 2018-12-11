@@ -1182,6 +1182,25 @@ static int vox_update_k2_pub_key(struct clsic_vox *vox)
 }
 
 /**
+ * phrase_id_from_enum() - convert enum value to true phrase ID
+ * @enum_value:	The integer value deduced from the ALSA control enum.
+ *
+ * The phrase ID used in the ALSA control enum is different to the actual value
+ * that must be sent to CLSIC so this function does the conversion.
+ *
+ * Return: phrase ID value as used by CLSIC.
+ */
+static int phrase_id_from_enum(int enum_value)
+{
+	if (enum_value == VOX_PHRASE_VDT1)
+		return CLSIC_VOX_PHRASE_VDT1;
+	else if (enum_value == VOX_PHRASE_VDT2)
+		return CLSIC_VOX_PHRASE_VDT2;
+	else /* enum_value == VOX_PHRASE_TI */
+		return CLSIC_VOX_PHRASE_TI;
+}
+
+/**
  * vox_install_asset() - install an asset to CLSIC from the filesystem
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
@@ -1198,6 +1217,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	union clsic_vox_msg msg_rsp;
 	char file[VOX_ASSET_TYPE_NAME_MAX_LEN];
 	int id = -1;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1210,7 +1230,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 	snprintf(file, VOX_ASSET_TYPE_NAME_MAX_LEN,
 		 vox_asset_filenames[vox->asset_type], vox->file_id);
 	if (vox->asset_type == VOX_ASSET_TYPE_PHRASE)
-		id = vox->phrase_id;
+		id = phrase_id;
 	else if (vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP)
 		id = vox->bin_id;
 
@@ -1238,7 +1258,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_INSTALL_PHRASE);
 		msg_cmd.cmd_install_phrase.hdr.bulk_sz = fw->size;
-		msg_cmd.cmd_install_phrase.phraseid = vox->phrase_id;
+		msg_cmd.cmd_install_phrase.phraseid = phrase_id;
 		break;
 	case VOX_ASSET_TYPE_BIN_VTE:
 	case VOX_ASSET_TYPE_BIN_SSF:
@@ -1272,14 +1292,14 @@ static int vox_install_asset(struct clsic_vox *vox)
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
 		if (msg_rsp.rsp_install_phrase.hdr.err == CLSIC_ERR_NONE) {
-			vox->phrase_installed[vox->phrase_id] = true;
+			vox->phrase_installed[phrase_id] = true;
 			clsic_dbg(clsic, "successfully installed phrase %d.\n",
-				  vox->phrase_id);
+				  phrase_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
 
 			/* Get updated information on enrolled users. */
-			if (vox_update_user_status(vox, vox->phrase_id,
-						   vox->phrase_id) != 0)
+			if (vox_update_user_status(vox, phrase_id, phrase_id)
+				!= 0)
 				vox->error_info = VOX_ERROR_DRIVER;
 		} else {
 			vox->error_info = VOX_ERROR_CLSIC;
@@ -1334,6 +1354,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret, usr;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1344,11 +1365,11 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
-		trace_clsic_vox_uninstall_phrase(vox->phrase_id);
+		trace_clsic_vox_uninstall_phrase(phrase_id);
 		clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 				   vox->service->service_instance,
 				   CLSIC_VOX_MSG_CR_REMOVE_PHRASE);
-		msg_cmd.cmd_remove_phrase.phraseid = vox->phrase_id;
+		msg_cmd.cmd_remove_phrase.phraseid = phrase_id;
 		break;
 	case VOX_ASSET_TYPE_BIN_VTE:
 	case VOX_ASSET_TYPE_BIN_SSF:
@@ -1386,7 +1407,7 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 		case CLSIC_ERR_PHRASE_NOT_INSTALLED:
 			clsic_dbg(clsic,
 				  "successfully uninstalled phrase %d.\n",
-				  vox->phrase_id);
+				  phrase_id);
 			/*
 			 * Present no enrolled users for this phrase to reflect
 			 * what CLSIC reports when there is no phrase installed.
@@ -1394,9 +1415,8 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 			for (usr = CLSIC_VOX_USER1;
 			     usr <= CLSIC_VOX_USER3;
 			     usr++)
-				vox->user_installed[vox->phrase_id][usr] =
-									false;
-			vox->phrase_installed[vox->phrase_id] = false;
+				vox->user_installed[phrase_id][usr] = false;
+			vox->phrase_installed[phrase_id] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
 		default:
@@ -1464,9 +1484,10 @@ static int vox_remove_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret;
 
-	trace_clsic_vox_remove_user(vox->user_id, vox->phrase_id);
+	trace_clsic_vox_remove_user(vox->user_id, phrase_id);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret) {
@@ -1477,7 +1498,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
 			   CLSIC_VOX_MSG_CR_REMOVE_USER);
-	msg_cmd.cmd_remove_user.phraseid = vox->phrase_id;
+	msg_cmd.cmd_remove_user.phraseid = phrase_id;
 	msg_cmd.cmd_remove_user.userid = vox->user_id;
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
@@ -1495,7 +1516,7 @@ static int vox_remove_user(struct clsic_vox *vox)
 	switch (msg_rsp.rsp_remove_user.hdr.err) {
 	case CLSIC_ERR_NONE:
 	case CLSIC_ERR_USER_NOT_INSTALLED:
-		vox->user_installed[vox->phrase_id][vox->user_id] = false;
+		vox->user_installed[phrase_id][vox->user_id] = false;
 		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	default:
@@ -1525,9 +1546,10 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret;
 
-	trace_clsic_vox_start_enrol_user(vox->user_id, vox->phrase_id,
+	trace_clsic_vox_start_enrol_user(vox->user_id, phrase_id,
 					 vox->duration, vox->timeout,
 					 vox->number_of_reps);
 
@@ -1556,8 +1578,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		msg_cmd.cmd_install_user_begin.userid |=
 						CLSIC_VOX_USER_FLAG_COMBINED;
 
-		msg_cmd.cmd_install_user_begin.phrase[0].phraseid =
-								vox->phrase_id;
+		msg_cmd.cmd_install_user_begin.phrase[0].phraseid = phrase_id;
 		msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
 								vox->timeout;
 		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
@@ -1570,22 +1591,14 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 		msg_cmd.cmd_install_user_begin.phrase[1].rep_count =
 							vox->number_of_reps;
 	} else {
-		if (vox->phrase_id == CLSIC_VOX_PHRASE_VDT1)
+		if (vox->timeout > 0)	/* e.g. VDT1, VDT2 */
 			msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
 								vox->timeout;
-		else if (vox->phrase_id == CLSIC_VOX_PHRASE_TI)
+		else /* e.g. TI */
 			msg_cmd.cmd_install_user_begin.phrase[0].duration_ms =
 								vox->duration;
-		else {
-			clsic_err(vox->clsic, "unsupported phrase ID %d.\n",
-				  vox->phrase_id);
-			vox->error_info = VOX_ERROR_DRIVER;
-			ret = -EIO;
-			goto exit;
-		}
 
-		msg_cmd.cmd_install_user_begin.phrase[0].phraseid =
-								vox->phrase_id;
+		msg_cmd.cmd_install_user_begin.phrase[0].phraseid = phrase_id;
 		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
 							vox->number_of_reps;
 	}
@@ -1685,6 +1698,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret;
 
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
@@ -1705,7 +1719,7 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 		ret = -EIO;
 	} else if (msg_rsp.rsp_install_user_complete.hdr.err ==
 		   CLSIC_ERR_NONE) {
-		vox->user_installed[vox->phrase_id][vox->user_id] = true;
+		vox->user_installed[phrase_id][vox->user_id] = true;
 		if ((vox->timeout > 0) && (vox->duration > 0))
 			/* Implied combined enrolment. */
 			vox->user_installed[CLSIC_VOX_PHRASE_TI][vox->user_id] =
@@ -2268,11 +2282,12 @@ static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
 		ucontrol->value.integer.value[0] =
-					vox->phrase_installed[vox->phrase_id];
+					vox->phrase_installed[phrase_id];
 		break;
 	case VOX_ASSET_TYPE_BIN_VTE:
 	case VOX_ASSET_TYPE_BIN_SSF:
@@ -2321,9 +2336,10 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 				       struct snd_ctl_elem_value *ucontrol)
 {
 	struct clsic_vox *vox = (struct clsic_vox *) kcontrol->private_value;
+	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 
 	ucontrol->value.integer.value[0] =
-			vox->user_installed[vox->phrase_id][vox->user_id];
+			vox->user_installed[phrase_id][vox->user_id];
 
 	return 0;
 }
@@ -2856,16 +2872,14 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
-	vox->phrase_id = CLSIC_VOX_PHRASE_VDT1;
+	vox->phrase_id_enum = VOX_PHRASE_VDT1;
 
-	vox->phrase_id_mixer_ctrl.min = 0;
-	vox->phrase_id_mixer_ctrl.max = VOX_MAX_PHRASES - 1;
-	vox->phrase_id_mixer_ctrl.platform_max = VOX_MAX_PHRASES - 1;
-	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
-			    "Vox Phrase ID",
-			    &vox->phrase_id_mixer_ctrl,
-			    vox,
-			    &vox->phrase_id);
+	vox->soc_enum_phrase_id.items = VOX_NUM_PHRASES;
+	vox->soc_enum_phrase_id.texts = vox_phrase_id_text;
+	vox->soc_enum_phrase_id.dobj.private = &vox->phrase_id_enum;
+	vox_ctrl_enum_helper(&vox->kcontrol_new[ctl_id],
+			     "Vox Phrase ID",
+			     (unsigned long) &vox->soc_enum_phrase_id);
 
 	ctl_id++;
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);

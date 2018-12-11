@@ -140,6 +140,7 @@ enum clsic_vox_userid {
  */
 enum clsic_vox_phraseid {
 	CLSIC_VOX_PHRASE_VDT1	= 0,
+	CLSIC_VOX_PHRASE_VDT2	= 1,
 	CLSIC_VOX_PHRASE_TI	= 4,
 };
 
