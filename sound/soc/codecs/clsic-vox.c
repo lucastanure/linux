@@ -3190,9 +3190,18 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	struct clsic_vox *vox;
 	int ret;
 
+	/*
+	 * Prevent the core CLSIC drivers from being unloaded whilst a VOX
+	 * device is instantiated.
+	 */
+	if (!try_module_get(clsic->dev->driver->owner))
+		return -EBUSY;
+
 	vox = devm_kzalloc(&pdev->dev, sizeof(struct clsic_vox), GFP_KERNEL);
-	if (vox == NULL)
-		return -ENOMEM;
+	if (vox == NULL)  {
+		ret = -ENOMEM;
+		goto error;
+	}
 
 	vox->clsic = clsic;
 	vox->service = clsic->service_handlers[vox_service->service_instance];
@@ -3203,7 +3212,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	ret = snd_soc_register_platform(&pdev->dev, &clsic_vox_compr_platform);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to register platform: %d.\n", ret);
-		return ret;
+		goto error;
 	}
 
 	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_clsic_vox,
@@ -3211,7 +3220,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to register codec: %d.\n", ret);
 		snd_soc_unregister_platform(&pdev->dev);
-		return ret;
+		goto error;
 	}
 
 #ifdef CONFIG_DEBUG_FS
@@ -3234,6 +3243,10 @@ static int clsic_vox_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
 		 &pdev->dev, ret);
+
+error:
+	if (ret != 0)
+		module_put(clsic->dev->driver->owner);
 
 	return ret;
 }
@@ -3262,6 +3275,8 @@ static int clsic_vox_remove(struct platform_device *pdev)
 
 	snd_soc_unregister_platform(&pdev->dev);
 	snd_soc_unregister_codec(&pdev->dev);
+
+	module_put(vox->clsic->dev->driver->owner);
 
 	return 0;
 }
