@@ -153,6 +153,7 @@ struct clsic_vox {
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
 	struct clsic_vox_k2_pub_key k2_pub_key;
+	struct clsic_vox_host_kvpp_key kvp_pub_key;
 	uint8_t auth_error;
 	/*
 	 * asr_streaming tells us if we are currently streaming audio data -
@@ -185,6 +186,7 @@ struct clsic_vox {
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
 	struct soc_bytes_ext s_bytes_k2_pub_key;
+	struct soc_bytes_ext s_bytes_kvp_pub_key;
 	struct soc_bytes_ext s_bytes_scc_manage_ack;
 	struct soc_bytes_ext s_bytes_scc_status;
 	struct soc_bytes_ext s_bytes_scc_cap_delay_ms;
@@ -222,7 +224,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_DRV_STATES			21
+#define VOX_NUM_DRV_STATES			23
 
 #define VOX_DRV_STATE_NEUTRAL			0
 #define VOX_DRV_STATE_INSTALL_ASSET		1
@@ -242,9 +244,11 @@ static const struct {
 #define VOX_DRV_STATE_TERMINATING_ENROL		15
 #define VOX_DRV_STATE_GET_BIO_RESULTS		16
 #define VOX_DRV_STATE_GETTING_BIO_RESULTS	17
-#define VOX_DRV_STATE_STARTING_LISTEN		18
-#define VOX_DRV_STATE_LISTENING			19
-#define VOX_DRV_STATE_STREAMING			20
+#define VOX_DRV_STATE_WRITE_KVP_PUB		18
+#define VOX_DRV_STATE_WRITING_KVP_PUB		19
+#define VOX_DRV_STATE_STARTING_LISTEN		20
+#define VOX_DRV_STATE_LISTENING			21
+#define VOX_DRV_STATE_STREAMING			22
 
 static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
@@ -266,6 +270,8 @@ static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_TERMINATING_ENROL]	= "Terminating User Enrolment",
 	[VOX_DRV_STATE_GET_BIO_RESULTS]		= "Get Biometric Results",
 	[VOX_DRV_STATE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
+	[VOX_DRV_STATE_WRITE_KVP_PUB]		= "Write KVP Public Key",
+	[VOX_DRV_STATE_WRITING_KVP_PUB]		= "Writing KVP Public Key",
 	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
 	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
 	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",

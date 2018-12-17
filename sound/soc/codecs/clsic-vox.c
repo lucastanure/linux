@@ -1828,6 +1828,63 @@ exit:
 }
 
 /**
+ * vox_put_kvp_pub() - write the KVP public key to CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Write the voiceprint proxy public key to CLSIC. This is a one-shot operation
+ * and will fail if a different key has already been written.
+ *
+ * Return: errno.
+ */
+static int vox_put_kvp_pub(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	trace_clsic_vox_put_kvp_pub(0);
+
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+	if (ret) {
+		set_error_info(vox, ret);
+		goto exit;
+	}
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY);
+	msg_cmd.blkcmd_set_host_kvpp_key.hdr.bulk_sz =
+					sizeof(struct clsic_vox_host_kvpp_key);
+	ret = clsic_send_msg_sync_pm(
+				vox->clsic,
+				(union t_clsic_generic_message *) &msg_cmd,
+				(union t_clsic_generic_message *) &msg_rsp,
+				(uint8_t *) &vox->kvp_pub_key,
+				sizeof(struct clsic_vox_host_kvpp_key),
+				CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_DRIVER;
+		ret = -EIO;
+		goto exit;
+	}
+
+	if (msg_rsp.rsp_set_host_kvpp_key.hdr.err == CLSIC_ERR_NONE)
+		vox->error_info = VOX_ERROR_SUCCESS;
+	else {
+		vox->clsic_error_code = msg_rsp.rsp_set_host_kvpp_key.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
+		ret = -EIO;
+	}
+
+exit:
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
+
+	return ret;
+}
+
+/**
  * vox_drv_state_handler() - handle userspace commands from the driver state
  *				control
  * @data:	Used to obtain the main instance of struct clsic_vox used in
@@ -1887,6 +1944,11 @@ static void vox_drv_state_handler(struct work_struct *data)
 		ret = vox_get_bio_results(vox);
 		if (ret)
 			clsic_err(clsic, "vox_get_bio_results ret %d.\n", ret);
+		break;
+	case VOX_DRV_STATE_WRITING_KVP_PUB:
+		ret = vox_put_kvp_pub(vox);
+		if (ret)
+			clsic_err(clsic, "vox_put_kvp_pub ret %d.\n", ret);
 		break;
 	default:
 		clsic_err(clsic, "unknown state %d for scheduled work.\n",
@@ -2115,6 +2177,31 @@ static int vox_ctrl_k2_pub_key_get(struct snd_kcontrol *kcontrol,
 }
 
 /**
+ * vox_ctrl_kvp_pub_key_put() - set the voiceprint proxy public key on CLSIC
+ * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
+ * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
+ *
+ * Sets the KVP public key which can be later used by the appropriate driver
+ * state command to program it into CLSIC (assuming one does not already exist).
+ *
+ * Return: 0 always.
+ */
+static int vox_ctrl_kvp_pub_key_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_bytes_ext *s_bytes_kvp_pub_key =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	struct clsic_vox *vox =
+		container_of(s_bytes_kvp_pub_key, struct clsic_vox,
+			     s_bytes_kvp_pub_key);
+
+	memcpy(&vox->kvp_pub_key, ucontrol->value.bytes.data,
+	       s_bytes_kvp_pub_key->max);
+
+	return 0;
+}
+
+/**
  * vox_ctrl_asset_installed_get() - find out if a particular asset is installed
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
@@ -2300,6 +2387,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_UNINSTALL_ASSET:
 	case VOX_DRV_STATE_REMOVE_USER:
 	case VOX_DRV_STATE_START_ENROL:
+	case VOX_DRV_STATE_WRITE_KVP_PUB:
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
 			/*
 			 * Management mode goes from command
@@ -2851,6 +2939,20 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 	vox->kcontrol_new[ctl_id].private_value =
 				(unsigned long) &vox->s_bytes_k2_pub_key;
+	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+
+	ctl_id++;
+	memset(&vox->kvp_pub_key, 0, sizeof(struct clsic_vox_host_kvpp_key));
+
+	vox->s_bytes_kvp_pub_key.max = sizeof(struct clsic_vox_host_kvpp_key);
+	vox->kcontrol_new[ctl_id].name = "Vox KVP Public Key";
+	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
+	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox->kcontrol_new[ctl_id].get = vox_ctrl_dummy;
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_kvp_pub_key_put;
+	vox->kcontrol_new[ctl_id].private_value =
+				(unsigned long) &vox->s_bytes_kvp_pub_key;
 	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 

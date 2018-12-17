@@ -92,6 +92,7 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP	= 34,
 	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED = 35,
 	CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY		= 36,
+	CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY	= 37,
 };
 
 /**
@@ -379,6 +380,15 @@ struct clsic_vox_k2_pub_key {
 	uint8_t signature[74];
 	uint8_t pad2[2];
 } PACKED;
+
+/**
+ *  Bulk part of the CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY command.
+ */
+struct clsic_vox_host_kvpp_key {
+	uint8_t pub_key[33];
+	uint8_t pad[3];
+} PACKED;
+
 
 /**
  *  Part of clsic_vox_biovte_map
@@ -856,6 +866,20 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_get_k2_pub_key;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY command structure.
+	 */
+	struct {
+		struct clsic_blkcmd_hdr hdr;
+	} PACKED blkcmd_set_host_kvpp_key;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_set_host_kvpp_key;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN command structure.
