@@ -1885,6 +1885,52 @@ exit:
 }
 
 /**
+ * vox_factory_reset() - perform a factory reset on CLSIC
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Do a factory reset. This will remove all keys.
+ *
+ * Return: errno.
+ */
+static int vox_factory_reset(struct clsic_vox *vox)
+{
+	union clsic_vox_msg msg_cmd;
+	union clsic_vox_msg msg_rsp;
+	int ret;
+
+	trace_clsic_vox_factory_reset(0);
+
+	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
+			   vox->service->service_instance,
+			   CLSIC_VOX_MSG_CR_FACTORY_RESET);
+	ret = clsic_send_msg_sync_pm(vox->clsic,
+				  (union t_clsic_generic_message *) &msg_cmd,
+				  (union t_clsic_generic_message *) &msg_rsp,
+				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+	if (ret) {
+		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
+		vox->error_info = VOX_ERROR_DRIVER;
+		ret = -EIO;
+		goto exit;
+	}
+
+	if (msg_rsp.rsp_factory_reset.hdr.err == CLSIC_ERR_NONE)
+		vox->error_info = VOX_ERROR_SUCCESS;
+	else {
+		vox->clsic_error_code = msg_rsp.rsp_factory_reset.hdr.err;
+		vox->error_info = VOX_ERROR_CLSIC;
+		ret = -EIO;
+	}
+
+exit:
+	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_send_userspace_event(vox);
+
+	return ret;
+}
+
+/**
  * vox_drv_state_handler() - handle userspace commands from the driver state
  *				control
  * @data:	Used to obtain the main instance of struct clsic_vox used in
@@ -1949,6 +1995,11 @@ static void vox_drv_state_handler(struct work_struct *data)
 		ret = vox_put_kvp_pub(vox);
 		if (ret)
 			clsic_err(clsic, "vox_put_kvp_pub ret %d.\n", ret);
+		break;
+	case VOX_DRV_STATE_PERFORMING_FACTORY_RESET:
+		ret = vox_factory_reset(vox);
+		if (ret)
+			clsic_err(clsic, "vox_factory_reset ret %d.\n", ret);
 		break;
 	default:
 		clsic_err(clsic, "unknown state %d for scheduled work.\n",
@@ -2388,6 +2439,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_REMOVE_USER:
 	case VOX_DRV_STATE_START_ENROL:
 	case VOX_DRV_STATE_WRITE_KVP_PUB:
+	case VOX_DRV_STATE_PERFORM_FACTORY_RESET:
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
 			/*
 			 * Management mode goes from command

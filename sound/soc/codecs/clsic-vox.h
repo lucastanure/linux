@@ -17,7 +17,7 @@
 #define VOX_MAX_USERS		3
 #define VOX_MAX_PHRASES		5
 
-#define VOX_NUM_NEW_KCONTROLS	27
+#define VOX_NUM_NEW_KCONTROLS	28
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT	4
 
@@ -224,7 +224,7 @@ static const struct {
 	},
 };
 
-#define VOX_NUM_DRV_STATES			23
+#define VOX_NUM_DRV_STATES			25
 
 #define VOX_DRV_STATE_NEUTRAL			0
 #define VOX_DRV_STATE_INSTALL_ASSET		1
@@ -246,9 +246,11 @@ static const struct {
 #define VOX_DRV_STATE_GETTING_BIO_RESULTS	17
 #define VOX_DRV_STATE_WRITE_KVP_PUB		18
 #define VOX_DRV_STATE_WRITING_KVP_PUB		19
-#define VOX_DRV_STATE_STARTING_LISTEN		20
-#define VOX_DRV_STATE_LISTENING			21
-#define VOX_DRV_STATE_STREAMING			22
+#define VOX_DRV_STATE_PERFORM_FACTORY_RESET	20
+#define VOX_DRV_STATE_PERFORMING_FACTORY_RESET	21
+#define VOX_DRV_STATE_STARTING_LISTEN		22
+#define VOX_DRV_STATE_LISTENING			23
+#define VOX_DRV_STATE_STREAMING			24
 
 static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
@@ -272,6 +274,8 @@ static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_GETTING_BIO_RESULTS]	= "Getting Biometric Results",
 	[VOX_DRV_STATE_WRITE_KVP_PUB]		= "Write KVP Public Key",
 	[VOX_DRV_STATE_WRITING_KVP_PUB]		= "Writing KVP Public Key",
+	[VOX_DRV_STATE_PERFORM_FACTORY_RESET]	= "Perform Factory Reset",
+	[VOX_DRV_STATE_PERFORMING_FACTORY_RESET] = "Performing Factory Reset",
 	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
 	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
 	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",

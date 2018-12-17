@@ -29,7 +29,7 @@
 /**
  *  Service version number.
  */
-#define CLSIC_SRV_VERSION_VOX		(0x00040001)
+#define CLSIC_SRV_VERSION_VOX		(0x00050002)
 
 /**
  *  VOX Service message identifiers.
@@ -93,6 +93,7 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED = 35,
 	CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY		= 36,
 	CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY	= 37,
+	CLSIC_VOX_MSG_CR_FACTORY_RESET		= 38,
 };
 
 /**
@@ -880,6 +881,20 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_rsp_hdr hdr;
 	} PACKED rsp_set_host_kvpp_key;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_FACTORY_RESET command structure.
+	 */
+	struct {
+		struct clsic_cmd_hdr hdr;
+	} PACKED cmd_factory_reset;
+
+	/**
+	 *  CLSIC_VOX_MSG_CR_FACTORY_RESET response structure.
+	 */
+	struct {
+		struct clsic_rsp_hdr hdr;
+	} PACKED rsp_factory_reset;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN command structure.

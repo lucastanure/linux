@@ -393,6 +393,11 @@ DEFINE_EVENT(clsic_vox_generic, clsic_vox_put_kvp_pub,
 	TP_ARGS(dummy)
 );
 
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_factory_reset,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
 #endif /* CLSIC_VOX_TRACE_H */
 
 /* This part must be outside protection */
