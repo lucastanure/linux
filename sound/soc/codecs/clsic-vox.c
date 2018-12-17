@@ -1142,15 +1142,15 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 }
 
 /**
- * vox_update_bio_pub_key() - update internally cached biometric public key for
- *			      this particular CLSIC device
+ * vox_update_k2_pub_key() - update internally cached K2 public key for this
+ *			     particular CLSIC device
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
- * Query CLSIC to get its biometric public key and cache it internally.
+ * Query CLSIC to get its K2 public key and cache it internally.
  *
  * Return: errno.
  */
-static int vox_update_bio_pub_key(struct clsic_vox *vox)
+static int vox_update_k2_pub_key(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1158,21 +1158,21 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 
 	clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			   vox->service->service_instance,
-			   CLSIC_VOX_MSG_CR_GET_AUTH_KEY);
+			   CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY);
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				  (uint8_t *) &vox->bio_pub_key,
-				  sizeof(struct clsic_vox_auth_key));
+				  (uint8_t *) &vox->k2_pub_key,
+				  sizeof(struct clsic_vox_k2_pub_key));
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		return -EIO;
 	}
 
 	/* Response is bulk in case of success. */
-	if (clsic_get_bulk_bit(msg_rsp.blkrsp_get_auth_key.hdr.sbc))
+	if (clsic_get_bulk_bit(msg_rsp.blkrsp_get_k2_pub_key.hdr.sbc))
 		return 0;
 
 	/*
@@ -1180,8 +1180,8 @@ static int vox_update_bio_pub_key(struct clsic_vox *vox)
 	 * response.
 	 */
 
-	clsic_err(vox->clsic, "failed to get biometric public key: %d.\n",
-		  msg_rsp.rsp_get_auth_key.hdr.err);
+	clsic_err(vox->clsic, "failed to get K2 public key: %d.\n",
+		  msg_rsp.rsp_get_k2_pub_key.hdr.err);
 	return -EIO;
 }
 
@@ -2091,26 +2091,25 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_bio_pub_key_get() - obtain the public signing key of CLSIC
+ * vox_ctrl_k2_pub_key_get() - obtain the public K2 key of CLSIC
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
- * Allow userspace to get CLSIC's public key as used within the biometric
- * results blob.
+ * Allow userspace to get CLSIC's K2 key.
  *
  * Return: 0 always.
  */
-static int vox_ctrl_bio_pub_key_get(struct snd_kcontrol *kcontrol,
-				    struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_k2_pub_key_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *s_bytes_bio_pub_key =
+	struct soc_bytes_ext *s_bytes_k2_pub_key =
 		(struct soc_bytes_ext *) kcontrol->private_value;
 	struct clsic_vox *vox =
-		container_of(s_bytes_bio_pub_key, struct clsic_vox,
-			     s_bytes_bio_pub_key);
+		container_of(s_bytes_k2_pub_key, struct clsic_vox,
+			     s_bytes_k2_pub_key);
 
-	memcpy(ucontrol->value.bytes.data, &vox->bio_pub_key,
-	       s_bytes_bio_pub_key->max);
+	memcpy(ucontrol->value.bytes.data, &vox->k2_pub_key,
+	       s_bytes_k2_pub_key->max);
 
 	return 0;
 }
@@ -2839,19 +2838,19 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
-	memset(&vox->bio_pub_key, 0, sizeof(struct clsic_vox_auth_key));
-	ret = vox_update_bio_pub_key(vox);
+	memset(&vox->k2_pub_key, 0, sizeof(struct clsic_vox_k2_pub_key));
+	ret = vox_update_k2_pub_key(vox);
 	if (ret != 0)
 		return ret;
 
-	vox->s_bytes_bio_pub_key.max = sizeof(struct clsic_vox_auth_key);
-	vox->kcontrol_new[ctl_id].name = "Vox Biometric Result Public Key";
+	vox->s_bytes_k2_pub_key.max = sizeof(struct clsic_vox_k2_pub_key);
+	vox->kcontrol_new[ctl_id].name = "Vox K2 Public Key";
 	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
 	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[ctl_id].get = vox_ctrl_bio_pub_key_get;
+	vox->kcontrol_new[ctl_id].get = vox_ctrl_k2_pub_key_get;
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 	vox->kcontrol_new[ctl_id].private_value =
-				(unsigned long) &vox->s_bytes_bio_pub_key;
+				(unsigned long) &vox->s_bytes_k2_pub_key;
 	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 

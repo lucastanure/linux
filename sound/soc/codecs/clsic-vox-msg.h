@@ -85,13 +85,13 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_REMOVE_PHRASE		= 21,
 	CLSIC_VOX_MSG_CR_IS_USER_INSTALLED	= 23,
 	CLSIC_VOX_MSG_CR_REMOVE_USER		= 24,
-	CLSIC_VOX_MSG_CR_GET_AUTH_KEY		= 25,
 	CLSIC_VOX_MSG_CR_INSTALL_BIN		= 30,
 	CLSIC_VOX_MSG_CR_REMOVE_BIN		= 31,
 	CLSIC_VOX_MSG_CR_IS_BIN_INSTALLED	= 32,
 	CLSIC_VOX_MSG_CR_INSTALL_BIOVTE_MAP	= 33,
 	CLSIC_VOX_MSG_CR_REMOVE_BIOVTE_MAP	= 34,
 	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED = 35,
+	CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY		= 36,
 };
 
 /**
@@ -370,11 +370,14 @@ struct clsic_vox_auth_result_ex2 {
 } PACKED;
 
 /**
- *  Bulk part of the CLSIC_VOX_MSG_CR_GET_AUTH_KEY response.
+ *  Bulk part of the CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY response.
  */
-struct clsic_vox_auth_key {
+struct clsic_vox_k2_pub_key {
 	uint8_t pub_key[33];
-	uint8_t pad[3];
+	uint8_t pad1[2];
+	uint8_t signature_valid;
+	uint8_t signature[74];
+	uint8_t pad2[2];
 } PACKED;
 
 /**
@@ -834,25 +837,25 @@ union clsic_vox_msg {
 	} PACKED rsp_remove_user;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_GET_AUTH_KEY command structure.
+	 *  CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY command structure.
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
-	} PACKED cmd_get_auth_key;
+	} PACKED cmd_get_k2_pub_key;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_GET_AUTH_KEY response structure.
+	 *  CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY response structure.
 	 */
 	struct {
 		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_get_auth_key;
+	} PACKED rsp_get_k2_pub_key;
 
 	/**
-	 *  CLSIC_VOX_MSG_CR_GET_AUTH_KEY response structure.
+	 *  CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY response structure.
 	 */
 	struct {
 		struct clsic_blkrsp_hdr hdr;
-	} PACKED blkrsp_get_auth_key;
+	} PACKED blkrsp_get_k2_pub_key;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_INSTALL_BIN command structure.

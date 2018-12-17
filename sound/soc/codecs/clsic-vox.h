@@ -152,7 +152,7 @@ struct clsic_vox {
 	int32_t scc_cap_preamble_ms;
 	struct clsic_vox_auth_challenge challenge;
 	union bio_results_u biometric_results;
-	struct clsic_vox_auth_key bio_pub_key;
+	struct clsic_vox_k2_pub_key k2_pub_key;
 	uint8_t auth_error;
 	/*
 	 * asr_streaming tells us if we are currently streaming audio data -
@@ -184,7 +184,7 @@ struct clsic_vox {
 
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_bio_res;
-	struct soc_bytes_ext s_bytes_bio_pub_key;
+	struct soc_bytes_ext s_bytes_k2_pub_key;
 	struct soc_bytes_ext s_bytes_scc_manage_ack;
 	struct soc_bytes_ext s_bytes_scc_status;
 	struct soc_bytes_ext s_bytes_scc_cap_delay_ms;
