@@ -1071,10 +1071,6 @@ static int vox_update_assets_status(struct clsic_vox *vox)
 	if (ret)
 		return ret;
 
-	if (vox->service->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
-		/* MVP2.0 nothing else to update. */
-		return 0;
-
 	ret = vox_update_bins(vox);
 	if (ret)
 		return ret;
@@ -2790,6 +2786,14 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
 
+	if (handler->service_version < CLSIC_VOX_SRV_VERSION) {
+		dev_err(codec->dev,
+			"%s() incompatible system firmware version 0x%08x (must be 0x%08x or newer).",
+			__func__, handler->service_version,
+			CLSIC_VOX_SRV_VERSION);
+		return -EPERM;
+	}
+
 	vox->codec = codec;
 	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_NEUTRAL);
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
@@ -3034,11 +3038,8 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ctl_id++;
 	vox->asset_type = VOX_ASSET_TYPE_PHRASE;
 
-	if (handler->service_version <= CLSIC_VOX_SRV_VERSION_MVP2)
-		vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES_MVP2;
-	else
-		vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES_MVP;
-	vox->soc_enum_asset_type.texts = vox_asset_type_text_mvp;
+	vox->soc_enum_asset_type.items = VOX_NUM_ASSET_TYPES;
+	vox->soc_enum_asset_type.texts = vox_asset_type_text;
 
 	vox->soc_enum_asset_type.dobj.private = &vox->asset_type;
 	vox_ctrl_enum_helper(&vox->kcontrol_new[ctl_id],

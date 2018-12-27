@@ -21,13 +21,14 @@
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT	4
 
+/* Minimum version of system firmware required. */
+#define CLSIC_VOX_SRV_VERSION		0x00050002
+
 #define VOX_DEFAULT_DURATION		0
 #define VOX_DEFAULT_TIMEOUT		4000
 #define VOX_MAX_DURATION_TIMEOUT	0xFFFF
 #define VOX_DEFAULT_NUM_REPS		3
 #define VOX_MAX_NUM_REPS		5
-
-#define CLSIC_VOX_SRV_VERSION_MVP2	0x00030002	/* 2.0.248 */
 
 /**
  * struct clsic_asr_stream_buf - audio buffer descriptor for use in ASR
@@ -329,15 +330,14 @@ static const char *vox_barge_in_text[VOX_NUM_BARGE_IN] = {
 	[VOX_BARGE_IN_ENABLED]		= "Loudspeaker Enabled",
 };
 
-#define VOX_NUM_ASSET_TYPES_MVP2	1
-#define VOX_NUM_ASSET_TYPES_MVP		4
+#define VOX_NUM_ASSET_TYPES		4
 
 #define VOX_ASSET_TYPE_PHRASE		0
 #define VOX_ASSET_TYPE_BIN_VTE		1
 #define VOX_ASSET_TYPE_BIN_SSF		2
 #define VOX_ASSET_TYPE_BIO_VTE_MAP	3
 
-static const char *vox_asset_type_text_mvp[VOX_NUM_ASSET_TYPES_MVP] = {
+static const char *vox_asset_type_text[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_PHRASE]		= "Biometric Phrase",
 	[VOX_ASSET_TYPE_BIN_VTE]	= "Voice Trigger Engine Bin",
 	[VOX_ASSET_TYPE_BIN_SSF]	= "Start Stop Flagger Bin",
@@ -345,7 +345,7 @@ static const char *vox_asset_type_text_mvp[VOX_NUM_ASSET_TYPES_MVP] = {
 };
 
 /* Templates for asset filenames. */
-static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES_MVP] = {
+static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_PHRASE]		= "bpb.p%02u",
 	[VOX_ASSET_TYPE_BIN_VTE]	= "vte%u.bin",
 	[VOX_ASSET_TYPE_BIN_SSF]	= "ssf%u.bin",
