@@ -3130,7 +3130,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
 	if (ret != 0) {
-		pr_err("enum %s() add ret: %d.\n", __func__, ret);
+		dev_err(codec->dev, "enum %s() add ret: %d.\n", __func__, ret);
 		return ret;
 	}
 
