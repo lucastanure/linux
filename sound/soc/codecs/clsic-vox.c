@@ -1898,7 +1898,8 @@ exit:
  * vox_factory_reset() - perform a factory reset on CLSIC
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
- * Do a factory reset. This will remove all keys.
+ * Do a factory reset. This will remove all keys, user enrolments, phrases, bin
+ * and map files.
  *
  * Return: errno.
  */
@@ -1925,9 +1926,23 @@ static int vox_factory_reset(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	if (msg_rsp.rsp_factory_reset.hdr.err == CLSIC_ERR_NONE)
+	if (msg_rsp.rsp_factory_reset.hdr.err == CLSIC_ERR_NONE) {
 		vox->error_info = VOX_ERROR_SUCCESS;
-	else {
+
+		/* Update all assets/keys rather than assume they are blank. */
+		ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
+		if (ret == 0) {
+			ret |= vox_update_assets_status(vox);
+			ret |= vox_update_user_status(vox,
+						      CLSIC_VOX_PHRASE_VDT1,
+						      CLSIC_VOX_PHRASE_TI);
+			ret |= vox_update_k2_pub_key(vox);
+			if (ret != 0) {
+				vox->clsic_error_code = VOX_ERROR_DRIVER;
+				ret = -EIO;
+			}
+		}
+	} else {
 		vox->clsic_error_code = msg_rsp.rsp_factory_reset.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
