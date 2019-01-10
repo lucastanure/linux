@@ -772,7 +772,7 @@ static struct snd_soc_dai_driver clsic_vox_dai[] = {
 			.rates = TACNA_RATES,
 			.formats = TACNA_FORMATS,
 		},
-		.compress_new = snd_soc_new_compress,
+		.compress_new = &snd_soc_new_compress,
 	},
 	{
 		.name = "clsic-dsp-vox-asr",
