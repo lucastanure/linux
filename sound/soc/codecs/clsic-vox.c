@@ -1660,7 +1660,6 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 				  (union t_clsic_generic_message *) &msg_rsp,
 				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
-
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
@@ -1677,10 +1676,13 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 		}
 	}
 
-	if (ret) {
+	if (ret)
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
-		vox_send_userspace_event(vox);
-	}
+	else
+		vox_set_idle_and_state(vox, false,
+				       VOX_DRV_STATE_AWAITING_ENROL_REP);
+
+	vox_send_userspace_event(vox);
 
 	return ret;
 }
@@ -2488,8 +2490,18 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		break;
 	case VOX_DRV_STATE_PERFORM_ENROL_REP:
 	case VOX_DRV_STATE_COMPLETE_ENROL:
-	case VOX_DRV_STATE_TERMINATE_ENROL:
 		if (vox->drv_state == VOX_DRV_STATE_ENROLLING) {
+			vox_set_idle_and_state(vox, false,
+				ucontrol->value.enumerated.item[0] + 1);
+			mutex_unlock(&vox->drv_state_lock);
+		} else {
+			mutex_unlock(&vox->drv_state_lock);
+			ret = -EBUSY;
+		}
+		break;
+	case VOX_DRV_STATE_TERMINATE_ENROL:
+		if ((vox->drv_state == VOX_DRV_STATE_ENROLLING) ||
+		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP)) {
 			vox_set_idle_and_state(vox, false,
 				ucontrol->value.enumerated.item[0] + 1);
 			mutex_unlock(&vox->drv_state_lock);
