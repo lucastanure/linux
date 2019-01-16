@@ -1686,9 +1686,7 @@ static void vox_start_enrol_user(struct clsic_vox *vox)
 	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
 	int ret;
 
-	trace_clsic_vox_start_enrol_user(vox->user_id, phrase_id,
-					 vox->duration, vox->timeout,
-					 vox->number_of_reps);
+	trace_clsic_vox_start_enrol_user(vox->user_id, phrase_id, vox->timeout);
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_ENROL);
 	if (ret) {
@@ -1706,50 +1704,31 @@ static void vox_start_enrol_user(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	msg_cmd.cmd_install_user_begin.userid = vox->user_id;
+	msg_cmd.blkcmd_install_user_begin.hdr.bulk_sz =
+				sizeof(struct clsic_vox_security_package);
+	msg_cmd.blkcmd_install_user_begin.userid = vox->user_id;
+	msg_cmd.blkcmd_install_user_begin.timeout_ms = vox->timeout;
+	msg_cmd.blkcmd_install_user_begin.phraseid[0] = phrase_id;
 
-	if ((vox->timeout > 0) && (vox->duration > 0)) {
-		/* Implied combined enrolment.
-		 *
+	if (vox->enrolment_type_enum == VOX_COMBINED) {
+		/* Combined enrolment:
 		 *	phrase[0] must be a trigger phrase.
 		 *	phrase[1] must be free speech (TI).
-		 *	Number of reps must be same for both.
 		 *	Trigger phrase will have a rep timeout.
-		 *	Free speech will have a rep duration (6 second maximum).
 		 */
-		msg_cmd.cmd_install_user_begin.userid |=
+		msg_cmd.blkcmd_install_user_begin.userid |=
 						CLSIC_VOX_USER_FLAG_COMBINED;
-
-		msg_cmd.cmd_install_user_begin.phrase[0].phraseid = phrase_id;
-		msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
-								vox->timeout;
-		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
-							vox->number_of_reps;
-
-		msg_cmd.cmd_install_user_begin.phrase[1].phraseid =
+		msg_cmd.blkcmd_install_user_begin.phraseid[1] =
 							CLSIC_VOX_PHRASE_TI;
-		msg_cmd.cmd_install_user_begin.phrase[1].duration_ms =
-								vox->duration;
-		msg_cmd.cmd_install_user_begin.phrase[1].rep_count =
-							vox->number_of_reps;
-	} else {
-		if (vox->timeout > 0)	/* e.g. VDT1, VDT2 */
-			msg_cmd.cmd_install_user_begin.phrase[0].timeout_ms =
-								vox->timeout;
-		else /* e.g. TI */
-			msg_cmd.cmd_install_user_begin.phrase[0].duration_ms =
-								vox->duration;
-
-		msg_cmd.cmd_install_user_begin.phrase[0].phraseid = phrase_id;
-		msg_cmd.cmd_install_user_begin.phrase[0].rep_count =
-							vox->number_of_reps;
 	}
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
-				  (union t_clsic_generic_message *) &msg_cmd,
-				  (union t_clsic_generic_message *) &msg_rsp,
-				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+				(union t_clsic_generic_message *) &msg_cmd,
+				(union t_clsic_generic_message *) &msg_rsp,
+				(uint8_t *) &vox->vpsp,
+				sizeof(struct clsic_vox_security_package),
+				(uint8_t *) vox->challenge.nonce,
+				sizeof(struct clsic_vox_install_usr_challenge));
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
@@ -1757,10 +1736,14 @@ static void vox_start_enrol_user(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	if (msg_rsp.rsp_install_user_begin.hdr.err == CLSIC_ERR_NONE)
+	if (msg_rsp.blkrsp_install_user_begin.hdr.err == CLSIC_ERR_NONE) {
 		vox->error_info = VOX_ERROR_SUCCESS;
-	else {
-		vox->clsic_error_code = msg_rsp.rsp_install_user_begin.hdr.err;
+		vox->duration = msg_rsp.blkrsp_install_user_begin.duration_ms;
+		vox->number_of_reps =
+				msg_rsp.blkrsp_install_user_begin.rep_count;
+	} else {
+		vox->clsic_error_code =
+				msg_rsp.blkrsp_install_user_begin.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 		ret = -EIO;
 	}
@@ -3057,6 +3040,16 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			     (unsigned long) &vox->soc_enum_phrase_id);
 
 	ctl_id++;
+	vox->enrolment_type_enum = VOX_SINGLE_PHRASE;
+
+	vox->soc_enum_enrolment_type.items = VOX_NUM_ENROLMENT_TYPES;
+	vox->soc_enum_enrolment_type.texts = vox_enrolment_type_text;
+	vox->soc_enum_enrolment_type.dobj.private = &vox->enrolment_type_enum;
+	vox_ctrl_enum_helper(&vox->kcontrol_new[ctl_id],
+			     "Vox Enrolment Type",
+			     (unsigned long) &vox->soc_enum_enrolment_type);
+
+	ctl_id++;
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
 	if (ret != 0)
 		return ret;
@@ -3112,6 +3105,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			    &vox->duration_mixer_ctrl,
 			    vox,
 			    &vox->duration);
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
 	vox->timeout = VOX_DEFAULT_TIMEOUT;
@@ -3161,6 +3155,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox Challenge",
 			     &vox->s_bytes_challenge, &vox->challenge,
 			     sizeof(struct clsic_vox_auth_challenge));
+
+	ctl_id++;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id],
+			     "Vox Voiceprint Security Package",
+			     &vox->s_bytes_vpsp, &vox->vpsp,
+			     sizeof(struct clsic_vox_security_package));
 
 	ctl_id++;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));

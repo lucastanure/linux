@@ -266,30 +266,23 @@ TRACE_EVENT(clsic_vox_remove_user,
 );
 
 TRACE_EVENT(clsic_vox_start_enrol_user,
-	TP_PROTO(uint8_t user_id, uint8_t phrase_id, uint16_t duration,
-		 uint16_t timeout, uint8_t number_of_reps),
-	TP_ARGS(user_id, phrase_id, duration, timeout, number_of_reps),
+	TP_PROTO(uint8_t user_id, uint8_t phrase_id, uint16_t timeout),
+	TP_ARGS(user_id, phrase_id, timeout),
 	TP_STRUCT__entry(
 			__field(uint8_t, user_id)
 			__field(uint8_t, phrase_id)
-			__field(uint16_t, duration)
 			__field(uint16_t, timeout)
-			__field(uint8_t, number_of_reps)
 			),
 	TP_fast_assign(
 			__entry->user_id = user_id;
 			__entry->phrase_id = phrase_id;
-			__entry->duration = duration;
 			__entry->timeout = timeout;
-			__entry->number_of_reps = number_of_reps;
 		),
 	TP_printk(
-		  "enrol user %u for phrase %u with duration %ums/timeout %ums and %u reps",
+		  "enrol user %u for phrase %u with timeout %ums",
 		  __entry->user_id,
 		  __entry->phrase_id,
-		  __entry->duration,
-		  __entry->timeout,
-		  __entry->number_of_reps
+		  __entry->timeout
 		)
 );
 

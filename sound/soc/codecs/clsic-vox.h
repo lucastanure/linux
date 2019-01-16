@@ -17,7 +17,7 @@
 #define VOX_MAX_USERS					3
 #define VOX_MAX_PHRASES					5
 
-#define VOX_NUM_NEW_KCONTROLS				28
+#define VOX_NUM_NEW_KCONTROLS				30
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT			4
 
@@ -159,6 +159,7 @@ struct clsic_vox {
 	unsigned int asset_type;
 
 	unsigned int phrase_id_enum;
+	unsigned int enrolment_type_enum;
 	unsigned int user_id;
 	unsigned int bin_id;
 	unsigned int file_id;	/* For filename determination. */
@@ -173,6 +174,7 @@ struct clsic_vox {
 	int32_t scc_triggerpoint;
 	int32_t scc_cap_preamble_ms;
 	struct clsic_vox_auth_challenge challenge;
+	struct clsic_vox_security_package vpsp;
 	union bio_results_u biometric_results;
 	struct clsic_vox_k2_pub_key k2_pub_key;
 	struct clsic_vox_host_kvpp_key kvp_pub_key;
@@ -194,6 +196,7 @@ struct clsic_vox {
 	struct soc_enum soc_enum_barge_in;
 	struct soc_enum soc_enum_asset_type;
 	struct soc_enum soc_enum_phrase_id;
+	struct soc_enum soc_enum_enrolment_type;
 
 	struct soc_mixer_control user_id_mixer_ctrl;
 	struct soc_mixer_control duration_mixer_ctrl;
@@ -206,6 +209,7 @@ struct clsic_vox {
 	struct soc_mixer_control trgr_engine_id_mixer_ctrl;
 
 	struct soc_bytes_ext s_bytes_challenge;
+	struct soc_bytes_ext s_bytes_vpsp;
 	struct soc_bytes_ext s_bytes_bio_res;
 	struct soc_bytes_ext s_bytes_k2_pub_key;
 	struct soc_bytes_ext s_bytes_kvp_pub_key;
@@ -348,6 +352,16 @@ static const char *vox_phrase_id_text[VOX_NUM_PHRASES] = {
 	[VOX_PHRASE_VDT1]		= "VDT1",
 	[VOX_PHRASE_VDT2]		= "VDT2",
 	[VOX_PHRASE_TI]			= "TI",
+};
+
+#define VOX_NUM_ENROLMENT_TYPES		2
+
+#define VOX_SINGLE_PHRASE		0
+#define VOX_COMBINED			1
+
+static const char *vox_enrolment_type_text[VOX_NUM_ENROLMENT_TYPES] = {
+	[VOX_SINGLE_PHRASE]		= "Single Phrase",
+	[VOX_COMBINED]			= "Combined",
 };
 
 #define VOX_NUM_BIO_RESULTS_FORMATS	3
