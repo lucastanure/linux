@@ -1779,11 +1779,14 @@ static void vox_perform_enrol_rep(struct clsic_vox *vox)
 		vox->error_info = VOX_ERROR_DRIVER;
 		goto exit;
 	}
+	msg_cmd.blkcmd_rep_start.hdr.bulk_sz =
+					sizeof(struct clsic_vox_hw_auth_token);
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
 				  (union t_clsic_generic_message *) &msg_rsp,
-				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				  (uint8_t *) &vox->authtoken,
+				  sizeof(struct clsic_vox_hw_auth_token),
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
@@ -3161,6 +3164,11 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			     "Vox Voiceprint Security Package",
 			     &vox->s_bytes_vpsp, &vox->vpsp,
 			     sizeof(struct clsic_vox_security_package));
+
+	ctl_id++;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox AuthToken",
+			     &vox->s_bytes_authtoken, &vox->authtoken,
+			     sizeof(struct clsic_vox_hw_auth_token));
 
 	ctl_id++;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));

@@ -17,7 +17,7 @@
 #define VOX_MAX_USERS					3
 #define VOX_MAX_PHRASES					5
 
-#define VOX_NUM_NEW_KCONTROLS				30
+#define VOX_NUM_NEW_KCONTROLS				31
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT			4
 
@@ -175,6 +175,7 @@ struct clsic_vox {
 	int32_t scc_cap_preamble_ms;
 	struct clsic_vox_auth_challenge challenge;
 	struct clsic_vox_security_package vpsp;
+	struct clsic_vox_hw_auth_token authtoken;
 	union bio_results_u biometric_results;
 	struct clsic_vox_k2_pub_key k2_pub_key;
 	struct clsic_vox_host_kvpp_key kvp_pub_key;
@@ -210,6 +211,7 @@ struct clsic_vox {
 
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_vpsp;
+	struct soc_bytes_ext s_bytes_authtoken;
 	struct soc_bytes_ext s_bytes_bio_res;
 	struct soc_bytes_ext s_bytes_k2_pub_key;
 	struct soc_bytes_ext s_bytes_kvp_pub_key;
