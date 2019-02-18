@@ -98,14 +98,12 @@ struct clsic_asr_stream {
  *			results blob from CLSIC
  * @result:	Results of biometric authentication in "classic" format.
  * @result_ex:	Results of biometric authentication in "extended" format.
- * @result_ex2:	Results of biometric authentication in "extended2" format.
  *
  * This is used as a safe maximum size container for managing biometric results.
  */
 union bio_results_u {
 	struct clsic_vox_auth_result result;
 	struct clsic_vox_auth_result_ex result_ex;
-	struct clsic_vox_auth_result_ex2 result_ex2;
 };
 
 #ifdef CONFIG_DEBUG_FS
@@ -366,16 +364,14 @@ static const char *vox_enrolment_type_text[VOX_NUM_ENROLMENT_TYPES] = {
 	[VOX_COMBINED]			= "Combined",
 };
 
-#define VOX_NUM_BIO_RESULTS_FORMATS	3
+#define VOX_NUM_BIO_RESULTS_FORMATS	2
 
 #define VOX_BIO_RESULTS_CLASSIC		0
-#define VOX_BIO_RESULTS_EXT_V1		1
-#define VOX_BIO_RESULTS_EXT_V2		2
+#define VOX_BIO_RESULTS_EXTENDED	1
 
 static const char *vox_bio_results_format_text[VOX_NUM_BIO_RESULTS_FORMATS] = {
 	[VOX_BIO_RESULTS_CLASSIC]	= "Classic",
-	[VOX_BIO_RESULTS_EXT_V1]	= "Extended Version 1",
-	[VOX_BIO_RESULTS_EXT_V2]	= "Extended Version 2",
+	[VOX_BIO_RESULTS_EXTENDED]	= "Extended",
 };
 
 #define VOX_NUM_SEC_LEVEL		3

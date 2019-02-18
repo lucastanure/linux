@@ -49,10 +49,8 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 	switch (bio_results_format) {
 	case VOX_BIO_RESULTS_CLASSIC:
 		return sizeof(struct clsic_vox_auth_result);
-	case VOX_BIO_RESULTS_EXT_V1:
+	case VOX_BIO_RESULTS_EXTENDED:
 		return sizeof(struct clsic_vox_auth_result_ex);
-	case VOX_BIO_RESULTS_EXT_V2:
-		return sizeof(struct clsic_vox_auth_result_ex2);
 	default:
 		return 0;
 	}
