@@ -2278,55 +2278,76 @@ static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_challenge_get() - read the challenge bytes for biometric
- *			      authentication
+ * vox_ctrl_bytes_get() - read the challenge bytes for biometric
+ *			      authentication or enrolment
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
- * Allow userspace to get the bytes used as a cryptographic challenge to CLSIC
- * when getting biometric authentication results.
+ * Allow userspace to get the bytes used in generic BYTE controls.
  *
  * Return: 0 always.
  */
-static int vox_ctrl_challenge_get(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_bytes_get(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *s_bytes_challenge =
-		(struct soc_bytes_ext *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(s_bytes_challenge, struct clsic_vox,
-			     s_bytes_challenge);
+	struct soc_bytes_ext *s_bytes =
+			(struct soc_bytes_ext *) kcontrol->private_value;
+	uint8_t *bytes_data = s_bytes->dobj.private;
 
-	memcpy(ucontrol->value.bytes.data, &vox->challenge,
-	       s_bytes_challenge->max);
+	memcpy(ucontrol->value.bytes.data, bytes_data, s_bytes->max);
 
 	return 0;
 }
 
 /**
- * vox_ctrl_challenge_put() - write the challenge bytes for biometric
+ * vox_ctrl_bytes_put() - write the challenge bytes for biometric
  *			      authentication
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
- * Allow userspace to set the bytes used as a cryptographic challenge to CLSIC
- * when getting biometric authentication results.
+ * Allow userspace to set the bytes used in generic BYTE controls.
  *
  * Return: 0 always.
  */
-static int vox_ctrl_challenge_put(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
+static int vox_ctrl_bytes_put(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct soc_bytes_ext *s_bytes_challenge =
-		(struct soc_bytes_ext *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(s_bytes_challenge, struct clsic_vox,
-			     s_bytes_challenge);
+	struct soc_bytes_ext *s_bytes =
+			(struct soc_bytes_ext *) kcontrol->private_value;
+	uint8_t *bytes_data = s_bytes->dobj.private;
 
-	memcpy(&vox->challenge, ucontrol->value.bytes.data,
-	       s_bytes_challenge->max);
+	memcpy(bytes_data, ucontrol->value.bytes.data, s_bytes->max);
 
 	return 0;
+}
+
+/**
+ * vox_ctrl_byte_helper() - set up a BYTE ALSA control
+ * @kc:			struct snd_kcontrol_new as used by the ALSA
+ *			infrastructure.
+ * @control_name:	Name of this ALSA control.
+ * @sb:			struct soc_bytes_ext for the new control
+ * @byte_data:		Pointer to the BYTE data.
+ * @size_of_bytes:	Size of the BYTE data.
+ *
+ * Helper function to speed up creation of an ALSA control.
+ *
+ */
+static void vox_ctrl_byte_helper(struct snd_kcontrol_new *kc,
+				 char *control_name, struct soc_bytes_ext *sb,
+				 void *byte_data, unsigned int size_of_bytes)
+{
+	memset(byte_data, 0, size_of_bytes);
+	sb->max = size_of_bytes;
+	sb->dobj.private = byte_data;
+	kc->name = control_name;
+	kc->info = snd_soc_bytes_info_ext;
+	kc->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	kc->get = vox_ctrl_bytes_get;
+	kc->put = vox_ctrl_bytes_put;
+	kc->private_value = (unsigned long) sb;
+	kc->access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+		     SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 }
 
 /**
@@ -3137,18 +3158,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			     (unsigned long) &vox->soc_enum_bio_res_type);
 
 	ctl_id++;
-	memset(&vox->challenge, 0, sizeof(struct clsic_vox_auth_challenge));
-
-	vox->s_bytes_challenge.max = sizeof(struct clsic_vox_auth_challenge);
-	vox->kcontrol_new[ctl_id].name = "Vox Challenge";
-	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
-	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[ctl_id].get = vox_ctrl_challenge_get;
-	vox->kcontrol_new[ctl_id].put = vox_ctrl_challenge_put;
-	vox->kcontrol_new[ctl_id].private_value =
-				(unsigned long) &vox->s_bytes_challenge;
-	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
-					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox Challenge",
+			     &vox->s_bytes_challenge, &vox->challenge,
+			     sizeof(struct clsic_vox_auth_challenge));
 
 	ctl_id++;
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
