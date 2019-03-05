@@ -136,7 +136,7 @@ TRACE_EVENT(clsic_vox_asr_stream_data_start,
 	TP_ARGS(bytes_copied),
 	TP_STRUCT__entry(__field(size_t, bytes_copied)),
 	TP_fast_assign(__entry->bytes_copied = bytes_copied;),
-	TP_printk("bytes copied (should be 0): %d", __entry->bytes_copied)
+	TP_printk("bytes copied (should be 0): %zu", __entry->bytes_copied)
 );
 
 TRACE_EVENT(clsic_vox_asr_stream_queue_read,
@@ -152,7 +152,7 @@ TRACE_EVENT(clsic_vox_asr_stream_data_rcv,
 	TP_ARGS(sz),
 	TP_STRUCT__entry(__field(size_t, sz)),
 	TP_fast_assign(__entry->sz = sz;),
-	TP_printk("receiving: %u bytes", __entry->sz)
+	TP_printk("receiving: %zu bytes", __entry->sz)
 );
 
 TRACE_EVENT(clsic_vox_asr_stream_copy_start,
@@ -170,7 +170,7 @@ TRACE_EVENT(clsic_vox_asr_stream_copy_end,
 			 __field(unsigned int, copied_total)),
 	TP_fast_assign(__entry->count = count;
 		       __entry->copied_total = copied_total),
-	TP_printk("copied: %zu bytes of total so far: %zu bytes",
+	TP_printk("copied: %zu bytes of total so far: %u bytes",
 		  __entry->count, __entry->copied_total)
 );
 
@@ -191,7 +191,7 @@ TRACE_EVENT(clsic_vox_asr_stream_pointer,
 			 __field(unsigned int, sample_rate)),
 	TP_fast_assign(__entry->copied_total = copied_total;
 		       __entry->sample_rate = sample_rate),
-	TP_printk("copied total: %zu bytes sample rate: %zu Hz",
+	TP_printk("copied total: %d bytes sample rate: %u Hz",
 		  __entry->copied_total, __entry->sample_rate)
 );
 

@@ -273,14 +273,14 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 	frame_sz = params->codec.ch_in * PCM_S16_LE_BYTES_PER_SAMPLE;
 	if (frag_sz % frame_sz) {
 		clsic_err(clsic,
-			  "requested ASR stream fragment size %u is not supported (frame size %u).\n",
+			  "requested ASR stream fragment size %zu is not supported (frame size %u).\n",
 			  frag_sz, frame_sz);
 		return -EINVAL;
 	}
 	block_sz = clsic_vox_asr_stream_block_sz(frag_sz / frame_sz);
 	if (block_sz < 0) {
 		clsic_err(clsic,
-			  "requested ASR stream fragment size %u is not supported (frame size %u).\n",
+			  "requested ASR stream fragment size %zu is not supported (frame size %u).\n",
 			  frag_sz, frame_sz);
 		return -EINVAL;
 	}
@@ -1249,7 +1249,7 @@ static int vox_install_asset(struct clsic_vox *vox)
 
 	if (fw->size % CLSIC_ASSET_SIZE_ALIGNMENT) {
 		clsic_err(clsic,
-			  "firmware file %s size %d is not a multiple of %d.\n",
+			  "firmware file %s size %zu is not a multiple of %d.\n",
 			  file, fw->size, CLSIC_ASSET_SIZE_ALIGNMENT);
 		release_firmware(fw);
 		vox->error_info = VOX_ERROR_DRIVER;
