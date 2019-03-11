@@ -61,7 +61,7 @@ static void clsic_disable_hard_reset(struct clsic *clsic)
 {
 	if (clsic->reset_gpio) {
 		gpiod_set_value_cansleep(clsic->reset_gpio, 1);
-		usleep_range(1000, 2000);
+		usleep_range(2000, 3000);
 	}
 }
 
@@ -91,6 +91,7 @@ static bool clsic_wait_for_boot_done(struct clsic *clsic)
 void clsic_soft_reset(struct clsic *clsic)
 {
 	regmap_write(clsic->regmap, TACNA_SFT_RESET, CLSIC_SOFTWARE_RESET_CODE);
+	usleep_range(2000, 3000);
 	clsic_wait_for_boot_done(clsic);
 }
 
@@ -1006,6 +1007,8 @@ static int clsic_runtime_resume(struct device *dev)
 
 		return ret;
 	}
+
+	usleep_range(2000, 3000);
 
 	if (force_reset) {
 		if (clsic->reset_gpio)
