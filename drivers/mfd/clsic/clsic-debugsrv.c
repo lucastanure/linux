@@ -1,7 +1,7 @@
 /*
  * clsic-debugsrv.c -- CLSIC Debug Service
  *
- * Copyright (C) 2015-2018 Cirrus Logic, Inc. and
+ * Copyright (C) 2015-2019 Cirrus Logic, Inc. and
  *			   Cirrus Logic International Semiconductor Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -74,23 +74,31 @@ static void clsic_debug_service_stop(struct clsic *clsic,
 	 * services can send messages in their stop() functions.
 	 */
 	if (debugsrv_struct->state != CLSIC_DEBUGSRV_STATE_IDLE) {
-		clsic_init_message((union t_clsic_generic_message *)&msg_cmd,
-				   handler->service_instance,
-				   CLSIC_DEBUGSRV_CMD_DEACTIVATE);
+		if (!clsic_init_message((union t_clsic_generic_message *)
+					&msg_cmd,
+					handler->service_instance,
+					CLSIC_DEBUGSRV_CMD_DEACTIVATE)) {
 
-		ret = clsic_send_msg_sync(clsic, &msg_cmd, &msg_rsp,
-					  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-					  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+			ret = clsic_send_msg_sync(clsic, &msg_cmd, &msg_rsp,
+						  CLSIC_NO_TXBUF,
+						  CLSIC_NO_TXBUF_LEN,
+						  CLSIC_NO_RXBUF,
+						  CLSIC_NO_RXBUF_LEN);
 
-		/* The above should block and state should now be IDLE */
-		if (debugsrv_struct->state != CLSIC_DEBUGSRV_STATE_IDLE) {
-			clsic_info(clsic,
-				  "deactivate message: %d state now: %d\n",
-				  ret, debugsrv_struct->state);
-		} else {
-			clsic_dbg(clsic,
-				  "deactivate message: %d state now: %d\n",
-				  ret, debugsrv_struct->state);
+			/*
+			 * When the message above has executed the state should
+			 * now be IDLE
+			 */
+			if (debugsrv_struct->state !=
+			    CLSIC_DEBUGSRV_STATE_IDLE) {
+				clsic_info(clsic,
+					   "deactivate message: %d state now: %d\n",
+					   ret, debugsrv_struct->state);
+			} else {
+				clsic_dbg(clsic,
+					  "deactivate message: %d state now: %d\n",
+					  ret, debugsrv_struct->state);
+			}
 		}
 	}
 
