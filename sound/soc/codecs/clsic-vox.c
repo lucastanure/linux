@@ -69,7 +69,6 @@ static void vox_set_idle_and_state(struct clsic_vox *vox,
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
  * Notify userspace that a change has happened using an event.
- *
  */
 static void vox_send_userspace_event(struct clsic_vox *vox)
 {
@@ -83,7 +82,6 @@ static void vox_send_userspace_event(struct clsic_vox *vox)
  *
  * When the audio path has closed, the last operation to be running needs to
  * clear up.
- *
  */
 static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
 {
@@ -102,7 +100,6 @@ static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
  * Use the driver state to determine how to bring down the ASR operations.
- *
  */
 static void clsic_vox_asr_cleanup_states(struct clsic_vox *vox)
 {
@@ -227,7 +224,7 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
  * Convert an actual ASR block size in bytes into the enumeration used by the
  * CLSIC messaging protocol.
  *
- * Return: CLSIC enumerated code representing block size.
+ * Return: CLSIC enumerated code representing block size or -EINVAL.
  */
 static int clsic_vox_asr_stream_block_sz(u32 block_size)
 {
@@ -345,7 +342,7 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
  * This is the callback that is called when the asynchronous message to copy
  * ASR data during streaming has completed.
  *
- * Return: CLSIC_HANDLED or CLSIC_UNHANDLED.
+ * Return: CLSIC_MSG_RELEASED always.
  */
 static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 						      struct clsic *clsic,
@@ -806,7 +803,6 @@ static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
  * @new_mode:	New CLSIC mode to change to.
  *
  * Mark CLSIC as in use dependent on what CLSIC mode transition is occurring.
- *
  */
 static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
 					enum clsic_vox_mode new_mode)
@@ -883,7 +879,6 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  * IDLE mode, setting the internal driver state and then notifying userspace
  * (i.e. waking the poll) that something has changed (usually meant to imply
  * that the error control node has changed value).
- *
  */
 static void vox_set_idle_and_state(struct clsic_vox *vox,
 				   bool set_clsic_to_idle,
@@ -1969,8 +1964,6 @@ exit:
  *
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
- *
- * Return: errno.
  */
 static void vox_drv_state_handler(struct work_struct *data)
 {
@@ -2096,7 +2089,7 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to set the relevant internal variable
  * existing in the driver vox struct.
  *
- * Return: 0 always.
+ * Return: errno.
  */
 static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
@@ -2297,7 +2290,7 @@ static int vox_ctrl_kvp_pub_key_put(struct snd_kcontrol *kcontrol,
  * Depending on the asset type, return to userspace whether an asset is
  * installed or not.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
@@ -2666,7 +2659,6 @@ static int vox_ctrl_int_info(struct snd_kcontrol *kcontrol,
  *			used by the put and get functions.
  *
  * Helper function to speed up creation of an ALSA control.
- *
  */
 static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
 				const char *control_name,
@@ -2702,7 +2694,6 @@ static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
  *			used by the put and get functions.
  *
  * Helper function to speed up creation of an ALSA control.
- *
  */
 static void vox_ctrl_enum_helper(struct snd_kcontrol_new *kc,
 				 const char *control_name,
@@ -2812,7 +2803,6 @@ static int vox_ctrl_scc_put(struct snd_kcontrol *kcontrol,
  * Helper function to speed up creation of an ALSA control for use by the
  * userspace SCC libraries - these are specified to have a particular size and
  * type.
- *
  */
 static void vox_ctrl_scc_helper(struct snd_kcontrol_new *kc,
 				const char *control_name,
@@ -3217,7 +3207,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
  *
  * Cancel any schedule work.
  *
- * Return: errno.
+ * Return: 0 always.
  */
 static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 {
