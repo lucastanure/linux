@@ -1201,10 +1201,8 @@ static int phrase_id_from_enum(int enum_value)
  *
  * Based on the value of various ALSA controls, install an asset (either map,
  * VTE/SSF bin, or biometric phrase) to CLSIC.
- *
- * Return: errno.
  */
-static int vox_install_asset(struct clsic_vox *vox)
+static void vox_install_asset(struct clsic_vox *vox)
 {
 	struct clsic *clsic = vox->clsic;
 	const struct firmware *fw;
@@ -1335,8 +1333,6 @@ static int vox_install_asset(struct clsic_vox *vox)
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1345,10 +1341,8 @@ exit:
  *
  * Based on the value of various ALSA controls, uninstall an asset (either map,
  * VTE/SSF bin, or biometric phrase) from CLSIC.
- *
- * Return: errno.
  */
-static int vox_uninstall_asset(struct clsic_vox *vox)
+static void vox_uninstall_asset(struct clsic_vox *vox)
 {
 	struct clsic *clsic = vox->clsic;
 	union clsic_vox_msg msg_cmd;
@@ -1466,8 +1460,6 @@ static int vox_uninstall_asset(struct clsic_vox *vox)
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1476,10 +1468,8 @@ exit:
  *
  * Remove (or de-enrol) a particular user for a particular biometric phrase
  * based on the value of relevant ALSA controls set from userspace.
- *
- * Return: errno.
  */
-static int vox_remove_user(struct clsic_vox *vox)
+static void vox_remove_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1508,7 +1498,6 @@ static int vox_remove_user(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1521,15 +1510,12 @@ static int vox_remove_user(struct clsic_vox *vox)
 	default:
 		vox->clsic_error_code = msg_rsp.rsp_remove_user.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 		break;
 	}
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1538,10 +1524,8 @@ exit:
  *
  * Start enrolling a user by gathering information from various ALSA controls
  * then sending the appropriate message to CLSIC.
- *
- * Return: errno.
  */
-static int vox_start_enrol_user(struct clsic_vox *vox)
+static void vox_start_enrol_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1629,8 +1613,6 @@ exit:
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
 
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1638,10 +1620,8 @@ exit:
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
  * Tell CLSIC that we are about to perform an enrolment repetition.
- *
- * Return: errno.
  */
-static int vox_perform_enrol_rep(struct clsic_vox *vox)
+static void vox_perform_enrol_rep(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1682,8 +1662,6 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 				       VOX_DRV_STATE_AWAITING_ENROL_REP);
 
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1692,10 +1670,8 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
  *
  * Tell CLSIC that we are ready to complete an enrolment, having started
  * enrolment and performed reps.
- *
- * Return: errno.
  */
-static int vox_complete_enrolment(struct clsic_vox *vox)
+static void vox_complete_enrolment(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1717,7 +1693,6 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 	} else if (msg_rsp.rsp_install_user_complete.hdr.err ==
 		   CLSIC_ERR_NONE) {
 		vox->user_installed[phrase_id][vox->user_id] = true;
@@ -1730,13 +1705,10 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
 		vox->clsic_error_code =
 			msg_rsp.rsp_install_user_complete.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 	}
 
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1744,10 +1716,8 @@ static int vox_complete_enrolment(struct clsic_vox *vox)
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
  * Request biometric results from CLSIC. This function will be called once
- *
- * Return: errno.
  */
-static int vox_get_bio_results(struct clsic_vox *vox)
+static void vox_get_bio_results(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1780,7 +1750,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	default:
 		vox->clsic_error_code = vox->auth_error;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1803,7 +1772,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1824,7 +1792,6 @@ static int vox_get_bio_results(struct clsic_vox *vox)
 	} else {
 		vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 	}
 
 exit:
@@ -1834,8 +1801,6 @@ exit:
 	mutex_unlock(&vox->drv_state_lock);
 
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1844,10 +1809,8 @@ exit:
  *
  * Write the voiceprint proxy public key to CLSIC. This is a one-shot operation
  * and will fail if a different key has already been written.
- *
- * Return: errno.
  */
-static int vox_put_kvp_pub(struct clsic_vox *vox)
+static void vox_put_kvp_pub(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1876,7 +1839,6 @@ static int vox_put_kvp_pub(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1885,14 +1847,11 @@ static int vox_put_kvp_pub(struct clsic_vox *vox)
 	else {
 		vox->clsic_error_code = msg_rsp.rsp_set_host_kvpp_key.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 	}
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1901,10 +1860,8 @@ exit:
  *
  * Do a factory reset. This will remove all keys, user enrolments, phrases, bin
  * and map files.
- *
- * Return: errno.
  */
-static int vox_factory_reset(struct clsic_vox *vox)
+static void vox_factory_reset(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1923,7 +1880,6 @@ static int vox_factory_reset(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1938,22 +1894,17 @@ static int vox_factory_reset(struct clsic_vox *vox)
 						      CLSIC_VOX_PHRASE_VDT1,
 						      CLSIC_VOX_PHRASE_TI);
 			ret |= vox_update_k2_pub_key(vox);
-			if (ret != 0) {
+			if (ret != 0)
 				vox->clsic_error_code = VOX_ERROR_DRIVER;
-				ret = -EIO;
-			}
 		}
 	} else {
 		vox->clsic_error_code = msg_rsp.rsp_factory_reset.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
-		ret = -EIO;
 	}
 
 exit:
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
 	vox_send_userspace_event(vox);
-
-	return ret;
 }
 
 /**
@@ -1970,40 +1921,25 @@ static void vox_drv_state_handler(struct work_struct *data)
 	struct clsic_vox *vox = container_of(data, struct clsic_vox,
 					     drv_state_work);
 	struct clsic *clsic = vox->clsic;
-	int ret;
 
 	switch (vox->drv_state) {
 	case VOX_DRV_STATE_INSTALLING_ASSET:
-		ret = vox_install_asset(vox);
-		if (ret)
-			clsic_err(clsic, "vox_install_asset ret %d.\n", ret);
+		vox_install_asset(vox);
 		break;
 	case VOX_DRV_STATE_UNINSTALLING_ASSET:
-		ret = vox_uninstall_asset(vox);
-		if (ret)
-			clsic_err(clsic, "vox_uninstall_asset ret %d.\n", ret);
+		vox_uninstall_asset(vox);
 		break;
 	case VOX_DRV_STATE_REMOVING_USER:
-		ret = vox_remove_user(vox);
-		if (ret)
-			clsic_err(clsic, "vox_remove_user ret %d.\n", ret);
+		vox_remove_user(vox);
 		break;
 	case VOX_DRV_STATE_STARTING_ENROL:
-		ret = vox_start_enrol_user(vox);
-		if (ret)
-			clsic_err(clsic, "vox_start_enrol_user ret %d.\n", ret);
+		vox_start_enrol_user(vox);
 		break;
 	case VOX_DRV_STATE_PERFORMING_ENROL_REP:
-		ret = vox_perform_enrol_rep(vox);
-		if (ret)
-			clsic_err(clsic, "vox_perform_enrol_rep ret %d.\n",
-				  ret);
+		vox_perform_enrol_rep(vox);
 		break;
 	case VOX_DRV_STATE_COMPLETING_ENROL:
-		ret = vox_complete_enrolment(vox);
-		if (ret)
-			clsic_err(clsic, "vox_complete_enrolment ret %d.\n",
-				  ret);
+		vox_complete_enrolment(vox);
 		break;
 	case VOX_DRV_STATE_TERMINATING_ENROL:
 		vox->error_info = VOX_ERROR_SUCCESS;
@@ -2011,19 +1947,13 @@ static void vox_drv_state_handler(struct work_struct *data)
 		vox_send_userspace_event(vox);
 		break;
 	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
-		ret = vox_get_bio_results(vox);
-		if (ret)
-			clsic_err(clsic, "vox_get_bio_results ret %d.\n", ret);
+		vox_get_bio_results(vox);
 		break;
 	case VOX_DRV_STATE_WRITING_KVP_PUB:
-		ret = vox_put_kvp_pub(vox);
-		if (ret)
-			clsic_err(clsic, "vox_put_kvp_pub ret %d.\n", ret);
+		vox_put_kvp_pub(vox);
 		break;
 	case VOX_DRV_STATE_PERFORMING_FACTORY_RESET:
-		ret = vox_factory_reset(vox);
-		if (ret)
-			clsic_err(clsic, "vox_factory_reset ret %d.\n", ret);
+		vox_factory_reset(vox);
 		break;
 	default:
 		clsic_err(clsic, "unknown state %d for scheduled work.\n",
