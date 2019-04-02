@@ -116,6 +116,7 @@ struct vox_last_trigger {
 struct vox_last_auth {
 	union clsic_vox_msg msg;
 	union bio_results_u result;
+	struct clsic_vox_hw_auth_token authtoken;
 	uint8_t security_lvl;
 	uint8_t result_format;
 	struct debugfs_blob_wrapper blob;
@@ -364,14 +365,16 @@ static const char *vox_enrolment_type_text[VOX_NUM_ENROLMENT_TYPES] = {
 	[VOX_COMBINED]			= "Combined",
 };
 
-#define VOX_NUM_BIO_RESULTS_FORMATS	2
+#define VOX_NUM_BIO_RESULTS_FORMATS	3
 
 #define VOX_BIO_RESULTS_CLASSIC		0
 #define VOX_BIO_RESULTS_EXTENDED	1
+#define VOX_BIO_RESULTS_AUTHTOKEN	2
 
 static const char *vox_bio_results_format_text[VOX_NUM_BIO_RESULTS_FORMATS] = {
 	[VOX_BIO_RESULTS_CLASSIC]	= "Classic",
 	[VOX_BIO_RESULTS_EXTENDED]	= "Extended",
+	[VOX_BIO_RESULTS_AUTHTOKEN]	= "AuthToken",
 };
 
 #define VOX_NUM_SEC_LEVEL		3

@@ -1874,6 +1874,11 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
+	uint8_t *tx_buf;
+	uint8_t *rx_buf;
+	size_t tx_size;
+	size_t rx_size;
+	struct clsic_vox_hw_auth_challenge auth_challenge;
 	int ret;
 
 	trace_clsic_vox_get_bio_results(0);
@@ -1925,18 +1930,30 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 		vox->error_info = VOX_ERROR_DRIVER;
 		goto exit;
 	}
-	msg_cmd.blkcmd_auth_user.hdr.bulk_sz =
-					sizeof(struct clsic_vox_auth_challenge);
+
+	if (vox->bio_results_format == VOX_BIO_RESULTS_AUTHTOKEN) {
+		auth_challenge.sp = vox->vpsp;
+		memcpy(&auth_challenge.challenge, vox->challenge.nonce,
+		       sizeof(auth_challenge.challenge));
+		tx_buf = (uint8_t *) &auth_challenge;
+		tx_size = sizeof(struct clsic_vox_hw_auth_challenge);
+		rx_buf = (uint8_t *) &vox->authtoken;
+		rx_size = sizeof(struct clsic_vox_hw_auth_token);
+	} else {
+		tx_buf = (uint8_t *) &vox->challenge;
+		tx_size = sizeof(struct clsic_vox_auth_challenge);
+		rx_buf = (uint8_t *) &vox->biometric_results;
+		rx_size = size_of_bio_results(vox->bio_results_format);
+	}
+
 	msg_cmd.blkcmd_auth_user.security_lvl = vox->security_level;
 	msg_cmd.blkcmd_auth_user.result_format = vox->bio_results_format;
+	msg_cmd.blkcmd_auth_user.hdr.bulk_sz = tx_size;
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
-				  (union t_clsic_generic_message *) &msg_cmd,
-				  (union t_clsic_generic_message *) &msg_rsp,
-				  (uint8_t *) &vox->challenge,
-				  sizeof(struct clsic_vox_auth_challenge),
-				  (uint8_t *) &vox->biometric_results,
-				  size_of_bio_results(vox->bio_results_format));
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     tx_buf, tx_size, rx_buf, rx_size);
 	if (ret) {
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
@@ -1950,8 +1967,12 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 		/* Save the auth data for later analysis */
 		memcpy(&vox->last_auth.msg, &msg_rsp,
 		       sizeof(union clsic_vox_msg));
-		memcpy(&vox->last_auth.result, &vox->biometric_results,
-		       size_of_bio_results(vox->bio_results_format));
+		if (vox->bio_results_format == VOX_BIO_RESULTS_AUTHTOKEN)
+			vox->last_auth.authtoken = vox->authtoken;
+		else
+			memcpy(&vox->last_auth.result, &vox->biometric_results,
+			       size_of_bio_results(vox->bio_results_format));
+
 		vox->last_auth.result_format = vox->bio_results_format;
 		vox->last_auth.security_lvl = vox->security_level;
 		vox->last_auth.blob.size = sizeof(vox->last_auth.msg) +
@@ -2359,6 +2380,7 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 
 	if (op_flag == SNDRV_CTL_TLV_OP_WRITE)
 		return -EACCES;
+
 	if (copy_to_user(tlv, &vox->biometric_results,
 			 size_of_bio_results(vox->bio_results_format)))
 		return -EFAULT;
