@@ -417,6 +417,21 @@ TRACE_EVENT(clsic_vox_msgproc,
 		)
 );
 
+TRACE_EVENT(clsic_vox_ratelimit_waiter,
+	TP_PROTO(int active),
+	TP_ARGS(active),
+	TP_STRUCT__entry(
+			__field(int, active)
+			),
+	TP_fast_assign(
+			__entry->active = active;
+		      ),
+	TP_printk(
+		  "%s",
+		  __entry->active ? "begin" : "end"
+		 )
+);
+
 #endif /* CLSIC_VOX_TRACE_H */
 
 /* This part must be outside protection */

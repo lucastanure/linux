@@ -44,6 +44,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_new_auth_result);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_put_kvp_pub);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_factory_reset);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_msgproc);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_ratelimit_waiter);
 
 const char *clsic_vox_mode_to_string(enum clsic_states state)
 {

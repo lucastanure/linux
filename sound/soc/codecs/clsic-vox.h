@@ -38,6 +38,9 @@
  */
 #define VOX_INDETERMINATE_MODE				-1
 
+/* The device is expected to be held in rate limiting for 30 seconds */
+#define VOX_RATELIMIT_DURATION				30
+
 /**
  * struct clsic_asr_stream_buf - audio buffer descriptor for use in ASR
  *				streaming operations
@@ -219,6 +222,14 @@ struct clsic_vox {
 	bool bio_vte_map_installed;
 
 	struct work_struct drv_state_work;
+	struct work_struct ratelimit_work;
+
+	/*
+	 * A flag to indicate whether the driver has detected rate limiting -
+	 * this is used to prevent scheduling the ratelimit_work multiple times
+	 */
+	bool rate_limited;
+
 	struct snd_kcontrol *error_info_kctrl;
 
 	struct completion new_bio_results_completion;

@@ -836,6 +836,53 @@ static void vox_msgproc_release(struct clsic_vox *vox)
 	trace_clsic_vox_msgproc(false, vox->msgproc_refcount);
 }
 
+/*
+ * clsic_vox_ratelimit() - schedule the rate limiting work if needed
+ * @vox:	The instance of struct clsic_vox used in this driver.
+ *
+ * The rate limited state can be detected multiple times when it occurs in the
+ * device, but it only requires the ratelimit_work to run once to clear it.
+ */
+static void clsic_vox_ratelimit(struct clsic_vox *vox)
+{
+	mutex_lock(&vox->handler_mutex);
+	if (!vox->rate_limited) {
+		vox->rate_limited = true;
+		schedule_work(&vox->ratelimit_work);
+	}
+	mutex_unlock(&vox->handler_mutex);
+}
+
+/**
+ * vox_ratelimit_waiter() - keep the driver powered on while rate limiting
+ * @data:	The ratelimit_work structure used to obtain the instance of
+ *		struct clsic_vox for this service instance
+ *
+ * When it is discovered that CLSIC is rate limiting (due to 5 or more failed
+ * verifications in a row), the service handler must keep the messaging
+ * processor active for at least 30 seconds in order to clear the rate limiting
+ * state.
+ */
+static void vox_ratelimit_waiter(struct work_struct *data)
+{
+	struct clsic_vox *vox = container_of(data, struct clsic_vox,
+					     ratelimit_work);
+
+	trace_clsic_vox_ratelimit_waiter(true);
+
+	vox_msgproc_use(vox);
+
+	ssleep(VOX_RATELIMIT_DURATION);
+
+	vox_msgproc_release(vox);
+
+	mutex_lock(&vox->handler_mutex);
+	vox->rate_limited = false;
+	mutex_unlock(&vox->handler_mutex);
+
+	trace_clsic_vox_ratelimit_waiter(false);
+}
+
 /**
  * vox_set_pm_from_mode() - set power management options using the CLSIC mode
  * @vox:	The main instance of struct clsic_vox used in this driver.
@@ -1801,6 +1848,10 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 		 */
 		vox->clsic_error_code = CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED;
 		break;
+	case CLSIC_ERR_RATE_LIMITED:
+		clsic_err(vox->clsic, "Rate limited detected\n");
+		clsic_vox_ratelimit(vox);
+		/* Fall through. */
 	default:
 		vox->clsic_error_code = vox->auth_error;
 		vox->error_info = VOX_ERROR_CLSIC;
@@ -1896,9 +1947,13 @@ static void vox_put_kvp_pub(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	if (msg_rsp.rsp_set_host_kvpp_key.hdr.err == CLSIC_ERR_NONE)
+	if (msg_rsp.rsp_set_host_kvpp_key.hdr.err == CLSIC_ERR_NONE) {
 		vox->error_info = VOX_ERROR_SUCCESS;
-	else {
+		if (msg_rsp.rsp_set_host_kvpp_key.is_rate_limited) {
+			clsic_err(vox->clsic, "Rate limited detected\n");
+			clsic_vox_ratelimit(vox);
+		}
+	} else {
 		vox->clsic_error_code = msg_rsp.rsp_set_host_kvpp_key.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 	}
@@ -2510,7 +2565,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			  vox->drv_state,
 			  ucontrol->value.enumerated.item[0],
 			  ret);
-
 	return ret;
 }
 
@@ -2841,6 +2895,9 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	mutex_init(&vox->handler_mutex);
 	vox->msgproc_refcount = 0;
+
+	INIT_WORK(&vox->ratelimit_work, vox_ratelimit_waiter);
+	vox->rate_limited = false;
 
 	init_completion(&vox->asr_stream.completion);
 	mutex_init(&vox->asr_stream.stream_lock);
@@ -3201,6 +3258,7 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 
 	dev_info(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
 
+	cancel_work_sync(&vox->ratelimit_work);
 	cancel_work_sync(&vox->drv_state_work);
 
 	return 0;

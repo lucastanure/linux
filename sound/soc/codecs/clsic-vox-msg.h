@@ -881,6 +881,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_rsp_hdr hdr;
+		uint8_t is_rate_limited;
 	} PACKED rsp_set_host_kvpp_key;
 
 	/**
