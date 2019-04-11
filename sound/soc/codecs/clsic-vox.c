@@ -1389,7 +1389,6 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 	if (ret) {
 		clsic_err(clsic, "clsic_send_msg_sync %d.\n", ret);
 		vox->error_info = VOX_ERROR_DRIVER;
-		ret = -EIO;
 		goto exit;
 	}
 
@@ -1416,7 +1415,6 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_phrase.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
 			break;
 		}
 		break;
@@ -1433,7 +1431,6 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 		default:
 			vox->clsic_error_code = msg_rsp.rsp_remove_bin.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
 			break;
 		}
 		break;
@@ -1451,7 +1448,6 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 			vox->clsic_error_code =
 				msg_rsp.rsp_remove_biovte_map.hdr.err;
 			vox->error_info = VOX_ERROR_CLSIC;
-			ret = -EIO;
 			break;
 		}
 		break;
