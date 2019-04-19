@@ -9,26 +9,28 @@
  * published by the Free Software Foundation.
  */
 
-#define VOX_ASR_MIN_FRAGMENT_SZ	0
-#define VOX_ASR_MAX_FRAGMENT_SZ	307200
-#define VOX_ASR_MIN_FRAGMENTS	1
-#define VOX_ASR_MAX_FRAGMENTS	256
+#define VOX_ASR_MIN_FRAGMENT_SZ				0
+#define VOX_ASR_MAX_FRAGMENT_SZ				307200
+#define VOX_ASR_MIN_FRAGMENTS				1
+#define VOX_ASR_MAX_FRAGMENTS				256
 
-#define VOX_MAX_USERS		3
-#define VOX_MAX_PHRASES		5
+#define VOX_MAX_USERS					3
+#define VOX_MAX_PHRASES					5
 
-#define VOX_NUM_NEW_KCONTROLS	28
+#define VOX_NUM_NEW_KCONTROLS				28
 
-#define CLSIC_ASSET_SIZE_ALIGNMENT	4
+#define CLSIC_ASSET_SIZE_ALIGNMENT			4
 
 /* Minimum version of system firmware required. */
-#define CLSIC_VOX_SRV_VERSION		0x00050002
+#define CLSIC_VOX_SRV_VERSION				0x00050002
 
-#define VOX_DEFAULT_DURATION		0
-#define VOX_DEFAULT_TIMEOUT		4000
-#define VOX_MAX_DURATION_TIMEOUT	0xFFFF
-#define VOX_DEFAULT_NUM_REPS		3
-#define VOX_MAX_NUM_REPS		5
+#define VOX_DEFAULT_DURATION				0
+#define VOX_DEFAULT_TIMEOUT				4000
+#define VOX_MAX_DURATION_TIMEOUT			0xFFFF
+#define VOX_DEFAULT_NUM_REPS				3
+#define VOX_MAX_NUM_REPS				5
+
+#define VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT		(5 * HZ)
 
 /**
  * struct clsic_asr_stream_buf - audio buffer descriptor for use in ASR

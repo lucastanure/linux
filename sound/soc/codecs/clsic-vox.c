@@ -1760,12 +1760,19 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
 
 	/*
-	 * Firstly wait for CLSIC to notify us of new results. There are no
-	 * further notifications after the last one if it contains the
-	 * CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED error code.
+	 * Firstly wait for CLSIC to notify us of new results (if there has
+	 * been no previous error)
 	 */
-	if (vox->auth_error != CLSIC_ERR_AUTH_MAX_AUDIO_PROCESSED)
-		wait_for_completion(&vox->new_bio_results_completion);
+	if (vox->auth_error == CLSIC_ERR_NONE) {
+		if (wait_for_completion_timeout(
+					  &vox->new_bio_results_completion,
+					  VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT
+					  ) == 0) {
+			clsic_err(vox->clsic, "Completion timeout.\n");
+			vox->error_info = VOX_ERROR_DRIVER;
+			goto exit;
+		}
+	}
 	reinit_completion(&vox->new_bio_results_completion);
 
 	switch (vox->auth_error) {
