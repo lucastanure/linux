@@ -32,6 +32,12 @@
 
 #define VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT		(5 * HZ)
 
+/*
+ * Extend the enum of clsic_vox_modes with another indicating that setting the
+ * mode of the device had previously failed and the state is now unknown.
+ */
+#define VOX_INDETERMINATE_MODE				-1
+
 /**
  * struct clsic_asr_stream_buf - audio buffer descriptor for use in ASR
  *				streaming operations
@@ -134,7 +140,7 @@ struct clsic_vox {
 	/* drv_state refers to ongoing vox biometric operations only. */
 	unsigned int drv_state;
 	/* Which mode CLSIC is in. */
-	enum clsic_vox_mode clsic_mode;
+	int clsic_mode;
 
 	/*
 	 * Mutex to guard the testing and changing of clsic_vox structure

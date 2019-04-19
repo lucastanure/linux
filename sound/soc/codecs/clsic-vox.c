@@ -873,6 +873,17 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	union clsic_vox_msg msg_rsp;
 	int ret;
 
+	/*
+	 * If the mode of the device is unknown, attempt to set it to IDLE
+	 * before setting the intended mode. If the intended mode is IDLE the
+	 * normal codepath is sufficient.
+	 */
+	if ((vox->clsic_mode == VOX_INDETERMINATE_MODE) &&
+	    (new_mode != CLSIC_VOX_MODE_IDLE)) {
+		if (vox_set_mode(vox, CLSIC_VOX_MODE_IDLE) != 0)
+			return -EIO;
+	}
+
 	trace_clsic_vox_set_mode(vox->clsic_mode, new_mode);
 
 	if (vox->clsic_mode == new_mode)
@@ -884,21 +895,25 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	msg_cmd.cmd_set_mode.mode = new_mode;
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
-				  (union t_clsic_generic_message *) &msg_cmd,
-				  (union t_clsic_generic_message *) &msg_rsp,
-				  CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
-				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+				     (union t_clsic_generic_message *) &msg_cmd,
+				     (union t_clsic_generic_message *) &msg_rsp,
+				     CLSIC_NO_TXBUF, CLSIC_NO_TXBUF_LEN,
+				     CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
+
+	vox_set_pm_from_mode(vox, new_mode);
+
 	if (ret) {
+		vox->clsic_mode = VOX_INDETERMINATE_MODE;
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
 		return -EIO;
 	}
 
 	if (msg_rsp.rsp_set_mode.hdr.err != CLSIC_ERR_NONE) {
+		vox->clsic_mode = VOX_INDETERMINATE_MODE;
 		vox->clsic_error_code = msg_rsp.rsp_set_mode.hdr.err;
 		return -EINVAL;
 	}
 
-	vox_set_pm_from_mode(vox, new_mode);
 	vox->clsic_mode = new_mode;
 
 	return 0;
