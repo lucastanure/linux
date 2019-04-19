@@ -1,7 +1,7 @@
 /*
  * clsic-vox.c -- ALSA SoC CLSIC VOX
  *
- * Copyright (C) 2015-2018 Cirrus Logic, Inc. and
+ * Copyright (C) 2015-2019 Cirrus Logic, Inc. and
  *			   Cirrus Logic International Semiconductor Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -798,6 +798,45 @@ static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
 };
 
 /**
+ * vox_msgproc_use() - limit the number of calls to power management use
+ * @vox:	The instance of struct clsic_vox used in this driver.
+ *
+ * Use an internal reference count to ensure that CLSIC is only marked in use
+ * when required by the driver and multiple calls are not made unnecessarily.
+ */
+static void vox_msgproc_use(struct clsic_vox *vox)
+{
+	trace_clsic_vox_msgproc(true, vox->msgproc_refcount);
+
+	mutex_lock(&vox->handler_mutex);
+	if (vox->msgproc_refcount == 0)
+		clsic_msgproc_use(vox->clsic, vox->service->service_instance);
+	vox->msgproc_refcount++;
+	mutex_unlock(&vox->handler_mutex);
+}
+
+/**
+ * vox_msgproc_release() - limit the number of calls to power management release
+ * @vox:	The instance of struct clsic_vox used in this driver.
+ *
+ * Use an internal reference count to ensure that CLSIC is only marked as not in
+ * use when no elements of this driver are using it.
+ */
+static void vox_msgproc_release(struct clsic_vox *vox)
+{
+	mutex_lock(&vox->handler_mutex);
+	if (vox->msgproc_refcount > 0) {
+		vox->msgproc_refcount--;
+		if (vox->msgproc_refcount == 0)
+			clsic_msgproc_release(vox->clsic,
+					      vox->service->service_instance);
+	}
+	mutex_unlock(&vox->handler_mutex);
+
+	trace_clsic_vox_msgproc(false, vox->msgproc_refcount);
+}
+
+/**
  * vox_set_pm_from_mode() - set power management options using the CLSIC mode
  * @vox:	The main instance of struct clsic_vox used in this driver.
  * @new_mode:	New CLSIC mode to change to.
@@ -811,13 +850,10 @@ static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
 	    (new_mode == CLSIC_VOX_MODE_LISTEN)) {
 		if ((vox->clsic_mode != CLSIC_VOX_MODE_IDLE) &&
 		    (vox->clsic_mode != CLSIC_VOX_MODE_LISTEN)) {
-			clsic_msgproc_release(vox->clsic,
-					vox->service->service_instance);
+			vox_msgproc_release(vox);
 		}
-	} else {
-		clsic_msgproc_use(vox->clsic,
-				  vox->service->service_instance);
-	}
+	} else
+		vox_msgproc_use(vox);
 }
 
 /**
@@ -2510,7 +2546,7 @@ static int vox_notification_handler(struct clsic *clsic,
 		 * Prevent the messaging processor from being powered off while
 		 * streaming
 		 */
-		clsic_msgproc_use(clsic, vox->service->service_instance);
+		vox_msgproc_use(vox);
 
 		if (msg_nty->nty_trgr_detect.biom_flags == 0)
 			/* No biometrics possible. */
@@ -2779,8 +2815,10 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
 	mutex_init(&vox->drv_state_lock);
-
 	INIT_WORK(&vox->drv_state_work, vox_drv_state_handler);
+
+	mutex_init(&vox->handler_mutex);
+	vox->msgproc_refcount = 0;
 
 	init_completion(&vox->asr_stream.completion);
 	mutex_init(&vox->asr_stream.stream_lock);

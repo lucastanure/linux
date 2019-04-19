@@ -398,6 +398,24 @@ DEFINE_EVENT(clsic_vox_generic, clsic_vox_factory_reset,
 	TP_ARGS(dummy)
 );
 
+TRACE_EVENT(clsic_vox_msgproc,
+	TP_PROTO(uint8_t use_release, int refcount),
+	TP_ARGS(use_release, refcount),
+	TP_STRUCT__entry(
+			__field(uint8_t, use_release)
+			__field(int, refcount)
+			),
+	TP_fast_assign(
+			__entry->use_release = use_release;
+			__entry->refcount = refcount;
+		),
+	TP_printk("%s %d)",
+		  __entry->use_release ? "use, initial refcount" :
+					 "release, final refcount",
+		  __entry->refcount
+		)
+);
+
 #endif /* CLSIC_VOX_TRACE_H */
 
 /* This part must be outside protection */

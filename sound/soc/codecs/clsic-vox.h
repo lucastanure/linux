@@ -133,6 +133,16 @@ struct clsic_vox {
 	unsigned int drv_state;
 	/* Which mode CLSIC is in. */
 	enum clsic_vox_mode clsic_mode;
+
+	/*
+	 * Mutex to guard the testing and changing of clsic_vox structure
+	 * variables.
+	 */
+	struct mutex handler_mutex;
+
+	/* Protect calls to msgproc functions with a reference count */
+	int msgproc_refcount;
+
 	/* error_info for showing result of a top level control mode change. */
 	unsigned int error_info;
 	unsigned int asset_type;
