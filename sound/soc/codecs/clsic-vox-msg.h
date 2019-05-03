@@ -29,7 +29,7 @@
 /**
  *  Service version number.
  */
-#define CLSIC_SRV_VERSION_VOX		(0x00050002)
+#define CLSIC_SRV_VERSION_VOX		(0x01010001)
 
 /**
  *  VOX Service message identifiers.
@@ -51,6 +51,11 @@ enum clsic_vox_msg_id {
 		CLSIC_GBL_MSG_CR_GET_DI_PAGE_COUNT,
 	CLSIC_VOX_MSG_CR_GET_DEBUG_INFO		=
 		CLSIC_GBL_MSG_CR_GET_DEBUG_INFO,
+
+	/**
+	 *  VOX messages only available in idle mode.
+	 */
+	CLSIC_VOX_MSG_CR_FACTORY_RESET = 38,
 
 	/**
 	 *  VOX Messages for Enrol mode.
@@ -93,7 +98,6 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED = 35,
 	CLSIC_VOX_MSG_CR_GET_K2_PUB_KEY		= 36,
 	CLSIC_VOX_MSG_CR_SET_HOST_KVPP_KEY	= 37,
-	CLSIC_VOX_MSG_CR_FACTORY_RESET		= 38,
 };
 
 /**
@@ -205,22 +209,22 @@ enum clsic_vox_max_auth_result_count {
  */
 enum clsic_vox_auth_result_format {
 	/**
-	 *  If this Flag is used then result will be in the foramt
+	 *  If this Flag is used then result will be in the format
 	 *  specified by struct clsic_vox_auth_result
 	 */
 	CLSIC_VOX_AUTH_RESULT_CLASSIC	= 0x0,
 
 	/**
-	 *  If this Flag is used then result will be in the foramt
+	 *  If this Flag is used then result will be in the format
 	 *  specified by struct clsic_vox_auth_result_ex
 	 */
 	CLSIC_VOX_AUTH_RESULT_EXTENDED	= 0x1,
 
 	/**
-	 *  If this Flag is used then result will be in the foramt
-	 *  specified by struct clsic_vox_auth_result_ex2
+	 *  If this Flag is used then result will be in the format
+	 *  specified by struct clsic_vox_hw_auth_token
 	 */
-	CLSIC_VOX_AUTH_RESULT_EXTENDED2 = 0x2,
+	CLSIC_VOX_AUTH_RESULT_HW_AUTH_TOKEN = 0x2,
 };
 
 /**
@@ -257,9 +261,19 @@ struct clsic_vox_auth_challenge {
 	uint8_t nonce[16];
 } PACKED;
 
+
 /**
- *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
- *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_CLASSIC
+ *  This is the core part of the biometric result that is sent out in
+ *  bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER bulk response.
+ *
+ *  .result_format conveys the exact format of the result i.e.
+ *  CLSIC_VOX_AUTH_RESULT_CLASSIC (or) CLSIC_VOX_AUTH_RESULT_EXTENDED.
+ *
+ *  .nonce is the 16 byte challenge that is sent by host as a part of
+ *  CLSIC_VOX_MSG_CR_AUTH_USER command.
+ *
+ *  .security_lvl conveys one of the 3 security levels at which host had
+ *  requested the result using CLSIC_VOX_MSG_CR_AUTH_USER command.
  *
  *  If result_count is greater than CLSIC_VOX_MAX_AUTH_RESULT_COUNT
  *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
@@ -269,22 +283,37 @@ struct clsic_vox_auth_challenge {
  *  Results are sorted in ascending order of time i.e. start_frame[i+1]
  *  will be greater than end_frame[i].
  *
+ *  .userid[i] conveys the id of the user identified in each audio section
+ *  defined by start_frame[i] and end_frame[i]
+ *
+ *  .sha contains the 256 bit sha of the audio samples used to generate
+ *  each result.
+ *
  *  The "secure_audio_src" field is a bit field where each of bits [0:9] are
  *  used to represent the security of each result segment. 0 means that the
  *  audio for the segment was sourced from a non-secure audio source. 1 means
  *  that the audio for the segment was sourced from a secure audio source.
  */
-struct clsic_vox_auth_result {
+struct clsic_vox_auth_result_core {
+	uint8_t result_format;
 	uint8_t nonce[16];
 	uint8_t security_lvl;
 	int32_t result_count;
 	int32_t start_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
 	int32_t end_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
 	uint8_t userid[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	float score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
+	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
 	uint16_t secure_audio_src;
-	uint8_t pad1[7];
+} PACKED;
+
+/**
+ *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
+ *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_CLASSIC
+ *
+ */
+struct clsic_vox_auth_result {
+	struct clsic_vox_auth_result_core core;
+	uint8_t pad1[14];
 	uint8_t signature[74];
 	uint8_t pad2[2];
 } PACKED;
@@ -293,83 +322,19 @@ struct clsic_vox_auth_result {
  *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
  *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_EXTENDED
  *
- *  If result_count is greater than CLSIC_VOX_MAX_AUTH_RESULT_COUNT
- *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
- *  in the below structure else result_count number of results will be
- *  available.
- *
- *  Results are sorted in ascending order of time i.e. start_frame[i+1]
- *  will be greater than end_frame[i].
- *
- *  The "secure_audio_src" field is a bit field where each of bits [0:9] are
- *  used to represent the security of each result segment. 0 means that the
- *  audio for the segment was sourced from a non-secure audio source. 1 means
- *  that the audiofor the segment was sourced from a secure audio source.
- *
- *  In the extended result format score will be included for all installed
- *  users even if no user was identified
- */
-struct clsic_vox_auth_result_ex {
-	uint8_t nonce[16];
-	uint8_t security_lvl;
-	int32_t result_count;
-	int32_t start_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	int32_t end_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
-	uint8_t userid[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	float score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint16_t secure_audio_src;
-	uint8_t pad1[23];
-	uint8_t signature[74];
-	uint8_t pad2[2];
-} PACKED;
-
-/**
- *  Bulk part of the CLSIC_VOX_MSG_CR_AUTH_USER response when
- *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_EXTENDED2
- *
- *  If result_count is greater than CLSIC_VOX_MAX_AUTH_RESULT_COUNT
- *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
- *  in the below structure else result_count number of results will be
- *  available.
- *
- *  Results are sorted in ascending order of time i.e. start_frame[i+1]
- *  will be greater than end_frame[i].
- *
- *  The "secure_audio_src" field is a bit field where each of bits [0:9] are
- *  used to represent the security of each result segment. 0 means that the
- *  audio for the segment was sourced from a non-secure audio source. 1 means
- *  that the audio for the segment was sourced from a secure audio source.
- *
- *  In the extended2 result format biometric scores and antispoofing scores
- *  will be included for all installed users even if no user was identified.
- *
- *  .userid would give the identified user if any, by only considering the
- *  biometric score given by .score
+ *  .score gives scores for all installed users even if no user was identified
  *
  *  If .is_spoof is set that would mean that user identified in .userid may
  *  be because of spoof or recorded audio rather than real live audio spoken
- *  by a person
- *
+ *  by a person and .as_score gives the raw score of the antispoofing algorithm
  */
-struct clsic_vox_auth_result_ex2 {
-	uint8_t nonce[16];
-	uint8_t security_lvl;
-	int32_t result_count;
-	int32_t start_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	int32_t end_frame[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
-	uint8_t sha[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][32];
-	uint8_t userid[CLSIC_VOX_MAX_AUTH_RESULT_COUNT];
+struct clsic_vox_auth_result_ex {
+	struct clsic_vox_auth_result_core core;
 	float score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
 	uint8_t is_spoof[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint8_t as_result1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	float as_score1[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint8_t as_result2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	float as_score2[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
-	uint16_t secure_audio_src;
-	uint8_t pad1[13];
+	float as_score[CLSIC_VOX_MAX_AUTH_RESULT_COUNT][3];
 	uint8_t signature[74];
-	uint8_t pad2[2];
+	uint8_t pad[2];
 } PACKED;
 
 /**
@@ -408,6 +373,77 @@ struct clsic_vox_biovte_map_entry {
 struct clsic_vox_biovte_map {
 	uint32_t cnt;
 	struct clsic_vox_biovte_map_entry map[0];
+} PACKED;
+
+/**
+ *  Bulk part of CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN command.
+ *
+ *  In order to send a Security package Host and Clsic must have
+ *  previously exchanged their public keys using GET_K2_PUB_KEY
+ *  and SET_HOST_KVPP_KEY messages.
+ *
+ *  Host first encrypts the security package. Everything starting
+ *  from .timestamp and up to and including .hmac_key is encrypted
+ *  using ECDH cryptography. ECDH requires an ephemeral key which
+ *  gets generated at the host and public part of it gets conveyed
+ *  to Clsic in .eph_key as plain (unencrypted) text.
+ *
+ *  After encrypting Host signs the security package. Everything
+ *  starting from .eph_key and up to and including .pad1 is signed
+ *  and the resulting signature is put in .signature
+ *
+ */
+struct clsic_vox_security_package {
+	uint8_t  eph_key[33];
+	uint64_t timestamp;
+	uint8_t  hmac_key[32];
+	uint8_t  pad1[23];
+	uint8_t  signature[74];
+	uint8_t  pad2[2];
+} PACKED;
+
+/**
+ *  Bulk part of the CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN response.
+ */
+struct clsic_vox_install_usr_challenge {
+	uint64_t challenge;
+} PACKED;
+
+/**
+ *  Bulk part of CLSIC_VOX_MSG_CR_REP_START.
+ *
+ *  (or)
+ *
+ *  Bulk part of CLSIC_VOX_MSG_CR_AUTH_USER response, when
+ *  blkcmd_auth_user.result_format is CLSIC_VOX_AUTH_RESULT_HW_AUTH_TOKEN
+ *
+ *  This is a standard android hardware authentication token described at
+ *  https://source.android.com/security/authentication
+ *
+ *  The hmac in the token is generated using the hmac_key previously conveyed to
+ *  clsic as a part of clsic_vox_security_package.
+ *
+ */
+struct clsic_vox_hw_auth_token {
+	uint8_t version;
+	uint64_t challenge;
+	uint64_t suid;
+	uint64_t auth_id;
+	uint32_t auth_type;
+	uint64_t timestamp;
+	uint8_t hmac[32];
+	uint8_t pad[3];
+} PACKED;
+
+
+/**
+ *  Bulk part of CLSIC_VOX_MSG_CR_AUTH_USER command when
+ *  blkcmd_auth_user.result_format is
+ *  CLSIC_VOX_AUTH_RESULT_HW_AUTH_TOKEN
+ */
+struct clsic_vox_hw_auth_challenge {
+	struct clsic_vox_security_package sp;
+	uint64_t challenge;
 } PACKED;
 
 /**
@@ -549,31 +585,27 @@ union clsic_vox_msg {
 	 *  CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN command structure.
 	 */
 	struct {
-		struct clsic_cmd_hdr hdr;
+		struct clsic_blkcmd_hdr hdr;
 		uint8_t userid;
-		struct {
-			uint8_t phraseid;
-			uint8_t rep_count;
-			union {
-				uint16_t duration_ms;
-				uint16_t timeout_ms;
-			} PACKED;
-		} PACKED phrase[2];
-	} PACKED cmd_install_user_begin;
+		uint8_t phraseid[2];
+		uint16_t timeout_ms;
+	} PACKED blkcmd_install_user_begin;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_INSTALL_USER_BEGIN response structure.
 	 */
 	struct {
-		struct clsic_rsp_hdr hdr;
-	} PACKED rsp_install_user_begin;
+		struct clsic_blkrsp_hdr hdr;
+		uint16_t duration_ms;
+		uint8_t rep_count;
+	} PACKED blkrsp_install_user_begin;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_REP_START command structure.
 	 */
 	struct {
-		struct clsic_cmd_hdr hdr;
-	} PACKED cmd_rep_start;
+		struct clsic_blkcmd_hdr hdr;
+	} PACKED blkcmd_rep_start;
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_REP_START response structure.
