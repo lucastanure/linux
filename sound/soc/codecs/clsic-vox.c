@@ -2780,6 +2780,10 @@ static int vox_notification_handler(struct clsic *clsic,
 		complete(&vox->new_bio_results_completion);
 
 		break;
+	case CLSIC_VOX_MSG_N_RATE_LIMITED:
+		clsic_err(vox->clsic, "Rate limited detected\n");
+		clsic_vox_ratelimit(vox);
+		break;
 	default:
 		clsic_err(clsic, "unrecognised message with message ID %d\n",
 			  msgid);
