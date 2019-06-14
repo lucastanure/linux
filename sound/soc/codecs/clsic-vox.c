@@ -1842,12 +1842,12 @@ static void vox_complete_enrolment(struct clsic_vox *vox)
 }
 
 /**
- * vox_get_bio_results() - get biometric results from CLSIC
+ * vox_perform_auth_user() - get biometric results from CLSIC
  * @vox:	The main instance of struct clsic_vox used in this driver.
  *
- * Request biometric results from CLSIC. This function will be called once
+ * Request biometric results from CLSIC.
  */
-static void vox_get_bio_results(struct clsic_vox *vox)
+static void vox_perform_auth_user(struct clsic_vox *vox)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1858,25 +1858,9 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 	struct clsic_vox_hw_auth_challenge auth_challenge;
 	int ret;
 
-	trace_clsic_vox_get_bio_results(0);
+	trace_clsic_vox_perform_auth_user(0);
 
 	memset(&vox->biometric_results, 0, sizeof(union bio_results_u));
-
-	/*
-	 * Firstly wait for CLSIC to notify us of new results (if there has
-	 * been no previous error)
-	 */
-	if (vox->auth_error == CLSIC_ERR_NONE) {
-		if (wait_for_completion_timeout(
-					  &vox->new_bio_results_completion,
-					  VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT
-					  ) == 0) {
-			clsic_err(vox->clsic, "Completion timeout.\n");
-			vox->error_info = VOX_ERROR_DRIVER;
-			return;
-		}
-	}
-	reinit_completion(&vox->new_bio_results_completion);
 
 	switch (vox->auth_error) {
 	case CLSIC_ERR_NONE:
@@ -1959,6 +1943,37 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 		vox->clsic_error_code = msg_rsp.rsp_auth_user.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 	}
+}
+
+/**
+ * vox_get_bio_results() - wait for new biometric results from CLSIC and
+ *			   receive them
+ *
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * Wait until new biometric results are available from CLSIC and then read them
+ */
+static void vox_get_bio_results(struct clsic_vox *vox)
+{
+	trace_clsic_vox_get_bio_results(0);
+
+	/*
+	 * Firstly wait for CLSIC to notify us of new results (if there has
+	 * been no previous error)
+	 */
+	if (vox->auth_error == CLSIC_ERR_NONE) {
+		if (wait_for_completion_timeout(
+					  &vox->new_bio_results_completion,
+					  VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT
+					  ) == 0) {
+			clsic_err(vox->clsic, "Completion timeout.\n");
+			vox->error_info = VOX_ERROR_DRIVER;
+			return;
+		}
+	}
+	reinit_completion(&vox->new_bio_results_completion);
+
+	vox_perform_auth_user(vox);
 }
 
 /**

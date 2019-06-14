@@ -425,6 +425,11 @@ TRACE_EVENT(clsic_vox_ratelimit_waiter,
 		 )
 );
 
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_perform_auth_user,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
 #endif /* CLSIC_VOX_TRACE_H */
 
 /* This part must be outside protection */
