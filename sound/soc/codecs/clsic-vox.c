@@ -2604,7 +2604,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_mode);
-	int ret = 0;
+	int ret = -EBUSY;
 
 	if (ucontrol->value.enumerated.item[0] == vox->drv_state)
 		return 0;
@@ -2616,10 +2616,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
 			vox_set_idle_and_state(vox, false,
 					VOX_DRV_STATE_GETTING_BIO_RESULTS);
-			mutex_unlock(&vox->drv_state_lock);
-		} else {
-			mutex_unlock(&vox->drv_state_lock);
-			ret = -EBUSY;
+			ret = 0;
 		}
 		break;
 	case VOX_DRV_STATE_INSTALL_ASSET:
@@ -2635,10 +2632,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			 */
 			vox_set_idle_and_state(vox, false,
 				ucontrol->value.enumerated.item[0] + 1);
-			mutex_unlock(&vox->drv_state_lock);
-		} else {
-			mutex_unlock(&vox->drv_state_lock);
-			ret = -EBUSY;
+			ret = 0;
 		}
 		break;
 	case VOX_DRV_STATE_PERFORM_ENROL_REP:
@@ -2646,10 +2640,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		if (vox->drv_state == VOX_DRV_STATE_ENROLLING) {
 			vox_set_idle_and_state(vox, false,
 				ucontrol->value.enumerated.item[0] + 1);
-			mutex_unlock(&vox->drv_state_lock);
-		} else {
-			mutex_unlock(&vox->drv_state_lock);
-			ret = -EBUSY;
+			ret = 0;
 		}
 		break;
 	case VOX_DRV_STATE_TERMINATE_ENROL:
@@ -2657,16 +2648,13 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP)) {
 			vox_set_idle_and_state(vox, false,
 				ucontrol->value.enumerated.item[0] + 1);
-			mutex_unlock(&vox->drv_state_lock);
-		} else {
-			mutex_unlock(&vox->drv_state_lock);
-			ret = -EBUSY;
+			ret = 0;
 		}
 		break;
 	default:
-		mutex_unlock(&vox->drv_state_lock);
 		ret = -EINVAL;
 	}
+	mutex_unlock(&vox->drv_state_lock);
 
 	if (ret == 0) {
 		if (schedule_work(&vox->drv_state_work) == false) {
