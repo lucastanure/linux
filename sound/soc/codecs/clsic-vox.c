@@ -2377,55 +2377,6 @@ static int vox_ctrl_bio_res_blob(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_k2_pub_key_get() - obtain the public K2 key of CLSIC
- * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
- * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
- *
- * Allow userspace to get CLSIC's K2 key.
- *
- * Return: 0 always.
- */
-static int vox_ctrl_k2_pub_key_get(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_bytes_ext *s_bytes_k2_pub_key =
-		(struct soc_bytes_ext *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(s_bytes_k2_pub_key, struct clsic_vox,
-			     s_bytes_k2_pub_key);
-
-	memcpy(ucontrol->value.bytes.data, &vox->k2_pub_key,
-	       s_bytes_k2_pub_key->max);
-
-	return 0;
-}
-
-/**
- * vox_ctrl_kvp_pub_key_put() - set the voiceprint proxy public key on CLSIC
- * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
- * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
- *
- * Sets the KVP public key which can be later used by the appropriate driver
- * state command to program it into CLSIC (assuming one does not already exist).
- *
- * Return: 0 always.
- */
-static int vox_ctrl_kvp_pub_key_put(struct snd_kcontrol *kcontrol,
-				    struct snd_ctl_elem_value *ucontrol)
-{
-	struct soc_bytes_ext *s_bytes_kvp_pub_key =
-		(struct soc_bytes_ext *) kcontrol->private_value;
-	struct clsic_vox *vox =
-		container_of(s_bytes_kvp_pub_key, struct clsic_vox,
-			     s_bytes_kvp_pub_key);
-
-	memcpy(&vox->kvp_pub_key, ucontrol->value.bytes.data,
-	       s_bytes_kvp_pub_key->max);
-
-	return 0;
-}
-
-/**
  * vox_ctrl_asset_installed_get() - find out if a particular asset is installed
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
@@ -3197,30 +3148,18 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	if (ret != 0)
 		return ret;
 
-	vox->s_bytes_k2_pub_key.max = sizeof(struct clsic_vox_k2_pub_key);
-	vox->kcontrol_new[ctl_id].name = "Vox K2 Public Key";
-	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
-	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	vox->kcontrol_new[ctl_id].get = vox_ctrl_k2_pub_key_get;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox K2 Public Key",
+			     &vox->s_bytes_k2_pub_key, &vox->k2_pub_key,
+			     sizeof(struct clsic_vox_k2_pub_key));
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
-	vox->kcontrol_new[ctl_id].private_value =
-				(unsigned long) &vox->s_bytes_k2_pub_key;
-	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
-					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
 	memset(&vox->kvp_pub_key, 0, sizeof(struct clsic_vox_host_kvpp_key));
 
-	vox->s_bytes_kvp_pub_key.max = sizeof(struct clsic_vox_host_kvpp_key);
-	vox->kcontrol_new[ctl_id].name = "Vox KVP Public Key";
-	vox->kcontrol_new[ctl_id].info = snd_soc_bytes_info_ext;
-	vox->kcontrol_new[ctl_id].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox KVP Public Key",
+			     &vox->s_bytes_kvp_pub_key, &vox->kvp_pub_key,
+			     sizeof(struct clsic_vox_host_kvpp_key));
 	vox->kcontrol_new[ctl_id].get = vox_ctrl_dummy;
-	vox->kcontrol_new[ctl_id].put = vox_ctrl_kvp_pub_key_put;
-	vox->kcontrol_new[ctl_id].private_value =
-				(unsigned long) &vox->s_bytes_kvp_pub_key;
-	vox->kcontrol_new[ctl_id].access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
-					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
 	vox->barge_in_status = VOX_BARGE_IN_DISABLED;
