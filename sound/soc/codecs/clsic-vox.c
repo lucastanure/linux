@@ -3195,6 +3195,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			    &vox->reps_mixer_ctrl,
 			    vox,
 			    &vox->number_of_reps);
+	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;
 	vox->security_level = VOX_SEC_LEVEL_LOW;
