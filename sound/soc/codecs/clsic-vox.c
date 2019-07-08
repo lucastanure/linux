@@ -89,7 +89,9 @@ static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
 	vox->scc_cap_preamble_ms = 0;
 	vox->scc_status &= (~VTE1_ACTIVE);
 
+	mutex_lock(&vox->drv_state_lock);
 	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	mutex_unlock(&vox->drv_state_lock);
 }
 
 /**
@@ -721,6 +723,7 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 		container_of(asr_stream, struct clsic_vox, asr_stream);
 	struct clsic *clsic = vox->clsic;
 
+	/* XXX this is checking state without taking vox->drv_state_lock */
 	if ((vox->drv_state != VOX_DRV_STATE_STREAMING) &&
 	    (vox->drv_state != VOX_DRV_STATE_GETTING_BIO_RESULTS)) {
 		clsic_err(clsic, "ASR not streaming yet.\n");
@@ -995,6 +998,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
  * IDLE mode, setting the internal driver state and then notifying userspace
  * (i.e. waking the poll) that something has changed (usually meant to imply
  * that the error control node has changed value).
+ *
+ * vox->drv_state_lock MUST be held
  */
 static void vox_set_idle_and_state(struct clsic_vox *vox,
 				   bool set_clsic_to_idle,
@@ -2082,6 +2087,7 @@ static void vox_drv_state_handler(struct work_struct *data)
 	struct clsic *clsic = vox->clsic;
 	int new_drv_state = VOX_DRV_STATE_NEUTRAL;
 
+	mutex_lock(&vox->drv_state_lock);
 	switch (vox->drv_state) {
 	case VOX_DRV_STATE_INSTALLING_ASSET:
 		vox_install_asset(vox);
@@ -2123,6 +2129,7 @@ static void vox_drv_state_handler(struct work_struct *data)
 		vox_factory_reset(vox);
 		break;
 	default:
+		mutex_unlock(&vox->drv_state_lock);
 		clsic_err(clsic, "unknown state %d for scheduled work.\n",
 			  vox->drv_state);
 		return;
@@ -2133,6 +2140,8 @@ static void vox_drv_state_handler(struct work_struct *data)
 				true : false),
 			       new_drv_state);
 	vox_send_userspace_event(vox);
+
+	mutex_unlock(&vox->drv_state_lock);
 }
 
 /**
@@ -2193,6 +2202,10 @@ static int vox_ctrl_int_get(struct snd_kcontrol *kcontrol,
  * generic function to allow userspace to set the relevant internal variable
  * existing in the driver vox struct.
  *
+ * Controls written to by this handler are only writable when the service
+ * handler is in the neutral driver state. (When there is an action in progress
+ * the controls are read only)
+ *
  * Return: errno.
  */
 static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
@@ -2201,14 +2214,18 @@ static int vox_ctrl_int_put(struct snd_kcontrol *kcontrol,
 	struct soc_mixer_control *e =
 			(struct soc_mixer_control *) kcontrol->private_value;
 	struct vox_value *vv = (struct vox_value *) e->dobj.private;
+	struct clsic_vox *vox = vv->vox;
+	int ret = -EBUSY;
 
-	if (vv->vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
+	mutex_lock(&vox->drv_state_lock);
+	if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
 		*(unsigned int *) vv->value =
 					ucontrol->value.enumerated.item[0];
-		return 0;
+		ret = 0;
 	}
+	mutex_unlock(&vox->drv_state_lock);
 
-	return -EBUSY;
+	return ret;
 }
 
 /**
@@ -2546,14 +2563,25 @@ static int vox_ctrl_barge_in_put(struct snd_kcontrol *kcontrol,
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_barge_in);
+	bool update_barge_in;
+	int ret = 0;
 
 	vox->barge_in_status = ucontrol->value.enumerated.item[0];
 
-	/* Only set barge-in now if CLSIC is already doing something. */
-	if (vox->drv_state != VOX_DRV_STATE_NEUTRAL)
-		return vox_update_barge_in(vox);
+	/*
+	 * Update the barge-in state immediately when CLSIC is not neutral -
+	 * the lock cannot be held over the call to vox_update_barge_in as it
+	 * may cause an immediate notification and the handler will take the
+	 * drv_state_lock (causing a deadlock)
+	 */
+	mutex_lock(&vox->drv_state_lock);
+	update_barge_in = (vox->drv_state != VOX_DRV_STATE_NEUTRAL);
+	mutex_unlock(&vox->drv_state_lock);
 
-	return 0;
+	if (update_barge_in)
+		ret = vox_update_barge_in(vox);
+
+	return ret;
 }
 
 /**
@@ -2575,20 +2603,23 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	struct soc_enum *e = (struct soc_enum *) kcontrol->private_value;
 	struct clsic_vox *vox =
 		container_of(e, struct clsic_vox, soc_enum_mode);
+	int requested_state = ucontrol->value.enumerated.item[0];
+	int new_state;
 	int ret = -EBUSY;
-
-	if (ucontrol->value.enumerated.item[0] == vox->drv_state)
-		return 0;
 
 	mutex_lock(&vox->drv_state_lock);
 
-	switch (ucontrol->value.enumerated.item[0]) {
+	if (requested_state == vox->drv_state) {
+		mutex_unlock(&vox->drv_state_lock);
+		return 0;
+	}
+
+	new_state = vox->drv_state;
+
+	switch (requested_state) {
 	case VOX_DRV_STATE_GET_BIO_RESULTS:
-		if (vox->drv_state == VOX_DRV_STATE_STREAMING) {
-			vox_set_idle_and_state(vox, false,
-					VOX_DRV_STATE_GETTING_BIO_RESULTS);
-			ret = 0;
-		}
+		if (vox->drv_state == VOX_DRV_STATE_STREAMING)
+			new_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
 		break;
 	case VOX_DRV_STATE_INSTALL_ASSET:
 	case VOX_DRV_STATE_UNINSTALL_ASSET:
@@ -2596,35 +2627,32 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_START_ENROL:
 	case VOX_DRV_STATE_WRITE_KVP_PUB:
 	case VOX_DRV_STATE_PERFORM_FACTORY_RESET:
-		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
-			/*
-			 * Management mode goes from command
-			 * e.g. INSTALL to a state e.g. INSTALLING
-			 */
-			vox_set_idle_and_state(vox, false,
-				ucontrol->value.enumerated.item[0] + 1);
-			ret = 0;
-		}
+		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL)
+			new_state = requested_state + 1;
 		break;
 	case VOX_DRV_STATE_PERFORM_ENROL_REP:
 	case VOX_DRV_STATE_COMPLETE_ENROL:
-		if (vox->drv_state == VOX_DRV_STATE_ENROLLING) {
-			vox_set_idle_and_state(vox, false,
-				ucontrol->value.enumerated.item[0] + 1);
-			ret = 0;
-		}
+		if (vox->drv_state == VOX_DRV_STATE_ENROLLING)
+			new_state = requested_state + 1;
 		break;
 	case VOX_DRV_STATE_TERMINATE_ENROL:
 		if ((vox->drv_state == VOX_DRV_STATE_ENROLLING) ||
-		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP)) {
-			vox_set_idle_and_state(vox, false,
-				ucontrol->value.enumerated.item[0] + 1);
-			ret = 0;
-		}
+		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP))
+			new_state = requested_state + 1;
 		break;
 	default:
 		ret = -EINVAL;
 	}
+
+	/*
+	 * if the requested_state caused new_state to change then it will be
+	 * different to the drv_state
+	 */
+	if (new_state != vox->drv_state) {
+		vox_set_idle_and_state(vox, false, new_state);
+		ret = 0;
+	}
+
 	mutex_unlock(&vox->drv_state_lock);
 
 	if (ret == 0) {
@@ -2638,9 +2666,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	} else
 		clsic_err(vox->codec,
 			  "unable to switch from vox driver state %d to %d (error %d).\n",
-			  vox->drv_state,
-			  ucontrol->value.enumerated.item[0],
-			  ret);
+			  vox->drv_state, requested_state, ret);
 	return ret;
 }
 
@@ -2715,7 +2741,9 @@ static int vox_notification_handler(struct clsic *clsic,
 			vox->error_info = VOX_ERROR_CLSIC;
 		}
 
+		mutex_lock(&vox->drv_state_lock);
 		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
+		mutex_unlock(&vox->drv_state_lock);
 		vox_send_userspace_event(vox);
 
 		break;
