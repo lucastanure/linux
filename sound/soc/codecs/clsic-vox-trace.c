@@ -62,5 +62,4 @@ const char *clsic_vox_mode_to_string(enum clsic_states state)
 	default:
 		return "UNKNOWN";
 	}
-	return "UNKNOWN";
 }
