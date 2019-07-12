@@ -1135,12 +1135,13 @@ static int vox_update_bins(struct clsic_vox *vox)
 /**
  * vox_update_map() - update internal cache of map installation state
  * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @mapid:	The clsic_vox_biovtemapid to check
  *
  * Query CLSIC to find out whether a map file is installed.
  *
  * Return: errno.
  */
-static int vox_update_map(struct clsic_vox *vox)
+static int vox_update_map(struct clsic_vox *vox, uint8_t mapid)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
@@ -1151,6 +1152,8 @@ static int vox_update_map(struct clsic_vox *vox)
 			       vox->service->service_instance,
 			       CLSIC_VOX_MSG_CR_IS_BIOVTE_MAP_INSTALLED))
 		return -EINVAL;
+
+	msg_cmd.cmd_is_biovte_map_installed.mapid = mapid;
 
 	ret = clsic_send_msg_sync_pm(vox->clsic,
 				  (union t_clsic_generic_message *) &msg_cmd,
@@ -1164,10 +1167,10 @@ static int vox_update_map(struct clsic_vox *vox)
 
 	switch (msg_rsp.rsp_is_biovte_map_installed.hdr.err) {
 	case CLSIC_ERR_NONE:
-		vox->bio_vte_map_installed = true;
+		vox->bio_vte_map_installed[mapid] = true;
 		break;
 	case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
-		vox->bio_vte_map_installed = false;
+		vox->bio_vte_map_installed[mapid] = false;
 		break;
 	default:
 		clsic_err(vox->clsic,
@@ -1199,7 +1202,11 @@ static int vox_update_assets_status(struct clsic_vox *vox)
 	if (ret)
 		return ret;
 
-	return vox_update_map(vox);
+	ret = vox_update_map(vox, CLSIC_VOX_BIOVTE_MAP);
+	if (ret)
+		return ret;
+
+	return vox_update_map(vox, CLSIC_VOX_BIOVTE_MAP_P);
 }
 
 /**
@@ -1323,6 +1330,8 @@ static int phrase_id_from_enum(int enum_value)
 		return CLSIC_VOX_PHRASE_VDT1;
 	else if (enum_value == VOX_PHRASE_VDT2)
 		return CLSIC_VOX_PHRASE_VDT2;
+	else if (enum_value == VOX_PHRASE_SECURE)
+		return CLSIC_VOX_PHRASE_SECURE;
 	else /* enum_value == VOX_PHRASE_TI */
 		return CLSIC_VOX_PHRASE_TI;
 }
@@ -1343,6 +1352,7 @@ static void vox_install_asset(struct clsic_vox *vox)
 	char file[VOX_ASSET_TYPE_NAME_MAX_LEN];
 	int id = -1;
 	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
+	uint8_t mapid = CLSIC_VOX_BIOVTE_MAP;
 	int ret;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1360,10 +1370,11 @@ static void vox_install_asset(struct clsic_vox *vox)
 
 	if (vox->asset_type == VOX_ASSET_TYPE_PHRASE)
 		id = phrase_id;
-	else if (vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP)
+	else if ((vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP) &&
+		 (vox->asset_type != VOX_ASSET_TYPE_BIO_VTE_MAP_P))
 		id = vox->bin_id;
 
-	trace_clsic_vox_install_asset(file, id);
+	trace_clsic_vox_install_asset(file, id, vox->asset_type);
 
 	ret = request_firmware(&fw, file, clsic->dev);
 	if (ret) {
@@ -1404,6 +1415,9 @@ static void vox_install_asset(struct clsic_vox *vox)
 		msg_cmd.blkcmd_install_bin.hdr.bulk_sz = fw->size;
 		msg_cmd.blkcmd_install_bin.binid = vox->bin_id;
 		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP_P:
+		mapid = CLSIC_VOX_BIOVTE_MAP_P;
+		/* FALLTHROUGH */
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
 		ret = clsic_init_message((union t_clsic_generic_message *)
 					 &msg_cmd,
@@ -1413,6 +1427,8 @@ static void vox_install_asset(struct clsic_vox *vox)
 			goto exit_withrelease;
 
 		msg_cmd.blkcmd_install_biovte_map.hdr.bulk_sz = fw->size;
+		msg_cmd.blkcmd_install_biovte_map.mapid = mapid;
+
 		break;
 	}
 
@@ -1454,8 +1470,9 @@ static void vox_install_asset(struct clsic_vox *vox)
 		}
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+	case VOX_ASSET_TYPE_BIO_VTE_MAP_P:
 		if (msg_rsp.rsp_install_biovte_map.hdr.err == CLSIC_ERR_NONE) {
-			vox->bio_vte_map_installed = true;
+			vox->bio_vte_map_installed[mapid] = true;
 			clsic_dbg(clsic, "successfully installed bin %d.\n",
 				  vox->bin_id);
 			vox->error_info = VOX_ERROR_SUCCESS;
@@ -1486,6 +1503,7 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
 	int phrase_id = phrase_id_from_enum(vox->phrase_id_enum);
+	uint8_t mapid = CLSIC_VOX_BIOVTE_MAP;
 	int ret, usr;
 
 	ret = vox_set_mode(vox, CLSIC_VOX_MODE_MANAGE);
@@ -1520,6 +1538,9 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 		}
 		msg_cmd.cmd_remove_bin.binid = vox->bin_id;
 		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP_P:
+		mapid = CLSIC_VOX_BIOVTE_MAP_P;
+		/* FALLTHROUGH */
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
 		trace_clsic_vox_uninstall_bio_vte_map(0);
 		ret = clsic_init_message((union t_clsic_generic_message *)
@@ -1530,6 +1551,7 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 			vox->error_info = VOX_ERROR_DRIVER;
 			return;
 		}
+		msg_cmd.cmd_remove_biovte_map.mapid = mapid;
 		break;
 	}
 
@@ -1588,13 +1610,14 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 		}
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
+	case VOX_ASSET_TYPE_BIO_VTE_MAP_P:
 		switch (msg_rsp.rsp_remove_biovte_map.hdr.err) {
 		case CLSIC_ERR_NONE:
 		case CLSIC_ERR_BIOVTE_MAP_NOT_INSTALLED:
 			clsic_dbg(clsic,
 				  "successfully uninstalled biometric VTE map %d.\n",
 				  vox->bin_id);
-			vox->bio_vte_map_installed = false;
+			vox->bio_vte_map_installed[mapid] = false;
 			vox->error_info = VOX_ERROR_SUCCESS;
 			break;
 		default:
@@ -2087,6 +2110,44 @@ static void vox_factory_reset(struct clsic_vox *vox)
 }
 
 /**
+ * vox_perform_prompted_auth() - perform a prompted authentication
+ * @vox:	The main instance of struct clsic_vox used in this driver.
+ *
+ * The prompted authentication is similar to the normal triggered
+ * authentication technique, however a single verification is expected in a
+ * limited amount of time.
+ */
+static void vox_perform_prompted_auth(struct clsic_vox *vox)
+{
+	int ret;
+
+	trace_clsic_vox_prompted_auth(0);
+
+	vox_msgproc_use(vox);
+
+	reinit_completion(&vox->new_bio_results_completion);
+	ret = vox_set_mode(vox, CLSIC_VOX_MODE_PROMPT_AUTH);
+	if (ret) {
+		set_error_info(vox, ret);
+		goto exit;
+	}
+
+	/* wait for notification of results */
+	if (wait_for_completion_timeout(&vox->new_bio_results_completion,
+					VOX_PROMPTED_AUTH_COMPLETION_TIMEOUT)
+	    == 0) {
+		clsic_err(vox->clsic, "Results completion timeout.\n");
+		vox->error_info = VOX_ERROR_DRIVER;
+		goto exit;
+	}
+
+	vox_perform_auth_user(vox);
+
+exit:
+	vox_msgproc_release(vox);
+}
+
+/**
  * vox_drv_state_handler() - handle userspace commands from the driver state
  *				control
  * @data:	Used to obtain the main instance of struct clsic_vox used in
@@ -2142,6 +2203,9 @@ static void vox_drv_state_handler(struct work_struct *data)
 		break;
 	case VOX_DRV_STATE_PERFORMING_FACTORY_RESET:
 		vox_factory_reset(vox);
+		break;
+	case VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH:
+		vox_perform_prompted_auth(vox);
 		break;
 	default:
 		mutex_unlock(&vox->drv_state_lock);
@@ -2419,7 +2483,11 @@ static int vox_ctrl_asset_installed_get(struct snd_kcontrol *kcontrol,
 		break;
 	case VOX_ASSET_TYPE_BIO_VTE_MAP:
 		ucontrol->value.integer.value[0] =
-					vox->bio_vte_map_installed;
+			       vox->bio_vte_map_installed[CLSIC_VOX_BIOVTE_MAP];
+		break;
+	case VOX_ASSET_TYPE_BIO_VTE_MAP_P:
+		ucontrol->value.integer.value[0] =
+			     vox->bio_vte_map_installed[CLSIC_VOX_BIOVTE_MAP_P];
 		break;
 	}
 
@@ -2573,6 +2641,20 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	int new_state;
 	int ret = -EBUSY;
 
+	/*
+	 * Termination of prompted authentication has to be trapped and started
+	 * without the drv_state lock held
+	 */
+	if ((requested_state == VOX_DRV_STATE_NEUTRAL) &&
+	    (vox->drv_state == VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH)) {
+		/*
+		 * If the worker is already active indicate the authenication
+		 * attempt should terminate and ensure it's not blocked
+		 */
+		vox->auth_error = CLSIC_ERR_CANCELLED;
+		complete(&vox->new_bio_results_completion);
+	}
+
 	mutex_lock(&vox->drv_state_lock);
 
 	if (requested_state == vox->drv_state) {
@@ -2585,7 +2667,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	switch (requested_state) {
 	case VOX_DRV_STATE_NEUTRAL:
 		if ((vox->drv_state == VOX_DRV_STATE_ENROLLING) ||
-		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP))
+		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP) ||
+		    (vox->drv_state == VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH))
 			new_state = VOX_DRV_STATE_RETURNING_TO_NEUTRAL;
 		else
 			ret = -EINVAL;
@@ -2600,6 +2683,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_START_ENROL:
 	case VOX_DRV_STATE_WRITE_KVP_PUB:
 	case VOX_DRV_STATE_PERFORM_FACTORY_RESET:
+	case VOX_DRV_STATE_PERFORM_PROMPTED_AUTH:
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL)
 			new_state = requested_state + 1;
 		break;

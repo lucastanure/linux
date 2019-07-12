@@ -335,19 +335,26 @@ TRACE_EVENT(clsic_vox_new_auth_result,
 			)
 );
 
+/*
+ * VOX_ASSET_TYPE_NAME_MAX_LEN is 43 - if it becomes longer then the
+ * clsic_vox_install_asset event will safely truncate filenames
+ */
 TRACE_EVENT(clsic_vox_install_asset,
-	TP_PROTO(char *filename, int assetid),
-	TP_ARGS(filename, assetid),
+	TP_PROTO(char *filename, int assetid, unsigned int type),
+	TP_ARGS(filename, assetid, type),
 	TP_STRUCT__entry(
-			__array(char, file, 32)
+			__array(char, file, 43)
 			__field(int, id)
+			__field(unsigned int, type)
 			),
 	TP_fast_assign(
-			strcpy(__entry->file, filename);
+			strncpy(__entry->file, filename, 43);
 			__entry->id = assetid;
+			__entry->type = type;
 		),
 	TP_printk(
-			"install asset file %s with CLSIC slot ID %d",
+			"install asset type %u named %s into slot ID %d",
+			__entry->type,
 			__entry->file,
 			__entry->id
 			)
@@ -426,6 +433,11 @@ TRACE_EVENT(clsic_vox_ratelimit_waiter,
 );
 
 DEFINE_EVENT(clsic_vox_generic, clsic_vox_perform_auth_user,
+	TP_PROTO(uint8_t dummy),
+	TP_ARGS(dummy)
+);
+
+DEFINE_EVENT(clsic_vox_generic, clsic_vox_prompted_auth,
 	TP_PROTO(uint8_t dummy),
 	TP_ARGS(dummy)
 );

@@ -31,6 +31,7 @@
 #define VOX_MAX_NUM_REPS				5
 
 #define VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT		(5 * HZ)
+#define VOX_PROMPTED_AUTH_COMPLETION_TIMEOUT		(10 * HZ)
 
 /*
  * Extend the enum of clsic_vox_modes with another indicating that setting the
@@ -228,7 +229,7 @@ struct clsic_vox {
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES][VOX_MAX_USERS];
 	bool bin_installed[CLSIC_VOX_BIN_CNT];
-	bool bio_vte_map_installed;
+	bool bio_vte_map_installed[CLSIC_VOX_BIOVTE_MAP_CNT];
 
 	struct work_struct drv_state_work;
 	struct work_struct ratelimit_work;
@@ -299,8 +300,10 @@ static const struct {
 #define VOX_DRV_STATE_STARTING_LISTEN		22
 #define VOX_DRV_STATE_LISTENING			23
 #define VOX_DRV_STATE_STREAMING			24
+#define VOX_DRV_STATE_PERFORM_PROMPTED_AUTH	25
+#define VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH	26
 
-#define VOX_NUM_DRV_STATES			25
+#define VOX_NUM_DRV_STATES			27
 
 static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_NEUTRAL]			= "Neutral",
@@ -329,6 +332,10 @@ static const char *vox_drv_state_text[VOX_NUM_DRV_STATES] = {
 	[VOX_DRV_STATE_STARTING_LISTEN]		= "Starting Listen For Trigger",
 	[VOX_DRV_STATE_LISTENING]		= "Listening For Trigger",
 	[VOX_DRV_STATE_STREAMING]		= "Streaming ASR Data",
+	[VOX_DRV_STATE_PERFORM_PROMPTED_AUTH]	=
+					      "Perform Prompted Authentication",
+	[VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH] =
+					   "Performing Prompted Authentication",
 };
 
 #define VOX_NUM_ERRORS			4
@@ -345,15 +352,17 @@ static const char *vox_error_info_text[VOX_NUM_ERRORS] = {
 	[VOX_ERROR_CLEARED]		= "Cleared",
 };
 
-#define VOX_NUM_PHRASES			3
+#define VOX_NUM_PHRASES			4
 
 #define VOX_PHRASE_VDT1			0
 #define VOX_PHRASE_VDT2			1
-#define VOX_PHRASE_TI			2
+#define VOX_PHRASE_SECURE		2
+#define VOX_PHRASE_TI			3
 
 static const char *vox_phrase_id_text[VOX_NUM_PHRASES] = {
 	[VOX_PHRASE_VDT1]		= "VDT1",
 	[VOX_PHRASE_VDT2]		= "VDT2",
+	[VOX_PHRASE_SECURE]		= "SECURE",
 	[VOX_PHRASE_TI]			= "TI",
 };
 
@@ -401,18 +410,21 @@ static const char *vox_barge_in_text[VOX_NUM_BARGE_IN] = {
 	[VOX_BARGE_IN_ENABLED]		= "Loudspeaker Enabled",
 };
 
-#define VOX_NUM_ASSET_TYPES		4
+#define VOX_NUM_ASSET_TYPES		5
 
 #define VOX_ASSET_TYPE_PHRASE		0
 #define VOX_ASSET_TYPE_BIN_VTE		1
 #define VOX_ASSET_TYPE_BIN_SSF		2
 #define VOX_ASSET_TYPE_BIO_VTE_MAP	3
+#define VOX_ASSET_TYPE_BIO_VTE_MAP_P	4
 
 static const char *vox_asset_type_text[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_PHRASE]		= "Biometric Phrase",
 	[VOX_ASSET_TYPE_BIN_VTE]	= "Voice Trigger Engine Bin",
 	[VOX_ASSET_TYPE_BIN_SSF]	= "Start Stop Flagger Bin",
 	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "Biometric Voice Trigger Engine Map",
+	[VOX_ASSET_TYPE_BIO_VTE_MAP_P]	=
+		"Biometric Voice Trigger Engine Map P",
 };
 
 /*
@@ -433,6 +445,7 @@ static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_BIN_VTE]	= "clsic-%s/%s-vte-%03u.bin",
 	[VOX_ASSET_TYPE_BIN_SSF]	= "clsic-%s/%s-ssf-%03u.bin",
 	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "clsic-%s/%s-map-%03u.bin",
+	[VOX_ASSET_TYPE_BIO_VTE_MAP_P]	= "clsic-%s/%s-map-%03u.bin",
 };
 
 /**

@@ -46,6 +46,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_factory_reset);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_msgproc);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_ratelimit_waiter);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_perform_auth_user);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_prompted_auth);
 
 const char *clsic_vox_mode_to_string(enum clsic_states state)
 {
@@ -60,6 +61,8 @@ const char *clsic_vox_mode_to_string(enum clsic_states state)
 		return "LISTEN";
 	case CLSIC_VOX_MODE_STREAM:
 		return "STREAM";
+	case CLSIC_VOX_MODE_PROMPT_AUTH:
+		return "PROMPT";
 	default:
 		return "UNKNOWN";
 	}
