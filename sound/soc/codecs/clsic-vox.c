@@ -2089,6 +2089,13 @@ static void vox_drv_state_handler(struct work_struct *data)
 
 	mutex_lock(&vox->drv_state_lock);
 	switch (vox->drv_state) {
+	case VOX_DRV_STATE_RETURNING_TO_NEUTRAL:
+		/*
+		 * This request can be handled by just returning the driver and
+		 * device to the neutral / idle states
+		 */
+		vox->error_info = VOX_ERROR_SUCCESS;
+		break;
 	case VOX_DRV_STATE_INSTALLING_ASSET:
 		vox_install_asset(vox);
 		break;
@@ -2110,13 +2117,6 @@ static void vox_drv_state_handler(struct work_struct *data)
 		break;
 	case VOX_DRV_STATE_COMPLETING_ENROL:
 		vox_complete_enrolment(vox);
-		break;
-	case VOX_DRV_STATE_TERMINATING_ENROL:
-		/*
-		 * This state can be handled by just returning the driver and
-		 * device to the neutral / idle states
-		 */
-		vox->error_info = VOX_ERROR_SUCCESS;
 		break;
 	case VOX_DRV_STATE_GETTING_BIO_RESULTS:
 		vox_get_bio_results(vox);
@@ -2568,6 +2568,13 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	new_state = vox->drv_state;
 
 	switch (requested_state) {
+	case VOX_DRV_STATE_NEUTRAL:
+		if ((vox->drv_state == VOX_DRV_STATE_ENROLLING) ||
+		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP))
+			new_state = VOX_DRV_STATE_RETURNING_TO_NEUTRAL;
+		else
+			ret = -EINVAL;
+		break;
 	case VOX_DRV_STATE_GET_BIO_RESULTS:
 		if (vox->drv_state == VOX_DRV_STATE_STREAMING)
 			new_state = VOX_DRV_STATE_GETTING_BIO_RESULTS;
@@ -2584,11 +2591,6 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	case VOX_DRV_STATE_PERFORM_ENROL_REP:
 	case VOX_DRV_STATE_COMPLETE_ENROL:
 		if (vox->drv_state == VOX_DRV_STATE_ENROLLING)
-			new_state = requested_state + 1;
-		break;
-	case VOX_DRV_STATE_TERMINATE_ENROL:
-		if ((vox->drv_state == VOX_DRV_STATE_ENROLLING) ||
-		    (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP))
 			new_state = requested_state + 1;
 		break;
 	default:
@@ -2685,18 +2687,21 @@ static int vox_notification_handler(struct clsic *clsic,
 
 		break;
 	case CLSIC_VOX_MSG_N_REP_COMPLETE:
-		if (msg_nty->nty_rep_complete.err == CLSIC_ERR_NONE)
-			vox->error_info = VOX_ERROR_SUCCESS;
-		else {
-			vox->clsic_error_code = msg_nty->nty_rep_complete.err;
-			vox->error_info = VOX_ERROR_CLSIC;
-		}
-
+		/* REP_COMPLETE only makes sense when AWAITING_ENROL_REP */
 		mutex_lock(&vox->drv_state_lock);
-		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_ENROLLING);
+		if (vox->drv_state == VOX_DRV_STATE_AWAITING_ENROL_REP) {
+			if (msg_nty->nty_rep_complete.err == CLSIC_ERR_NONE)
+				vox->error_info = VOX_ERROR_SUCCESS;
+			else {
+				vox->clsic_error_code =
+					msg_nty->nty_rep_complete.err;
+				vox->error_info = VOX_ERROR_CLSIC;
+			}
+			vox_set_idle_and_state(vox, false,
+					       VOX_DRV_STATE_ENROLLING);
+			vox_send_userspace_event(vox);
+		}
 		mutex_unlock(&vox->drv_state_lock);
-		vox_send_userspace_event(vox);
-
 		break;
 	case CLSIC_VOX_MSG_N_NEW_AUTH_RESULT:
 		/*
