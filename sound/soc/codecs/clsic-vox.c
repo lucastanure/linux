@@ -83,8 +83,7 @@ static void vox_send_userspace_event(struct clsic_vox *vox)
  */
 static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
 {
-	vox->trigger_phrase_id = VOX_TRGR_INVALID;
-	vox->trigger_engine_id = VOX_TRGR_INVALID;
+	vox->trigger_info.valid = false;
 
 	vox->scc_cap_preamble_ms = 0;
 	vox->scc_status &= (~VTE1_ACTIVE);
@@ -546,8 +545,9 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 #endif
 
 	/* Populate the ALSA controls with the trigger information. */
-	vox->trigger_engine_id = trgr_info.engineid;
-	vox->trigger_phrase_id = trgr_info.phraseid;
+	vox->trigger_info.vte_phraseid = trgr_info.vte_phraseid;
+	vox->trigger_info.vte_engineid = trgr_info.vte_engineid;
+	vox->trigger_info.valid = true;
 
 	asr_stream->cb_error = false;
 
@@ -2835,7 +2835,7 @@ static int vox_ctrl_scc_get(struct snd_kcontrol *kcontrol,
 	else if (s_bytes_scc == &vox->s_bytes_scc_cap_preamble_ms)
 		rgstr = vox->scc_cap_preamble_ms;
 	else if (s_bytes_scc == &vox->s_bytes_scc_phraseid)
-		rgstr = vox->trigger_phrase_id;
+		rgstr = vox->trigger_info.vte_phraseid;
 	else {
 		clsic_err(vox->clsic, "unrecognised accessor %p\n",
 			  s_bytes_scc);
@@ -3209,29 +3209,10 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 			    &vox->file_id);
 
 	ctl_id++;
-	vox->trigger_phrase_id = VOX_TRGR_INVALID;
-
-	vox->trgr_phrase_id_mixer_ctrl.min = INT_MIN;
-	vox->trgr_phrase_id_mixer_ctrl.max = INT_MAX;
-	vox->trgr_phrase_id_mixer_ctrl.platform_max = INT_MAX;
-	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
-			    "Vox Trigger Phrase ID",
-			    &vox->trgr_phrase_id_mixer_ctrl,
-			    vox,
-			    &vox->trigger_phrase_id);
-	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
-
-	ctl_id++;
-	vox->trigger_engine_id = VOX_TRGR_INVALID;
-
-	vox->trgr_engine_id_mixer_ctrl.min = INT_MIN;
-	vox->trgr_engine_id_mixer_ctrl.max = INT_MAX;
-	vox->trgr_engine_id_mixer_ctrl.platform_max = INT_MAX;
-	vox_ctrl_int_helper(&vox->kcontrol_new[ctl_id],
-			    "Vox Trigger Engine ID",
-			    &vox->trgr_engine_id_mixer_ctrl,
-			    vox,
-			    &vox->trigger_engine_id);
+	vox->trigger_info.valid = false;
+	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox Trigger Info",
+			     &vox->s_bytes_trigger_info, &vox->trigger_info,
+			     sizeof(struct vox_trigger_info));
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
 
 	ctl_id++;

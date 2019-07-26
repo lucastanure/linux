@@ -17,7 +17,7 @@
 #define VOX_MAX_USERS					3
 #define VOX_MAX_PHRASES					5
 
-#define VOX_NUM_NEW_KCONTROLS				31
+#define VOX_NUM_NEW_KCONTROLS				30
 
 #define CLSIC_ASSET_SIZE_ALIGNMENT			4
 
@@ -106,6 +106,12 @@ union bio_results_u {
 	struct clsic_vox_auth_result_ex result_ex;
 };
 
+struct vox_trigger_info {
+	uint32_t vte_phraseid;
+	uint32_t vte_engineid;
+	bool valid;
+};
+
 #ifdef CONFIG_DEBUG_FS
 struct vox_last_trigger {
 	union clsic_vox_msg msg;
@@ -186,8 +192,7 @@ struct clsic_vox {
 	 */
 	int asr_strm_mode;
 	unsigned int barge_in_status;
-	int trigger_phrase_id;
-	int trigger_engine_id;
+	struct vox_trigger_info trigger_info;
 
 	struct soc_enum soc_enum_mode;
 	struct soc_enum soc_enum_error_info;
@@ -205,8 +210,6 @@ struct clsic_vox {
 	struct soc_mixer_control bin_id_mixer_ctrl;
 	struct soc_mixer_control file_id_mixer_ctrl;
 	struct soc_mixer_control clsic_error_mixer_ctrl;
-	struct soc_mixer_control trgr_phrase_id_mixer_ctrl;
-	struct soc_mixer_control trgr_engine_id_mixer_ctrl;
 
 	struct soc_bytes_ext s_bytes_challenge;
 	struct soc_bytes_ext s_bytes_vpsp;
@@ -220,6 +223,7 @@ struct clsic_vox {
 	struct soc_bytes_ext s_bytes_scc_triggerpoint;
 	struct soc_bytes_ext s_bytes_scc_cap_preamble_ms;
 	struct soc_bytes_ext s_bytes_scc_phraseid;
+	struct soc_bytes_ext s_bytes_trigger_info;
 
 	bool phrase_installed[VOX_MAX_PHRASES];
 	bool user_installed[VOX_MAX_PHRASES][VOX_MAX_USERS];
@@ -432,14 +436,6 @@ static const char *vox_asset_filenames[VOX_NUM_ASSET_TYPES] = {
 	[VOX_ASSET_TYPE_BIN_SSF]	= "clsic-%s/%s-ssf-%03u.bin",
 	[VOX_ASSET_TYPE_BIO_VTE_MAP]	= "clsic-%s/%s-map-%03u.bin",
 };
-
-/*
- * Valid values for Engine and Phrase IDs are 0 to 255 (8 bit unsigned
- * integer), the vox service stores the value in a signed 32 bit integer and an
- * INT ALSA control so the value of -1 can be stored and communicated safely
- * through the stack.
- */
-#define VOX_TRGR_INVALID		-1
 
 /**
  * set_error_info() - set the error info control value for userspace
