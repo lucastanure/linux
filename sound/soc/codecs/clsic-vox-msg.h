@@ -29,7 +29,7 @@
 /**
  *  Service version number.
  */
-#define CLSIC_SRV_VERSION_VOX		(0x01010001)
+#define CLSIC_SRV_VERSION_VOX		(0x01020000)
 
 /**
  *  VOX Service message identifiers.
@@ -55,7 +55,7 @@ enum clsic_vox_msg_id {
 	/**
 	 *  VOX messages only available in idle mode.
 	 */
-	CLSIC_VOX_MSG_CR_FACTORY_RESET = 38,
+	CLSIC_VOX_MSG_CR_FACTORY_RESET		= 38,
 
 	/**
 	 *  VOX Messages for Enrol mode.
@@ -74,13 +74,17 @@ enum clsic_vox_msg_id {
 	CLSIC_VOX_MSG_CR_SET_TRGR_DETECT	= 15,
 
 	/**
-	 *  VOX Messages for Streaming mode.
+	 *  VOX Messages for Streaming and Prompted Auth mode.
 	 */
 	CLSIC_VOX_MSG_CR_AUTH_USER		= 5,
+	CLSIC_VOX_MSG_N_NEW_AUTH_RESULT		= 27,
+
+	/**
+	 *  VOX Messages for Streaming mode.
+	 */
 	CLSIC_VOX_MSG_CR_GET_TRGR_INFO		= 16,
 	CLSIC_VOX_MSG_CR_GET_AVAIL_ASR_DATA	= 17,
 	CLSIC_VOX_MSG_CRA_GET_ASR_BLOCK		= 18,
-	CLSIC_VOX_MSG_N_NEW_AUTH_RESULT		= 27,
 
 	/**
 	 *  VOX Messages for Manage mode.
@@ -104,11 +108,12 @@ enum clsic_vox_msg_id {
  *  VOX Service operating modes.
  */
 enum clsic_vox_mode {
-	CLSIC_VOX_MODE_IDLE	= 0,
-	CLSIC_VOX_MODE_MANAGE	= 1,
-	CLSIC_VOX_MODE_ENROL	= 2,
-	CLSIC_VOX_MODE_LISTEN	= 4,
-	CLSIC_VOX_MODE_STREAM	= 5,
+	CLSIC_VOX_MODE_IDLE		= 0,
+	CLSIC_VOX_MODE_MANAGE		= 1,
+	CLSIC_VOX_MODE_ENROL		= 2,
+	CLSIC_VOX_MODE_LISTEN		= 4,
+	CLSIC_VOX_MODE_STREAM		= 5,
+	CLSIC_VOX_MODE_PROMPT_AUTH	= 6,
 };
 
 /**
@@ -145,6 +150,7 @@ enum clsic_vox_userid {
 enum clsic_vox_phraseid {
 	CLSIC_VOX_PHRASE_VDT1	= 0,
 	CLSIC_VOX_PHRASE_VDT2	= 1,
+	CLSIC_VOX_PHRASE_SECURE	= 3,
 	CLSIC_VOX_PHRASE_TI	= 4,
 };
 
@@ -155,7 +161,19 @@ enum clsic_vox_binid {
 	CLSIC_VOX_BIN_VTE1	= 0,
 	CLSIC_VOX_BIN_VTE2	= 1,
 	CLSIC_VOX_BIN_SSF	= 2,
-	CLSIC_VOX_BIN_CNT	= 3,
+	CLSIC_VOX_BIN_VTE1_P	= 3,
+	CLSIC_VOX_BIN_VTE2_P	= 4,
+	CLSIC_VOX_BIN_SSF_P	= 5,
+	CLSIC_VOX_BIN_CNT	= 6,
+};
+
+/**
+ *  VOX Service biovte map identifiers
+ */
+enum clsic_vox_biovtemapid {
+	CLSIC_VOX_BIOVTE_MAP		= 0,
+	CLSIC_VOX_BIOVTE_MAP_P		= 1,
+	CLSIC_VOX_BIOVTE_MAP_CNT	= 2,
 };
 
 /**
@@ -245,13 +263,12 @@ enum clsic_vox_biom_flags {
  *  Bulk part of CLSIC_VOX_MSG_CR_GET_TRGR_INFO response
  */
 struct clsic_vox_trgr_info {
-	uint8_t phraseid;
-	uint8_t engineid;
+	uint32_t vte_phraseid;
+	uint32_t vte_engineid;
 	int64_t start_time;
 	int64_t stop_time;
 	int64_t now_time;
 	uint64_t timer_freq;
-	uint8_t pad[2];
 } PACKED;
 
 /**
@@ -279,6 +296,8 @@ struct clsic_vox_auth_challenge {
  *  then only the last CLSIC_VOX_MAX_AUTH_RESULT_COUNT will be available
  *  in the below structure else result_count number of results will be
  *  available.
+ *
+ *  When in Prompted Auth mode the result_count will be set to 1.
  *
  *  Results are sorted in ascending order of time i.e. start_frame[i+1]
  *  will be greater than end_frame[i].
@@ -362,8 +381,8 @@ struct clsic_vox_host_kvpp_key {
  */
 struct clsic_vox_biovte_map_entry {
 	int32_t bio_phraseid;
-	int32_t vte_engineid;
-	int32_t vte_phraseid;
+	uint32_t vte_engineid;
+	uint32_t vte_phraseid;
 } PACKED;
 
 /**
@@ -682,8 +701,8 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
-		int32_t vte_engineid;
-		int32_t vte_phraseid;
+		uint32_t vte_engineid;
+		uint32_t vte_phraseid;
 	} PACKED cmd_set_trgr_detect;
 
 	/**
@@ -695,7 +714,7 @@ union clsic_vox_msg {
 
 
 	/**
-	 *  VOX Messages for Streaming mode.
+	 *  VOX Messages for Streaming and Prompted Auth mode.
 	 */
 
 
@@ -721,6 +740,20 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_auth_user;
+
+	/**
+	 *  CLSIC_VOX_MSG_N_NEW_AUTH_RESULT notification structure.
+	 */
+	struct {
+		struct clsic_nty_hdr hdr;
+		int32_t total_frames_processed;
+		uint8_t userid[CLSIC_VOX_SECURITY_LVL_COUNT];
+		uint8_t auth_stop_reason;
+	} PACKED nty_new_auth_result;
+
+	/**
+	 *  VOX Messages for Streaming mode.
+	 */
 
 	/**
 	 *  CLSIC_VOX_MSG_CR_GET_TRGR_INFO command structure.
@@ -785,17 +818,6 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_get_asr_block;
-
-	/**
-	 *  CLSIC_VOX_MSG_N_NEW_AUTH_RESULT notification structure.
-	 */
-	struct {
-		struct clsic_nty_hdr hdr;
-		int32_t total_frames_processed;
-		uint8_t userid[CLSIC_VOX_SECURITY_LVL_COUNT];
-		uint8_t auth_stop_reason;
-	} PACKED nty_new_auth_result;
-
 
 	/**
 	 *  VOX Messages for Manage mode.
@@ -980,6 +1002,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_blkcmd_hdr hdr;
+		uint8_t mapid;
 	} PACKED blkcmd_install_biovte_map;
 
 	/**
@@ -994,6 +1017,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint8_t mapid;
 	} PACKED cmd_is_biovte_map_installed;
 
 	/**
@@ -1008,6 +1032,7 @@ union clsic_vox_msg {
 	 */
 	struct {
 		struct clsic_cmd_hdr hdr;
+		uint8_t mapid;
 	} PACKED cmd_remove_biovte_map;
 
 	/**
