@@ -3418,7 +3418,6 @@ static const struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
 static int clsic_vox_probe(struct platform_device *pdev)
 {
 	struct clsic *clsic = dev_get_drvdata(pdev->dev.parent);
-	struct clsic_service *vox_service = dev_get_platdata(&pdev->dev);
 	struct clsic_vox *vox;
 	int ret;
 
@@ -3436,7 +3435,7 @@ static int clsic_vox_probe(struct platform_device *pdev)
 	}
 
 	vox->clsic = clsic;
-	vox->service = clsic->service_handlers[vox_service->service_instance];
+	vox->service = clsic_get_service_from_pdev(pdev);
 	vox->service->supports_debuginfo = true;
 
 	platform_set_drvdata(pdev, vox);
