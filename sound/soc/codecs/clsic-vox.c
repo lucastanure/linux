@@ -3247,19 +3247,15 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 					   SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 
 	ctl_id++;
-	memset(&vox->k2_pub_key, 0, sizeof(struct clsic_vox_k2_pub_key));
-	ret = vox_update_k2_pub_key(vox);
-	if (ret != 0)
-		return ret;
-
 	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox K2 Public Key",
 			     &vox->s_bytes_k2_pub_key, &vox->k2_pub_key,
 			     sizeof(struct clsic_vox_k2_pub_key));
 	vox->kcontrol_new[ctl_id].put = vox_ctrl_dummy;
+	ret = vox_update_k2_pub_key(vox);
+	if (ret != 0)
+		return ret;
 
 	ctl_id++;
-	memset(&vox->kvp_pub_key, 0, sizeof(struct clsic_vox_host_kvpp_key));
-
 	vox_ctrl_byte_helper(&vox->kcontrol_new[ctl_id], "Vox KVP Public Key",
 			     &vox->s_bytes_kvp_pub_key, &vox->kvp_pub_key,
 			     sizeof(struct clsic_vox_host_kvpp_key));
