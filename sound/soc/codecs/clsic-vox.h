@@ -19,8 +19,6 @@
 
 #define VOX_NUM_NEW_KCONTROLS				30
 
-#define CLSIC_ASSET_SIZE_ALIGNMENT			4
-
 /* Minimum version of system firmware required. */
 #define CLSIC_VOX_SRV_VERSION				0x00050002
 

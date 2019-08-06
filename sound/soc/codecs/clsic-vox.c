@@ -1383,14 +1383,6 @@ static void vox_install_asset(struct clsic_vox *vox)
 		return;
 	}
 
-	if (fw->size % CLSIC_ASSET_SIZE_ALIGNMENT) {
-		clsic_err(clsic,
-			  "firmware file %s size %zu is not a multiple of %d.\n",
-			  file, fw->size, CLSIC_ASSET_SIZE_ALIGNMENT);
-		vox->error_info = VOX_ERROR_DRIVER;
-		goto exit_withrelease;
-	}
-
 	switch (vox->asset_type) {
 	case VOX_ASSET_TYPE_PHRASE:
 		ret = clsic_init_message((union t_clsic_generic_message *)
