@@ -1378,7 +1378,6 @@ static void vox_install_asset(struct clsic_vox *vox)
 
 	ret = request_firmware(&fw, file, clsic->dev);
 	if (ret) {
-		clsic_err(clsic, "request_firmware failed for %s.\n", file);
 		vox->error_info = VOX_ERROR_DRIVER;
 		return;
 	}
@@ -3027,7 +3026,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	int ret;
 	unsigned int ctl_id = 0;
 
-	dev_info(codec->dev, "%s() %p.\n", __func__, codec);
+	dev_dbg(codec->dev, "%s() %p.\n", __func__, codec);
 
 	if (handler->service_version < CLSIC_VOX_SRV_VERSION) {
 		dev_err(codec->dev,
@@ -3386,7 +3385,7 @@ static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
 {
 	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
 
-	dev_info(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
+	dev_dbg(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
 
 	cancel_work_sync(&vox->ratelimit_work);
 	cancel_work_sync(&vox->drv_state_work);
@@ -3464,8 +3463,8 @@ static int clsic_vox_probe(struct platform_device *pdev)
 			  &vox->last_auth.result_format);
 #endif
 
-	dev_info(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
-		 &pdev->dev, ret);
+	dev_dbg(&pdev->dev, "%s() Register: %p ret %d.\n", __func__,
+		&pdev->dev, ret);
 
 error:
 	if (ret != 0)
@@ -3486,8 +3485,8 @@ static int clsic_vox_remove(struct platform_device *pdev)
 {
 	struct clsic_vox *vox = platform_get_drvdata(pdev);
 
-	dev_info(&pdev->dev, "%s() dev %p priv %p.\n",
-		 __func__, &pdev->dev, vox);
+	dev_dbg(&pdev->dev, "%s() dev %p priv %p.\n",
+		__func__, &pdev->dev, vox);
 
 	if (vox->clsic_mode != CLSIC_VOX_MODE_IDLE)
 		return -EBUSY;
