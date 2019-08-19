@@ -14,7 +14,6 @@
 #define CREATE_TRACE_POINTS
 #include "clsic-vox-trace.h"
 
-EXPORT_TRACEPOINT_SYMBOL(clsic_vox_modechange);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_trigger_heard);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_open);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_free);
@@ -39,7 +38,6 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_start_enrol_user);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_perform_enrol_rep);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_complete_enrolment);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_get_bio_results);
-EXPORT_TRACEPOINT_SYMBOL(clsic_vox_stop_bio_results);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_new_auth_result);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_put_kvp_pub);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_factory_reset);

@@ -23,25 +23,6 @@
 
 const char *clsic_vox_mode_to_string(int8_t mode);
 
-TRACE_EVENT(clsic_vox_modechange,
-	TP_PROTO(enum clsic_vox_mode mode_from,
-		 enum clsic_vox_mode mode_to),
-	TP_ARGS(mode_from, mode_to),
-	TP_STRUCT__entry(
-			__field(uint8_t, mode_from)
-			__field(uint8_t, mode_to)
-			),
-	TP_fast_assign(
-			__entry->mode_from = mode_from;
-			__entry->mode_to = mode_to
-		),
-	TP_printk(
-			"0x%x -> 0x%x",
-			__entry->mode_from,
-			__entry->mode_to
-			)
-);
-
 TRACE_EVENT(clsic_vox_trigger_heard,
 	TP_PROTO(u8 msgid,
 		 u8 flags),
@@ -308,11 +289,6 @@ DEFINE_EVENT(clsic_vox_generic, clsic_vox_complete_enrolment,
 );
 
 DEFINE_EVENT(clsic_vox_generic, clsic_vox_get_bio_results,
-	TP_PROTO(uint8_t dummy),
-	TP_ARGS(dummy)
-);
-
-DEFINE_EVENT(clsic_vox_generic, clsic_vox_stop_bio_results,
 	TP_PROTO(uint8_t dummy),
 	TP_ARGS(dummy)
 );
