@@ -21,7 +21,7 @@
 #include <uapi/sound/compress_offload.h>
 #include "clsic-vox-msg.h"
 
-const char *clsic_vox_mode_to_string(enum clsic_states state);
+const char *clsic_vox_mode_to_string(int8_t mode);
 
 TRACE_EVENT(clsic_vox_modechange,
 	TP_PROTO(enum clsic_vox_mode mode_from,
@@ -212,39 +212,50 @@ DEFINE_EVENT(clsic_vox_generic, clsic_vox_asr_stream_get_caps,
 );
 
 TRACE_EVENT(clsic_vox_set_mode,
-	TP_PROTO(enum clsic_vox_mode old_mode, enum clsic_vox_mode new_mode),
-	TP_ARGS(old_mode, new_mode),
+	TP_PROTO(enum clsic_vox_mode initial_mode,
+		 enum clsic_vox_mode requested_mode,
+		 enum clsic_vox_mode final_mode,
+		 int ret),
+	TP_ARGS(initial_mode, requested_mode, final_mode, ret),
 	TP_STRUCT__entry(
-			__field(uint8_t, old_mode)
-			__field(uint8_t, new_mode)
+			__field(int8_t, initial_mode)
+			__field(int8_t, requested_mode)
+			__field(int8_t, final_mode)
+			__field(int, ret)
 			),
 	TP_fast_assign(
-			__entry->old_mode = old_mode;
-			__entry->new_mode = new_mode
+			__entry->initial_mode = initial_mode;
+			__entry->requested_mode = requested_mode;
+			__entry->final_mode = final_mode;
+			__entry->ret = ret
 		),
-	TP_printk("CLSIC change vox mode from %s (0x%x) to %s (0x%x)",
-		  clsic_vox_mode_to_string(__entry->old_mode),
-		  __entry->old_mode,
-		  clsic_vox_mode_to_string(__entry->new_mode),
-		  __entry->new_mode
+	TP_printk(
+		  "CLSIC change vox mode: initial %s (%d), requested %s (%d), final %s (%d) ret %d",
+		  clsic_vox_mode_to_string(__entry->initial_mode),
+		  __entry->initial_mode,
+		  clsic_vox_mode_to_string(__entry->requested_mode),
+		  __entry->requested_mode,
+		  clsic_vox_mode_to_string(__entry->final_mode),
+		  __entry->final_mode,
+		  __entry->ret
 		)
 );
 
-TRACE_EVENT(clsic_vox_set_idle_and_state,
-	TP_PROTO(int set_clsic_to_idle, unsigned int drv_state),
-	TP_ARGS(set_clsic_to_idle, drv_state),
+TRACE_EVENT(clsic_vox_set_drv_state,
+	TP_PROTO(unsigned int old_drv_state, unsigned int new_drv_state),
+	TP_ARGS(old_drv_state, new_drv_state),
 	TP_STRUCT__entry(
-			__field(int, set_clsic_to_idle)
-			__field(unsigned int, drv_state)
+			__field(unsigned int, old_drv_state)
+			__field(unsigned int, new_drv_state)
 			),
 	TP_fast_assign(
-			__entry->set_clsic_to_idle = set_clsic_to_idle;
-			__entry->drv_state = drv_state
+			__entry->old_drv_state = old_drv_state,
+			__entry->new_drv_state = new_drv_state
 		),
 	TP_printk(
-		  "CLSIC will %s set to IDLE mode and driver state will be set to %d",
-		  __entry->set_clsic_to_idle ? "be" : "not be",
-		  __entry->drv_state
+		  "CLSIC change driver state from %d to %d",
+		  __entry->old_drv_state,
+		  __entry->new_drv_state
 		)
 );
 

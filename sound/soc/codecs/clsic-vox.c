@@ -58,9 +58,20 @@ static inline int size_of_bio_results(uint8_t bio_results_format)
 
 static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode);
 static int vox_update_barge_in(struct clsic_vox *vox);
-static void vox_set_idle_and_state(struct clsic_vox *vox,
-				   bool set_clsic_to_idle,
-				   int drv_state);
+
+/**
+ * vox_set_drv_state() - set driver management state with a trace event
+ *
+ * @vox:	The instance of struct clsic_vox used in this driver.
+ * @new_state:	New vox driver state to change to.
+ *
+ * vox->drv_state_lock MUST be held
+ */
+static inline void vox_set_drv_state(struct clsic_vox *vox, int new_state)
+{
+	trace_clsic_vox_set_drv_state(vox->drv_state, new_state);
+	vox->drv_state = new_state;
+}
 
 /**
  * vox_send_userspace_event() - notify userspace of a change.
@@ -89,7 +100,8 @@ static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
 	vox->scc_status &= (~VTE1_ACTIVE);
 
 	mutex_lock(&vox->drv_state_lock);
-	vox_set_idle_and_state(vox, true, VOX_DRV_STATE_NEUTRAL);
+	vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+	vox_set_drv_state(vox, VOX_DRV_STATE_NEUTRAL);
 	mutex_unlock(&vox->drv_state_lock);
 }
 
@@ -492,7 +504,7 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
 
 	mutex_lock(&vox->drv_state_lock);
 	if (vox->drv_state == VOX_DRV_STATE_LISTENING) {
-		vox_set_idle_and_state(vox, false, VOX_DRV_STATE_STREAMING);
+		vox_set_drv_state(vox, VOX_DRV_STATE_STREAMING);
 
 		vox->scc_status &= (~VTE1_ACTIVE);
 		vox->scc_status |= VTE1_TRIGGERED_SINCE_LISTEN;
@@ -606,8 +618,7 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 		/* Fail if any ongoing vox operations. */
 		mutex_lock(&vox->drv_state_lock);
 		if (vox->drv_state == VOX_DRV_STATE_NEUTRAL) {
-			vox_set_idle_and_state(vox, false,
-					       VOX_DRV_STATE_LISTENING);
+			vox_set_drv_state(vox, VOX_DRV_STATE_LISTENING);
 			mutex_unlock(&vox->drv_state_lock);
 		} else {
 			mutex_unlock(&vox->drv_state_lock);
@@ -937,7 +948,8 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 {
 	union clsic_vox_msg msg_cmd;
 	union clsic_vox_msg msg_rsp;
-	int ret;
+	int ret = 0;
+	int initial_mode;
 
 	/*
 	 * If the mode of the device is unknown, attempt to set it to IDLE
@@ -946,19 +958,23 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	 */
 	if ((vox->clsic_mode == VOX_INDETERMINATE_MODE) &&
 	    (new_mode != CLSIC_VOX_MODE_IDLE)) {
-		if (vox_set_mode(vox, CLSIC_VOX_MODE_IDLE) != 0)
+		if (vox_set_mode(vox, CLSIC_VOX_MODE_IDLE) != 0) {
+			/* Return without another trace event */
 			return -EIO;
+		}
 	}
 
-	trace_clsic_vox_set_mode(vox->clsic_mode, new_mode);
+	initial_mode = vox->clsic_mode;
 
 	if (vox->clsic_mode == new_mode)
-		return 0;
+		goto return_with_traceevent;
 
 	if (clsic_init_message((union t_clsic_generic_message *) &msg_cmd,
 			       vox->service->service_instance,
-			       CLSIC_VOX_MSG_CR_SET_MODE))
-		return -EINVAL;
+			       CLSIC_VOX_MSG_CR_SET_MODE)) {
+		ret = -EINVAL;
+		goto return_with_traceevent;
+	}
 
 	msg_cmd.cmd_set_mode.mode = new_mode;
 
@@ -973,56 +989,23 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	if (ret) {
 		vox->clsic_mode = VOX_INDETERMINATE_MODE;
 		clsic_err(vox->clsic, "clsic_send_msg_sync %d.\n", ret);
-		return -EIO;
+			ret = -EIO;
+			goto return_with_traceevent;
 	}
 
 	if (msg_rsp.rsp_set_mode.hdr.err != CLSIC_ERR_NONE) {
 		vox->clsic_mode = VOX_INDETERMINATE_MODE;
 		vox->clsic_error_code = msg_rsp.rsp_set_mode.hdr.err;
-		return -EINVAL;
+		ret = -EINVAL;
+		goto return_with_traceevent;
 	}
 
 	vox->clsic_mode = new_mode;
 
-	return 0;
-}
+return_with_traceevent:
+	trace_clsic_vox_set_mode(initial_mode, new_mode, vox->clsic_mode, ret);
 
-/**
- * vox_set_idle_and_state() - set CLSIC to IDLE mode and set driver management
- *			     mode
- * @vox:	The main instance of struct clsic_vox used in this driver.
- * @set_clsic_to_idle:	Whether to set CLSIC to IDLE mode or not.
- * @drv_state:	New vox driver state to change to.
- *
- * This function incorporates the 3 commonly performed tasks of setting CLSIC to
- * IDLE mode, setting the internal driver state and then notifying userspace
- * (i.e. waking the poll) that something has changed (usually meant to imply
- * that the error control node has changed value).
- *
- * vox->drv_state_lock MUST be held
- */
-static void vox_set_idle_and_state(struct clsic_vox *vox,
-				   bool set_clsic_to_idle,
-				   int drv_state)
-{
-	int ret = 0;
-
-	trace_clsic_vox_set_idle_and_state(set_clsic_to_idle, drv_state);
-
-	if (set_clsic_to_idle) {
-		ret = vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
-		if (ret) {
-			clsic_err(vox->clsic,
-				  "unable to change to driver state %d from %d (ret = %d, CLSIC error code %d).\n",
-				  drv_state,
-				  vox->drv_state,
-				  ret,
-				  vox->clsic_error_code);
-			return;
-		}
-	}
-
-	vox->drv_state = drv_state;
+	return ret;
 }
 
 /**
@@ -2205,10 +2188,11 @@ static void vox_drv_state_handler(struct work_struct *data)
 		return;
 	}
 
-	vox_set_idle_and_state(vox,
-			       (new_drv_state == VOX_DRV_STATE_NEUTRAL ?
-				true : false),
-			       new_drv_state);
+	if (new_drv_state == VOX_DRV_STATE_NEUTRAL)
+		vox_set_mode(vox, CLSIC_VOX_MODE_IDLE);
+
+	vox_set_drv_state(vox, new_drv_state);
+
 	vox_send_userspace_event(vox);
 
 	mutex_unlock(&vox->drv_state_lock);
@@ -2692,7 +2676,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	 * different to the drv_state
 	 */
 	if (new_state != vox->drv_state) {
-		vox_set_idle_and_state(vox, false, new_state);
+		vox_set_drv_state(vox, new_state);
 		ret = 0;
 	}
 
@@ -2787,8 +2771,7 @@ static int vox_notification_handler(struct clsic *clsic,
 					msg_nty->nty_rep_complete.err;
 				vox->error_info = VOX_ERROR_CLSIC;
 			}
-			vox_set_idle_and_state(vox, false,
-					       VOX_DRV_STATE_ENROLLING);
+			vox_set_drv_state(vox, VOX_DRV_STATE_ENROLLING);
 			vox_send_userspace_event(vox);
 		}
 		mutex_unlock(&vox->drv_state_lock);
@@ -3037,7 +3020,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	vox->codec = codec;
-	vox_set_idle_and_state(vox, false, VOX_DRV_STATE_NEUTRAL);
+	vox_set_drv_state(vox, VOX_DRV_STATE_NEUTRAL);
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
 	mutex_init(&vox->drv_state_lock);

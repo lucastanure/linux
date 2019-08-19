@@ -29,7 +29,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_trigger);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_pointer);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_asr_stream_get_caps);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_mode);
-EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_idle_and_state);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_set_drv_state);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_install_asset);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_uninstall_phrase);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_uninstall_bin);
@@ -48,9 +48,15 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_ratelimit_waiter);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_perform_auth_user);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_prompted_auth);
 
-const char *clsic_vox_mode_to_string(enum clsic_states state)
+/*
+ * The device mode is usually a member of the clsic_vox_modes enum, except when
+ * setting the mode of the device had previously failed and the state is now
+ * unknown.
+ */
+#define VOX_INDETERMINATE_MODE	-1
+const char *clsic_vox_mode_to_string(int8_t mode)
 {
-	switch (state) {
+	switch (mode) {
 	case CLSIC_VOX_MODE_IDLE:
 		return "IDLE";
 	case CLSIC_VOX_MODE_MANAGE:
@@ -63,6 +69,8 @@ const char *clsic_vox_mode_to_string(enum clsic_states state)
 		return "STREAM";
 	case CLSIC_VOX_MODE_PROMPT_AUTH:
 		return "PROMPT";
+	case VOX_INDETERMINATE_MODE:
+		return "INDETERMINATE";
 	default:
 		return "UNKNOWN";
 	}

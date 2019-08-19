@@ -147,7 +147,7 @@ struct clsic_vox {
 	/* drv_state refers to ongoing vox biometric operations only. */
 	unsigned int drv_state;
 	/* Which mode CLSIC is in. */
-	int clsic_mode;
+	int8_t clsic_mode;
 
 	/*
 	 * Mutex to guard the testing and changing of clsic_vox structure
