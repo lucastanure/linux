@@ -62,7 +62,7 @@ static int vox_update_barge_in(struct clsic_vox *vox);
 /**
  * vox_set_drv_state() - set driver management state with a trace event
  *
- * @vox:	The instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  * @new_state:	New vox driver state to change to.
  *
  * vox->drv_state_lock MUST be held
@@ -75,7 +75,7 @@ static inline void vox_set_drv_state(struct clsic_vox *vox, int new_state)
 
 /**
  * vox_send_userspace_event() - notify userspace of a change.
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Notify userspace that a change has happened using an event.
  */
@@ -87,7 +87,7 @@ static void vox_send_userspace_event(struct clsic_vox *vox)
 
 /**
  * clsic_vox_asr_end_streaming() - set CLSIC back to IDLE after a problem.
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * When the audio path has closed, the last operation to be running needs to
  * clear up.
@@ -108,7 +108,7 @@ static void clsic_vox_asr_end_streaming(struct clsic_vox *vox)
 /**
  * clsic_vox_asr_cleanup_states() - ensure that other threads close sensibly
  *				when there is no more ASR streaming to be done.
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Use the driver state to determine how to bring down the ASR operations.
  */
@@ -346,8 +346,7 @@ static int clsic_vox_asr_stream_set_params(struct snd_compr_stream *stream,
 
 /**
  * clsic_vox_asr_stream_data_cb() - asynchronous message callback for ASR
- * @clsic:	The main shared instance of struct clsic used in the CLSIC
- *		drivers.
+ * @clsic:	The parent clsic driver supporting this this vox instance
  * @msg:	The message notification itself as received from CLSIC.
  *
  * This is the callback that is called when the asynchronous message to copy
@@ -406,7 +405,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 
 /**
  * clsic_vox_asr_queue_async() - helper function for copying ASR data
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * This function handles creating and sending an asynchronous message to copy
  * ASR data during streaming. It also sensibly reacts if the message sending
@@ -577,8 +576,9 @@ static int clsic_vox_asr_stream_wait_for_trigger(void *data)
  * @stream:	Standard parameter as used by compressed stream infrastructure.
  * @cmd:	A start or stop flag for compressed audio streaming.
  *
- * Standard .trigger function - see struct snd_compr_ops for more details. When
- * userspace (crec) starts reading an active compressed stream of audio, this
+ * Standard .trigger function - see struct snd_compr_ops for more details.
+ *
+ * When userspace starts reading an active compressed stream of audio, this
  * function is called with a relevant command regarding whether the stream has
  * just started or just stopped.
  *
@@ -691,8 +691,8 @@ static int clsic_vox_asr_stream_trigger(struct snd_compr_stream *stream,
 }
 
 /**
- * clsic_vox_asr_stream_pointer() - get timestamp information about the
- *					ASR stream
+ * clsic_vox_asr_stream_pointer() - get timestamp information about the ASR
+ *				    stream
  * @stream:	Standard parameter as used by compressed stream infrastructure.
  * @tstamp:	Standard parameter as used by compressed stream infrastructure.
  *
@@ -829,7 +829,7 @@ static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
 
 /**
  * vox_msgproc_use() - limit the number of calls to power management use
- * @vox:	The instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Use an internal reference count to ensure that CLSIC is only marked in use
  * when required by the driver and multiple calls are not made unnecessarily.
@@ -847,7 +847,7 @@ static void vox_msgproc_use(struct clsic_vox *vox)
 
 /**
  * vox_msgproc_release() - limit the number of calls to power management release
- * @vox:	The instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Use an internal reference count to ensure that CLSIC is only marked as not in
  * use when no elements of this driver are using it.
@@ -868,7 +868,7 @@ static void vox_msgproc_release(struct clsic_vox *vox)
 
 /*
  * clsic_vox_ratelimit() - schedule the rate limiting work if needed
- * @vox:	The instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * The rate limited state can be detected multiple times when it occurs in the
  * device, but it only requires the ratelimit_work to run once to clear it.
@@ -885,13 +885,11 @@ static void clsic_vox_ratelimit(struct clsic_vox *vox)
 
 /**
  * vox_ratelimit_waiter() - keep the driver powered on while rate limiting
- * @data:	The ratelimit_work structure used to obtain the instance of
- *		struct clsic_vox for this service instance
+ * @data:	The ratelimit_work structure used to obtain the struct clsic_vox
+ *		for this service instance
  *
- * When it is discovered that CLSIC is rate limiting (due to 5 or more failed
- * verifications in a row), the service handler must keep the messaging
- * processor active for at least 30 seconds in order to clear the rate limiting
- * state.
+ * When rate limiting is encountered, the service handler must keep the
+ * messaging processor active in order to clear the rate limiting state.
  */
 static void vox_ratelimit_waiter(struct work_struct *data)
 {
@@ -915,7 +913,7 @@ static void vox_ratelimit_waiter(struct work_struct *data)
 
 /**
  * vox_set_pm_from_mode() - set power management options using the CLSIC mode
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  * @new_mode:	New CLSIC mode to change to.
  *
  * Mark CLSIC as in use dependent on what CLSIC mode transition is occurring.
@@ -935,7 +933,7 @@ static inline void vox_set_pm_from_mode(struct clsic_vox *vox,
 
 /**
  * vox_set_mode() - set mode on CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  * @new_mode:	New CLSIC mode to change to.
  *
  * Set the mode on CLSIC. Includes inter-operation with the power management
@@ -1008,9 +1006,9 @@ return_with_traceevent:
 }
 
 /**
- * vox_update_phrases() - update internal cache of biometric phrase
- *			  installation states
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * vox_update_phrases() - update internal cache of biometric phrase installation
+ *			  states
+ * @vox:	The instance of struct clsic_vox
  *
  * Query CLSIC to find out which biometric phrases are installed.
  *
@@ -1063,7 +1061,7 @@ static int vox_update_phrases(struct clsic_vox *vox)
 
 /**
  * vox_update_bins() - update internal cache of VTE/SSF bin installation states
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Query CLSIC to find out which VTE/SSF bin files are installed.
  *
@@ -1116,7 +1114,7 @@ static int vox_update_bins(struct clsic_vox *vox)
 
 /**
  * vox_update_map() - update internal cache of map installation state
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  * @mapid:	The clsic_vox_biovtemapid to check
  *
  * Query CLSIC to find out whether a map file is installed.
@@ -1166,7 +1164,7 @@ static int vox_update_map(struct clsic_vox *vox, uint8_t mapid)
 
 /**
  * vox_update_assets_status() - update all internal asset states
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Update the cached states of all assets.
  *
@@ -1193,7 +1191,7 @@ static int vox_update_assets_status(struct clsic_vox *vox)
 
 /**
  * vox_update_user_status() - update internally cached user enrolment states
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  * @start_phr:	Start biometric phrase ID.
  * @end_phr:	End biometric phrase ID.
  *
@@ -1255,7 +1253,7 @@ static int vox_update_user_status(struct clsic_vox *vox, uint8_t start_phr,
 /**
  * vox_update_k2_pub_key() - update internally cached K2 public key for this
  *			     particular CLSIC device
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Query CLSIC to get its K2 public key and cache it internally.
  *
@@ -1320,7 +1318,7 @@ static int phrase_id_from_enum(int enum_value)
 
 /**
  * vox_install_asset() - install an asset to CLSIC from the filesystem
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Based on the value of various ALSA controls, install an asset (either map,
  * VTE/SSF bin, or biometric phrase) to CLSIC.
@@ -1465,7 +1463,7 @@ exit_withrelease:
 
 /**
  * vox_uninstall_asset() - uninstall an asset from CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Based on the value of various ALSA controls, uninstall an asset (either map,
  * VTE/SSF bin, or biometric phrase) from CLSIC.
@@ -1605,7 +1603,7 @@ static void vox_uninstall_asset(struct clsic_vox *vox)
 
 /**
  * vox_remove_user() - remove an enrolled user from CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Remove (or de-enrol) a particular user for a particular biometric phrase
  * based on the value of relevant ALSA controls set from userspace.
@@ -1662,7 +1660,7 @@ static void vox_remove_user(struct clsic_vox *vox)
 
 /**
  * vox_start_enrol_user() - start the enrolment process on CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Start enrolling a user by gathering information from various ALSA controls
  * then sending the appropriate message to CLSIC.
@@ -1740,7 +1738,7 @@ static int vox_start_enrol_user(struct clsic_vox *vox)
 
 /**
  * vox_perform_enrol_rep() - perform an enrolment rep
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Tell CLSIC that we are about to perform an enrolment repetition.
  */
@@ -1790,7 +1788,7 @@ static int vox_perform_enrol_rep(struct clsic_vox *vox)
 
 /**
  * vox_complete_enrolment() - complete an enrolment
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Tell CLSIC that we are ready to complete an enrolment, having started
  * enrolment and performed reps.
@@ -1834,12 +1832,11 @@ static void vox_complete_enrolment(struct clsic_vox *vox)
 			msg_rsp.rsp_install_user_complete.hdr.err;
 		vox->error_info = VOX_ERROR_CLSIC;
 	}
-
 }
 
 /**
  * vox_perform_auth_user() - get biometric results from CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Request biometric results from CLSIC.
  */
@@ -1942,10 +1939,10 @@ static void vox_perform_auth_user(struct clsic_vox *vox)
 }
 
 /**
- * vox_get_bio_results() - wait for new biometric results from CLSIC and
- *			   receive them
+ * vox_get_bio_results() - wait for new biometric results from CLSIC and receive
+ *			   them
  *
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Wait until new biometric results are available from CLSIC and then read them
  */
@@ -1974,7 +1971,7 @@ static void vox_get_bio_results(struct clsic_vox *vox)
 
 /**
  * vox_put_kvp_pub() - write the KVP public key to CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Write the voiceprint proxy public key to CLSIC. This is a one-shot operation
  * and will fail if a different key has already been written.
@@ -2030,7 +2027,7 @@ static void vox_put_kvp_pub(struct clsic_vox *vox)
 
 /**
  * vox_factory_reset() - perform a factory reset on CLSIC
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * Do a factory reset. This will remove all keys, user enrolments, phrases, bin
  * and map files.
@@ -2084,7 +2081,7 @@ static void vox_factory_reset(struct clsic_vox *vox)
 
 /**
  * vox_perform_prompted_auth() - perform a prompted authentication
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * @vox:	The instance of struct clsic_vox
  *
  * The prompted authentication is similar to the normal triggered
  * authentication technique, however a single verification is expected in a
@@ -2122,9 +2119,8 @@ exit:
 
 /**
  * vox_drv_state_handler() - handle userspace commands from the driver state
- *				control
- * @data:	Used to obtain the main instance of struct clsic_vox used in
- *		this driver in which this is contained.
+ *			     control
+ * @data:	Used to obtain the instance of struct clsic_vox
  *
  * Work function allows ALSA "get" control to return immediately while sending
  * multiple messages.
@@ -2202,8 +2198,8 @@ static void vox_drv_state_handler(struct work_struct *data)
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
- * Allow the user to clear the error info ALSA control by writing the
- * appropriate value to it.
+ * Allow userspace to reset the error code ALSA control by writing
+ * VOX_ERROR_CLEARED to error info.
  *
  * Return: errno.
  */
@@ -2324,8 +2320,7 @@ static int vox_ctrl_enum_put(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_bytes_get() - read the challenge bytes for biometric
- *			      authentication or enrolment
+ * vox_ctrl_bytes_get() - read the challenge bytes for biometric authentication
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
@@ -2346,8 +2341,7 @@ static int vox_ctrl_bytes_get(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_ctrl_bytes_put() - write the challenge bytes for biometric
- *			      authentication
+ * vox_ctrl_bytes_put() - write the challenge bytes for biometric authentication
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @ucontrol:	struct snd_ctl_elem_value as used by the ALSA infrastructure.
  *
@@ -2398,7 +2392,7 @@ static void vox_ctrl_byte_helper(struct snd_kcontrol_new *kc,
 
 /**
  * vox_ctrl_bio_res_blob() - move signed biometrics authentication results data
- *			blob to userspace
+ *			     blob to userspace
  * @kcontrol:	struct snd_kcontrol as used by the ALSA infrastructure.
  * @op_flag:	Can only usefully be SNDRV_CTL_TLV_OP_READ.
  * @size:	Unused.
@@ -2510,12 +2504,12 @@ static int vox_ctrl_user_installed_get(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_update_barge_in() - tell CLSIC about enrolment state
- * @vox:	The main instance of struct clsic_vox used in this driver.
+ * vox_update_barge_in() - tell CLSIC about playback state
+ * @vox:	The instance of struct clsic_vox
  *
- * This needs to be called just for safety when enrolment starts or when a
- * trigger has occurred. Alternatively, it may be actively called during
- * enrolment reps or biometric authentication.
+ * This indicates when the device is playing back audio, it is updated when
+ * beginning sensitive tasks and when userspace indicates a change while CLSIC
+ * is not idle.
  *
  * Return: errno.
  */
@@ -2622,7 +2616,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	if ((requested_state == VOX_DRV_STATE_NEUTRAL) &&
 	    (vox->drv_state == VOX_DRV_STATE_PERFORMING_PROMPTED_AUTH)) {
 		/*
-		 * If the worker is already active indicate the authenication
+		 * If the worker is already active indicate the authentication
 		 * attempt should terminate and ensure it's not blocked
 		 */
 		vox->auth_error = CLSIC_ERR_CANCELLED;
@@ -2697,15 +2691,13 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 }
 
 /**
- * vox_notification_handler() - handle notifications destined for the vox
- *				service
- * @clsic:	The main shared instance of struct clsic used in the CLSIC
- *		drivers.
+ * vox_notification_handler() - handle notifications from the vox service
+ * @clsic:	The parent clsic driver supporting this this vox instance
  * @handler:	The handler struct for vox service.
- * @msg:	The message notification itself as received from CLSIC.
+ * @msg:	The notification message received from CLSIC.
  *
- * This is a standard CLSIC function that will be called in the interrupt
- * handler context in the core messaging driver to examine notifications for the
+ * This is a standard CLSIC function that will be called in the incoming
+ * message context of the core messaging driver to examine notifications for the
  * vox service and react accordingly.
  *
  * Return: CLSIC_HANDLED or CLSIC_UNHANDLED.
@@ -2914,8 +2906,7 @@ static int vox_ctrl_scc_get(struct snd_kcontrol *kcontrol,
 	else if (s_bytes_scc == &vox->s_bytes_scc_phraseid)
 		rgstr = vox->trigger_info.vte_phraseid;
 	else {
-		clsic_err(vox->clsic, "unrecognised accessor %p\n",
-			  s_bytes_scc);
+		clsic_err(vox->clsic, "unrecognised control %p\n", s_bytes_scc);
 		return -EINVAL;
 	}
 
@@ -2993,8 +2984,7 @@ static void vox_ctrl_scc_helper(struct snd_kcontrol_new *kc,
 
 /**
  * clsic_vox_codec_probe() - probe function for the codec part of the driver
- * @codec:	The main shared instance of struct snd_soc_codec used in
- *		CLSIC.
+ * @codec:	The codec instance enclosing the struct clsic_vox
  *
  * Create ALSA controls and call various update functions to cache information
  * in the driver from CLSIC.
@@ -3356,8 +3346,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 /**
  * clsic_vox_codec_remove() - remove function for the codec part of the driver
- * @codec:	The main shared instance of struct snd_soc_codec used in
- *		CLSIC.
+ * @codec:	The codec instance enclosing the struct clsic_vox
  *
  * Cancel any schedule work.
  *
