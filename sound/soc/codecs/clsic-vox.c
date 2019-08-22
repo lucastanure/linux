@@ -955,14 +955,13 @@ static int vox_set_mode(struct clsic_vox *vox, enum clsic_vox_mode new_mode)
 	 * If the mode of the device is unknown, attempt to set it to IDLE
 	 * before setting the intended mode. If the intended mode is IDLE the
 	 * normal codepath is sufficient.
+	 *
+	 * Propagate an error when setting the mode to idle fails.
 	 */
-	if ((vox->clsic_mode == VOX_INDETERMINATE_MODE) &&
-	    (new_mode != CLSIC_VOX_MODE_IDLE)) {
-		if (vox_set_mode(vox, CLSIC_VOX_MODE_IDLE) != 0) {
-			/* Return without another trace event */
-			return -EIO;
-		}
-	}
+	if (((vox->clsic_mode == VOX_INDETERMINATE_MODE) &&
+	     (new_mode != CLSIC_VOX_MODE_IDLE)) &&
+	    (vox_set_mode(vox, CLSIC_VOX_MODE_IDLE) != 0))
+		return -EIO;
 
 	initial_mode = vox->clsic_mode;
 
