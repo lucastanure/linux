@@ -3000,13 +3000,19 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	dev_dbg(codec->dev, "%s() %p.\n", __func__, codec);
 
-	if (handler->service_version < CLSIC_VOX_SRV_VERSION) {
-		dev_err(codec->dev,
-			"%s() incompatible system firmware version 0x%08x (must be 0x%08x or newer).",
-			__func__, handler->service_version,
-			CLSIC_VOX_SRV_VERSION);
-		return -EPERM;
-	}
+	/*
+	 * There is a version embedded within the messaging specification for
+	 * the VOX service that establishes a binary API level.
+	 *
+	 * A difference could be benign or indicate a serious incompatibility,
+	 * therefore if the versions of the firmware and the device driver are
+	 * mismatched then log a warning.
+	 */
+	if (handler->service_version != CLSIC_SRV_VERSION_VOX)
+		dev_warn(codec->dev,
+			 "%s() warning mismatched VOX service version 0x%08x (built for version 0x%08x)",
+			 __func__, handler->service_version,
+			 CLSIC_SRV_VERSION_VOX);
 
 	vox->codec = codec;
 	vox_set_drv_state(vox, VOX_DRV_STATE_NEUTRAL);

@@ -19,9 +19,6 @@
 
 #define VOX_NUM_NEW_KCONTROLS				30
 
-/* Minimum version of system firmware required. */
-#define CLSIC_VOX_SRV_VERSION				0x00050002
-
 #define VOX_DEFAULT_DURATION				0
 #define VOX_DEFAULT_TIMEOUT				4000
 #define VOX_MAX_DURATION_TIMEOUT			0xFFFF
