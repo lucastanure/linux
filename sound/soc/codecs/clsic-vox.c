@@ -2102,15 +2102,13 @@ static void vox_perform_prompted_auth(struct clsic_vox *vox)
 		goto exit;
 	}
 
-	/* wait for notification of results */
-	if (wait_for_completion_timeout(&vox->new_bio_results_completion,
-					VOX_PROMPTED_AUTH_COMPLETION_TIMEOUT)
-	    == 0) {
-		clsic_err(vox->clsic, "Results completion timeout.\n");
-		vox->error_info = VOX_ERROR_DRIVER;
-		goto exit;
-	}
-
+	/*
+	 * Wait for notification of results - this will not timeout and isn't
+	 * interruptable with a signal, the process can be interrupted by
+	 * setting the driver state back to Neutral (vb_hal reset_state()
+	 * method)
+	 */
+	wait_for_completion(&vox->new_bio_results_completion);
 	vox_perform_auth_user(vox);
 
 exit:

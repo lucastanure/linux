@@ -29,7 +29,6 @@
 #define VOX_MAX_NUM_REPS				5
 
 #define VOX_NEW_BIO_RESULTS_COMPLETION_TIMEOUT		(5 * HZ)
-#define VOX_PROMPTED_AUTH_COMPLETION_TIMEOUT		(10 * HZ)
 
 /*
  * Extend the enum of clsic_vox_modes with another indicating that setting the
