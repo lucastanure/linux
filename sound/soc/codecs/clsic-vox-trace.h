@@ -436,6 +436,22 @@ TRACE_EVENT(clsic_vox_ratelimit_waiter,
 	TP_printk("%s", __entry->active ? "begin" : "end")
 );
 
+TRACE_EVENT(clsic_vox_ctrl_drv_state_put,
+	TP_PROTO(unsigned int current_drv_state, unsigned int requested_drv_state),
+	TP_ARGS(current_drv_state, requested_drv_state),
+	TP_STRUCT__entry(
+		__field(unsigned int, current_drv_state)
+		__field(unsigned int, requested_drv_state)
+	),
+	TP_fast_assign(
+		__entry->current_drv_state = current_drv_state,
+		__entry->requested_drv_state = requested_drv_state
+	),
+	TP_printk("current drv_state %d requested drv_state:%d",
+		  __entry->current_drv_state,
+		  __entry->requested_drv_state)
+);
+
 DEFINE_EVENT(clsic_vox_generic, clsic_vox_perform_auth_user,
 	TP_PROTO(uint8_t dummy),
 	TP_ARGS(dummy)

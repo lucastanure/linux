@@ -2607,6 +2607,8 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 	int new_state;
 	int ret = -EBUSY;
 
+	trace_clsic_vox_ctrl_drv_state_put(vox->drv_state, requested_state);
+
 	/*
 	 * Termination of prompted authentication has to be trapped and started
 	 * without the drv_state lock held

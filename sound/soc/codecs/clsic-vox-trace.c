@@ -45,6 +45,7 @@ EXPORT_TRACEPOINT_SYMBOL(clsic_vox_msgproc);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_ratelimit_waiter);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_perform_auth_user);
 EXPORT_TRACEPOINT_SYMBOL(clsic_vox_prompted_auth);
+EXPORT_TRACEPOINT_SYMBOL(clsic_vox_ctrl_drv_state_put);
 
 /*
  * The device mode is usually a member of the clsic_vox_modes enum, except when
