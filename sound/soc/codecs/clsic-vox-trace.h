@@ -437,7 +437,8 @@ TRACE_EVENT(clsic_vox_ratelimit_waiter,
 );
 
 TRACE_EVENT(clsic_vox_ctrl_drv_state_put,
-	TP_PROTO(unsigned int current_drv_state, unsigned int requested_drv_state),
+	TP_PROTO(unsigned int current_drv_state,
+		 unsigned int requested_drv_state),
 	TP_ARGS(current_drv_state, requested_drv_state),
 	TP_STRUCT__entry(
 		__field(unsigned int, current_drv_state)
