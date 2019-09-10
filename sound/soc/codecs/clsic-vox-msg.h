@@ -78,6 +78,7 @@ enum clsic_vox_msg_id {
 	 */
 	CLSIC_VOX_MSG_CR_AUTH_USER		= 5,
 	CLSIC_VOX_MSG_N_NEW_AUTH_RESULT		= 27,
+	CLSIC_VOX_MSG_N_RATE_LIMITED		= 39,
 
 	/**
 	 *  VOX Messages for Streaming mode.
@@ -818,6 +819,13 @@ union clsic_vox_msg {
 	struct {
 		struct clsic_blkrsp_hdr hdr;
 	} PACKED blkrsp_get_asr_block;
+
+	/**
+	 *  CLSIC_VOX_MSG_N_RATE_LIMITED notification structure.
+	 */
+	struct {
+		struct clsic_nty_hdr hdr;
+	} PACKED nty_rate_limited;
 
 	/**
 	 *  VOX Messages for Manage mode.
