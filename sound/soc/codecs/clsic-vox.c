@@ -746,7 +746,7 @@ static int clsic_vox_asr_stream_copy(struct snd_compr_stream *stream,
 		return -EFAULT;
 	}
 
-	count = min(count, asr_stream->buf.size);
+	count = min_t(size_t, count, asr_stream->buf.size);
 
 	trace_clsic_vox_asr_stream_copy_start(count);
 
