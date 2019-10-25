@@ -133,7 +133,7 @@ struct vox_last_auth {
 struct clsic_vox {
 	struct clsic *clsic;
 	struct clsic_service *service;
-	struct snd_soc_codec *codec;
+	struct snd_soc_component *component;
 
 	/* ASR data stream */
 	struct clsic_asr_stream asr_stream;

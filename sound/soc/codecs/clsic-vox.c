@@ -37,6 +37,8 @@
 
 #include "clsic-vox.h"
 
+#define DRV_NAME "clsic-vox-codec"
+
 /**
  * size_of_bio_results() - get the size of the biometric results struct in use
  * @bio_results_format:	The format of biometric results struct whose size is
@@ -81,7 +83,7 @@ static inline void vox_set_drv_state(struct clsic_vox *vox, int new_state)
  */
 static void vox_send_userspace_event(struct clsic_vox *vox)
 {
-	snd_ctl_notify(vox->codec->component.card->snd_card,
+	snd_ctl_notify(vox->component->card->snd_card,
 		       SNDRV_CTL_EVENT_MASK_VALUE, &vox->error_info_kctrl->id);
 }
 
@@ -134,7 +136,8 @@ static void clsic_vox_asr_cleanup_states(struct clsic_vox *vox)
 static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_vox *vox = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_vox *vox = snd_soc_component_get_drvdata(component);
 	struct clsic *clsic = vox->clsic;
 	int ret = 0;
 
@@ -146,11 +149,11 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 	 * Attempt to get a reference count on the required driver modules,
 	 * these calls may fail if the module is already being unloaded.
 	 */
-	if (!try_module_get(vox->codec->component.card->owner))
+	if (!try_module_get(component->card->owner))
 		return -EBUSY;
 
 	if (!try_module_get(clsic->dev->driver->owner)) {
-		module_put(vox->codec->component.card->owner);
+		module_put(component->card->owner);
 		return -EBUSY;
 	}
 
@@ -187,7 +190,7 @@ static int clsic_vox_asr_stream_open(struct snd_compr_stream *stream)
 
 error_return:
 	module_put(vox->clsic->dev->driver->owner);
-	module_put(vox->codec->component.card->owner);
+	module_put(component->card->owner);
 	return ret;
 }
 
@@ -223,7 +226,7 @@ static int clsic_vox_asr_stream_free(struct snd_compr_stream *stream)
 
 	pm_runtime_put_autosuspend(clsic->dev);
 	module_put(clsic->dev->driver->owner);
-	module_put(vox->codec->component.card->owner);
+	module_put(vox->component->card->owner);
 
 	return 0;
 }
@@ -398,7 +401,7 @@ static enum clsic_message_cb_ret clsic_vox_asr_stream_data_cb(
 	trace_clsic_vox_asr_stream_data_rcv(payload_sz);
 
 	pm_runtime_put_autosuspend(clsic->dev);
-	module_put(vox->codec->dev->driver->owner);
+	module_put(vox->component->dev->driver->owner);
 
 	return CLSIC_MSG_RELEASED;
 }
@@ -424,7 +427,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 	 * when an async message is outstanding the vox driver cannot be
 	 * unloaded as this would make the callback function invalid
 	 */
-	if (!try_module_get(vox->codec->dev->driver->owner))
+	if (!try_module_get(vox->component->dev->driver->owner))
 		return -EBUSY;
 
 	pm_runtime_get_sync(clsic->dev);
@@ -458,7 +461,7 @@ static int clsic_vox_asr_queue_async(struct clsic_vox *vox)
 		mutex_unlock(&asr_stream->stream_lock);
 
 		pm_runtime_put_autosuspend(clsic->dev);
-		module_put(vox->codec->dev->driver->owner);
+		module_put(vox->component->dev->driver->owner);
 	}
 
 	return ret;
@@ -811,20 +814,6 @@ static struct snd_soc_dai_driver clsic_vox_dai[] = {
 			.formats = TACNA_FORMATS,
 		},
 	},
-};
-
-static const struct snd_compr_ops clsic_vox_compr_ops = {
-	.open = &clsic_vox_asr_stream_open,
-	.free = &clsic_vox_asr_stream_free,
-	.set_params = &clsic_vox_asr_stream_set_params,
-	.trigger = &clsic_vox_asr_stream_trigger,
-	.pointer = &clsic_vox_asr_stream_pointer,
-	.copy = &clsic_vox_asr_stream_copy,
-	.get_caps = &clsic_vox_asr_stream_get_caps,
-};
-
-static const struct snd_soc_platform_driver clsic_vox_compr_platform = {
-	.compr_ops = &clsic_vox_compr_ops,
 };
 
 /**
@@ -2684,7 +2673,7 @@ static int vox_ctrl_drv_state_put(struct snd_kcontrol *kcontrol,
 			schedule_work(&vox->drv_state_work);
 		}
 	} else
-		clsic_err(vox->codec,
+		clsic_err(vox->component,
 			  "unable to switch from vox driver state %d to %d (error %d).\n",
 			  vox->drv_state, requested_state, ret);
 	return ret;
@@ -2832,7 +2821,7 @@ static void vox_ctrl_int_helper(struct snd_kcontrol_new *kc,
 				struct clsic_vox *vox,
 				void *value)
 {
-	struct vox_value *vv = devm_kzalloc(vox->codec->dev,
+	struct vox_value *vv = devm_kzalloc(vox->component->dev,
 					    sizeof(struct vox_value),
 					    GFP_KERNEL);
 
@@ -2987,22 +2976,22 @@ static void vox_ctrl_scc_helper(struct snd_kcontrol_new *kc,
 }
 
 /**
- * clsic_vox_codec_probe() - probe function for the codec part of the driver
- * @codec:	The codec instance enclosing the struct clsic_vox
+ * clsic_vox_component_probe() - probe function for the component part of the driver
+ * @component:	The component instance enclosing the struct clsic_vox
  *
  * Create ALSA controls and call various update functions to cache information
  * in the driver from CLSIC.
  *
  * Return: errno.
  */
-static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
+static int clsic_vox_component_probe(struct snd_soc_component *component)
 {
-	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
+	struct clsic_vox *vox = snd_soc_component_get_drvdata(component);
 	struct clsic_service *handler = vox->service;
 	int ret;
 	unsigned int ctl_id = 0;
 
-	dev_dbg(codec->dev, "%s() %p.\n", __func__, codec);
+	dev_dbg(component->dev, "%s() %p.\n", __func__, component);
 
 	/*
 	 * There is a version embedded within the messaging specification for
@@ -3013,12 +3002,12 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 	 * mismatched then log a warning.
 	 */
 	if (handler->service_version != CLSIC_SRV_VERSION_VOX)
-		dev_warn(codec->dev,
+		dev_warn(component->dev,
 			 "%s() warning mismatched VOX service version 0x%08x (built for version 0x%08x)",
 			 __func__, handler->service_version,
 			 CLSIC_SRV_VERSION_VOX);
 
-	vox->codec = codec;
+	vox->component = component;
 	vox_set_drv_state(vox, VOX_DRV_STATE_NEUTRAL);
 	vox->clsic_mode = CLSIC_VOX_MODE_IDLE;
 
@@ -3331,10 +3320,10 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 
 	BUG_ON(VOX_NUM_NEW_KCONTROLS != (ctl_id + 1));
 
-	ret = snd_soc_add_codec_controls(codec, vox->kcontrol_new,
+	ret = snd_soc_add_component_controls(component, vox->kcontrol_new,
 					 VOX_NUM_NEW_KCONTROLS);
 	if (ret != 0) {
-		dev_err(codec->dev, "enum %s() add ret: %d.\n", __func__, ret);
+		dev_err(component->dev, "enum %s() add ret: %d.\n", __func__, ret);
 		return ret;
 	}
 
@@ -3345,7 +3334,7 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 		return ret;
 
 	vox->error_info_kctrl = snd_soc_card_get_kcontrol(
-						vox->codec->component.card,
+						vox->component->card,
 						"Vox Error Info");
 
 	handler->data = (void *) vox;
@@ -3355,28 +3344,38 @@ static int clsic_vox_codec_probe(struct snd_soc_codec *codec)
 }
 
 /**
- * clsic_vox_codec_remove() - remove function for the codec part of the driver
- * @codec:	The codec instance enclosing the struct clsic_vox
+ * clsic_vox_component_remove() - remove function for the component part of the driver
+ * @component:	The component instance enclosing the struct clsic_vox
  *
  * Cancel any schedule work.
  *
  * Return: 0 always.
  */
-static int clsic_vox_codec_remove(struct snd_soc_codec *codec)
+static void clsic_vox_component_remove(struct snd_soc_component *component)
 {
-	struct clsic_vox *vox = snd_soc_codec_get_drvdata(codec);
+	struct clsic_vox *vox = snd_soc_component_get_drvdata(component);
 
-	dev_dbg(codec->dev, "%s() %p %p.\n", __func__, codec, vox);
+	dev_dbg(component->dev, "%s() %p %p.\n", __func__, component, vox);
 
 	cancel_work_sync(&vox->ratelimit_work);
 	cancel_work_sync(&vox->drv_state_work);
-
-	return 0;
 }
 
-static const struct snd_soc_codec_driver soc_codec_dev_clsic_vox = {
-	.probe = &clsic_vox_codec_probe,
-	.remove = &clsic_vox_codec_remove,
+static const struct snd_compr_ops clsic_vox_compr_ops = {
+	.open = &clsic_vox_asr_stream_open,
+	.free = &clsic_vox_asr_stream_free,
+	.set_params = &clsic_vox_asr_stream_set_params,
+	.trigger = &clsic_vox_asr_stream_trigger,
+	.pointer = &clsic_vox_asr_stream_pointer,
+	.copy = &clsic_vox_asr_stream_copy,
+	.get_caps = &clsic_vox_asr_stream_get_caps,
+};
+
+static const struct snd_soc_component_driver soc_component_dev_clsic_vox = {
+	.probe = &clsic_vox_component_probe,
+	.remove = &clsic_vox_component_remove,
+	.name	= DRV_NAME,
+	.compr_ops = &clsic_vox_compr_ops,
 };
 
 /**
@@ -3412,17 +3411,10 @@ static int clsic_vox_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, vox);
 
-	ret = snd_soc_register_platform(&pdev->dev, &clsic_vox_compr_platform);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register platform: %d.\n", ret);
-		goto error;
-	}
-
-	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_clsic_vox,
+	ret = devm_snd_soc_register_component(&pdev->dev, &soc_component_dev_clsic_vox,
 				     clsic_vox_dai, ARRAY_SIZE(clsic_vox_dai));
 	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register codec: %d.\n", ret);
-		snd_soc_unregister_platform(&pdev->dev);
+		dev_err(&pdev->dev, "Failed to register component: %d.\n", ret);
 		goto error;
 	}
 
@@ -3475,10 +3467,6 @@ static int clsic_vox_remove(struct platform_device *pdev)
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(vox->debugfs_vox);
 #endif
-
-	snd_soc_unregister_platform(&pdev->dev);
-	snd_soc_unregister_codec(&pdev->dev);
-
 	module_put(vox->clsic->dev->driver->owner);
 
 	return 0;
@@ -3502,7 +3490,7 @@ static struct platform_driver clsic_vox_driver = {
 
 module_platform_driver(clsic_vox_driver);
 
-MODULE_DESCRIPTION("ASoC Cirrus Logic CLSIC vox codec");
+MODULE_DESCRIPTION("ASoC Cirrus Logic CLSIC vox component");
 MODULE_AUTHOR("Piotr Stankiewicz <piotrs@opensource.wolfsonmicro.com>");
 MODULE_AUTHOR("Ralph Clark <ralph.clark@cirrus.com>");
 MODULE_AUTHOR("Simon Trimmer <simont@opensource.cirrus.com>");

@@ -858,9 +858,9 @@ bool clsic_msgproc_shutdown_cancel(struct clsic *clsic, bool sync)
 /*
  * The workerthread timer callback provides the timeout mechanism
  */
-static void clsic_workerthread_timer_function(unsigned long data)
+static void clsic_workerthread_timer_function(struct timer_list *t)
 {
-	struct clsic *clsic = (struct clsic *)data;
+	struct clsic *clsic = from_timer(clsic, t, workerthread_timer);
 
 	queue_work(clsic->message_worker_queue, &clsic->message_work);
 }
@@ -900,9 +900,7 @@ int clsic_setup_message_interface(struct clsic *clsic)
 	INIT_LIST_HEAD(&clsic->waiting_for_response);
 	INIT_LIST_HEAD(&clsic->completed_messages);
 
-	init_timer(&clsic->workerthread_timer);
-	clsic->workerthread_timer.function = &clsic_workerthread_timer_function;
-	clsic->workerthread_timer.data = (unsigned long) clsic;
+	timer_setup(&clsic->workerthread_timer, clsic_workerthread_timer_function, 0);
 
 	clsic->timeout_counter = 0;
 	clsic->messages_sent = 0;

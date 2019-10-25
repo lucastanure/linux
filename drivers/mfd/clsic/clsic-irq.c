@@ -78,9 +78,9 @@ static irqreturn_t clsic_irq_thread(int irq, void *data)
  */
 
 #define CLSIC_SIMIRQ_TIMER_PERIOD_MS 300
-static void clsic_simirq_timer_cb(unsigned long data)
+static void clsic_simirq_timer_cb(struct timer_list *t)
 {
-	struct clsic *clsic = (struct clsic *)data;
+	struct clsic *clsic = from_timer(clsic, t, simirq_timer);
 
 	schedule_work(&clsic->simirq_work);
 }
@@ -157,9 +157,7 @@ int clsic_irq_init(struct clsic *clsic)
 #ifdef CONFIG_DEBUG_FS
 	clsic->simirq_state = CLSIC_SIMIRQ_STATE_DEASSERTED;
 
-	init_timer(&clsic->simirq_timer);
-	clsic->simirq_timer.function = &clsic_simirq_timer_cb;
-	clsic->simirq_timer.data = (unsigned long) clsic;
+	timer_setup(&clsic->simirq_timer, clsic_simirq_timer_cb, 0);
 
 	INIT_WORK(&clsic->simirq_work, clsic_simirq);
 	debugfs_create_file("triggerirq", 0220, clsic->debugfs_root, clsic,

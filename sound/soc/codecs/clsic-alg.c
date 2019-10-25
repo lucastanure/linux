@@ -22,6 +22,8 @@
 #include <linux/mfd/clsic/message.h>
 #include <linux/mfd/clsic/irq.h>
 
+#define DRV_NAME "clsic-alg-codec"
+
 #define CLSIC_ALG_MAX_BULK_SZ  (CLSIC_FIFO_TRANSACTION_MAX / BITS_PER_BYTE)
 
 #define CLSIC_ALG_REG_BITS	32
@@ -67,7 +69,7 @@ struct clsic_alg_compr_stream {
 
 struct clsic_alg {
 	/*
-	 * wm_adsp struct must be the first element in codec private data
+	 * wm_adsp struct must be the first element in component private data
 	 * because adsp driver will cast this private data to wm_adsp to handle
 	 * dsp calls
 	 */
@@ -78,7 +80,7 @@ struct clsic_alg {
 	struct clsic_service *service;
 
 	/* SoC Audio Codec device */
-	struct snd_soc_codec *codec;
+	struct snd_soc_component *component;
 
 	struct regmap *regmap;
 	struct mutex regmapMutex;
@@ -1013,7 +1015,8 @@ static int clsic_alg_compr_free(struct snd_compr_stream *stream);
 static int clsic_alg_compr_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	struct clsic *clsic = alg->clsic;
 	enum clsic_ras_irq_id irq_id;
 	int ret = 0;
@@ -1026,11 +1029,11 @@ static int clsic_alg_compr_open(struct snd_compr_stream *stream)
 	 * Attempt to get a reference count on the required driver modules,
 	 * these calls may fail if the module is already being unloaded.
 	 */
-	if (!try_module_get(alg->codec->component.card->owner))
+	if (!try_module_get(component->card->owner))
 		return -EBUSY;
 
 	if (!try_module_get(alg->clsic->dev->driver->owner)) {
-		module_put(alg->codec->component.card->owner);
+		module_put(component->card->owner);
 		return -EBUSY;
 	}
 
@@ -1059,7 +1062,7 @@ static int clsic_alg_compr_open(struct snd_compr_stream *stream)
 				      alg->service->service_instance);
 
 		module_put(clsic->dev->driver->owner);
-		module_put(alg->codec->component.card->owner);
+		module_put(component->card->owner);
 		pm_runtime_put_autosuspend(clsic->dev);
 		return ret;
 	} else {
@@ -1105,7 +1108,8 @@ static int clsic_alg_compr_open(struct snd_compr_stream *stream)
 static int clsic_alg_compr_free(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	struct clsic *clsic = alg->clsic;
 	enum clsic_ras_irq_id irq_id;
 	int ret;
@@ -1147,7 +1151,7 @@ static int clsic_alg_compr_free(struct snd_compr_stream *stream)
 	clsic_msgproc_release(alg->clsic, alg->service->service_instance);
 
 	module_put(clsic->dev->driver->owner);
-	module_put(alg->codec->component.card->owner);
+	module_put(component->card->owner);
 	pm_runtime_put_autosuspend(clsic->dev);
 
 	trace_clsic_alg_compr_stream_free(rtd->codec_dai->name,
@@ -1170,7 +1174,8 @@ static int clsic_alg_compr_set_params(struct snd_compr_stream *stream,
 				      struct snd_compr_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	int ret;
 
 	clsic_dbg(alg->clsic, "%s\n", rtd->codec_dai->name);
@@ -1202,7 +1207,8 @@ static int clsic_alg_compr_get_caps(struct snd_compr_stream *stream,
 				    struct snd_compr_caps *caps)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	int ret;
 
 	clsic_dbg(alg->clsic, "%s\n", rtd->codec_dai->name);
@@ -1279,7 +1285,8 @@ static bool clsic_alg_stream_available(const char *name)
 static int clsic_alg_compr_trigger(struct snd_compr_stream *stream, int cmd)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	int ret;
 
 	clsic_dbg(alg->clsic, "%s %d\n", rtd->codec_dai->name, cmd);
@@ -1331,7 +1338,8 @@ static int clsic_alg_compr_pointer(struct snd_compr_stream *stream,
 				   struct snd_compr_tstamp *tstamp)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	int ret;
 
 	clsic_dbg(alg->clsic, "%s\n", rtd->codec_dai->name);
@@ -1371,7 +1379,8 @@ static int clsic_alg_compr_copy(struct snd_compr_stream *stream,
 				char __user *buf, size_t count)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(rtd->codec);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	int ret;
 
 	clsic_dbg(alg->clsic, "%s\n", rtd->codec_dai->name);
@@ -1392,19 +1401,19 @@ static int clsic_alg_compr_copy(struct snd_compr_stream *stream,
 }
 
 /**
- * clsic_alg_codec_probe() - probe function for the codec part of the driver
- * @codec:	The main shared instance of struct snd_soc_codec used in CLSIC.
+ * clsic_alg_component_probe() - probe function for the component part of the driver
+ * @component:	The main shared instance of struct snd_soc_component used in CLSIC.
  *
  * Initialise ALSA controls on VPU and DSPs
  *
  * Return: 0 success
  */
-static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
+static int clsic_alg_component_probe(struct snd_soc_component *component)
 {
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 	struct clsic_service *handler = alg->service;
 
-	alg->codec = codec;
+	alg->component = component;
 	handler->data = (void *)alg;
 	handler->callback = &clsic_alg_notification_handler;
 
@@ -1412,30 +1421,26 @@ static int clsic_alg_codec_probe(struct snd_soc_codec *codec)
 
 	INIT_WORK(&alg->compr_stream.triggered, clsic_alg_compr_triggered);
 
-	wm_adsp2_codec_probe(&alg->dsp[0], codec);
-	wm_adsp2_codec_probe(&alg->dsp[1], codec);
-	wm_adsp2_codec_probe(&alg->dsp[2], codec);
+	wm_adsp2_component_probe(&alg->dsp[0], component);
+	wm_adsp2_component_probe(&alg->dsp[1], component);
+	wm_adsp2_component_probe(&alg->dsp[2], component);
 
 	return 0;
 }
 
 /**
- * clsic_alg_codec_remove() - remove function for the codec part of the driver
- * @codec:	The main shared instance of struct snd_soc_codec used in CLSIC.
- *
- * Return: 0 success
+ * clsic_alg_component_remove() - remove function for the component part of the driver
+ * @component:	The main shared instance of struct snd_soc_component used in CLSIC.
  */
-static int clsic_alg_codec_remove(struct snd_soc_codec *codec)
+static void clsic_alg_component_remove(struct snd_soc_component *component)
 {
-	struct clsic_alg *alg = snd_soc_codec_get_drvdata(codec);
+	struct clsic_alg *alg = snd_soc_component_get_drvdata(component);
 
 	alg->service->callback = NULL;
 
-	wm_adsp2_codec_remove(&alg->dsp[0], codec);
-	wm_adsp2_codec_remove(&alg->dsp[1], codec);
-	wm_adsp2_codec_remove(&alg->dsp[2], codec);
-
-	return 0;
+	wm_adsp2_component_remove(&alg->dsp[0], component);
+	wm_adsp2_component_remove(&alg->dsp[1], component);
+	wm_adsp2_component_remove(&alg->dsp[2], component);
 }
 
 #define VPU_ADSP_PRELOADER(wname, num, event_fn) \
@@ -1483,18 +1488,6 @@ static const struct snd_kcontrol_new clsic_alg_snd_controls[] = {
 	WM_ADSP_FW_CONTROL("VPU1", 2),
 };
 
-static const struct snd_soc_codec_driver soc_codec_clsic_alg = {
-	.probe = &clsic_alg_codec_probe,
-	.remove = &clsic_alg_codec_remove,
-
-	.component_driver = {
-		.controls = clsic_alg_snd_controls,
-		.num_controls = ARRAY_SIZE(clsic_alg_snd_controls),
-		.dapm_widgets = clsic_alg_dapm_widgets,
-		.num_dapm_widgets = ARRAY_SIZE(clsic_alg_dapm_widgets),
-	},
-};
-
 static const struct snd_compr_ops clsic_alg_compr_ops = {
 	.open = &clsic_alg_compr_open,
 	.free = &clsic_alg_compr_free,
@@ -1505,8 +1498,15 @@ static const struct snd_compr_ops clsic_alg_compr_ops = {
 	.copy = &clsic_alg_compr_copy,
 };
 
-static const struct snd_soc_platform_driver clsic_alg_compr_platform = {
+static const struct snd_soc_component_driver soc_component_clsic_alg = {
+	.probe = &clsic_alg_component_probe,
+	.remove = &clsic_alg_component_remove,
 	.compr_ops = &clsic_alg_compr_ops,
+	.name	= DRV_NAME,
+	.controls = clsic_alg_snd_controls,
+	.num_controls = ARRAY_SIZE(clsic_alg_snd_controls),
+	.dapm_widgets = clsic_alg_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(clsic_alg_dapm_widgets),
 };
 
 /**
@@ -1571,12 +1571,6 @@ static int clsic_alg_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	ret = snd_soc_register_platform(dev, &clsic_alg_compr_platform);
-	if (ret < 0) {
-		clsic_err(clsic, "Failed to register platform: %d.\n", ret);
-		goto error;
-	}
-
 	devid_string = clsic_devid_to_string(alg->clsic->devid);
 
 	/*
@@ -1597,11 +1591,11 @@ static int clsic_alg_probe(struct platform_device *pdev)
 	clsic_alg_dai[CLSIC_ALG_VPU_TRACE].name =
 		kasprintf(GFP_KERNEL, "%s-dsp-trace", devid_string);
 
-	/* Register codec with the ASoC core */
-	ret = snd_soc_register_codec(dev, &soc_codec_clsic_alg, clsic_alg_dai,
+	/* Register component with the ASoC core */
+	ret = devm_snd_soc_register_component(dev, &soc_component_clsic_alg, clsic_alg_dai,
 				     ARRAY_SIZE(clsic_alg_dai));
 	if (ret)
-		clsic_err(clsic, "Failed to register codec: %d.\n", ret);
+		clsic_err(clsic, "Failed to register component: %d.\n", ret);
 
 error:
 	if (ret != 0)
@@ -1630,8 +1624,6 @@ static int clsic_alg_remove(struct platform_device *pdev)
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove(alg->rawMsgFile);
 #endif
-	snd_soc_unregister_platform(&pdev->dev);
-	snd_soc_unregister_codec(&pdev->dev);
 	module_put(alg->clsic->dev->driver->owner);
 
 	return 0;

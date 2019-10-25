@@ -9,6 +9,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/pinctrl/consumer.h>
 #include <linux/mfd/clsic/core.h>
 #include <linux/mfd/clsic/rassrv.h>
 #include <linux/mfd/core.h>

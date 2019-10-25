@@ -31,6 +31,8 @@
 #include <linux/mfd/clsic/core.h>
 #include <linux/mfd/clsic/clsic-tacna.h>
 
+#define DRV_NAME "clsic-codec"
+
 /* Revision A hardware does not have DSP power status registers */
 #define CLSIC_REVID_A 0xA0
 
@@ -52,7 +54,7 @@ struct clsic_codec {
 	struct tacna_priv core;
 	struct tacna_fll fll[3];
 	struct clsic *clsic;
-	struct snd_soc_codec *codec;
+	struct snd_soc_component *component;
 	bool host_controls_dsp2;
 	bool check_dsp2_power_ok;
 	bool micbias_active_discharge[CLSIC_MICBIAS_COUNT];
@@ -122,16 +124,16 @@ static void clsic_dsp_memory_disable(struct tacna_priv *priv)
 static int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event)
 {
-	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 	/*
 	 * the snd_soc_codec_get_drvdata() gets the address of both the
 	 * clsic_codec and the tacna_priv structures because tacna_priv is the
 	 * first member of clsic_codec
 	 */
-	struct clsic_codec *clsic_codec = snd_soc_codec_get_drvdata(codec);
-	struct tacna_priv *priv = snd_soc_codec_get_drvdata(codec);
+	struct clsic_codec *clsic_codec = snd_soc_component_get_drvdata(component);
+	struct tacna_priv *priv = snd_soc_component_get_drvdata(component);
 	struct tacna *tacna = priv->tacna;
-	struct wm_adsp *dsps = snd_soc_codec_get_drvdata(codec);
+	struct wm_adsp *dsps = snd_soc_component_get_drvdata(component);
 	struct wm_adsp *dsp = &dsps[w->shift];
 	unsigned int freq;
 	unsigned int val;
@@ -162,7 +164,7 @@ static int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 			ret = regmap_read(tacna->regmap, CLSIC_DSP2_PWR_CTRL,
 					  &val);
 			if (ret || !(val & CLSIC_DSP2_POWER_OK)) {
-				dev_err(codec->dev,
+				dev_err(component->dev,
 					"Failed to enable DSP2 power: %d (0x%x)\n",
 					ret, val);
 				return ret;
@@ -171,14 +173,14 @@ static int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		ret = regmap_write(tacna->regmap, CLSIC_DSP2_PWR_CTRL,
 			     CLSIC_DSP2_RST_N);
 		if (ret) {
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"Failed to de-assert reset: %d\n", ret);
 			goto error;
 		}
 
 		ret = regmap_read(tacna->regmap, TACNA_DSP_CLOCK3, &freq);
 		if (ret) {
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"Failed to read TACNA_DSP_CLOCK3: %d\n", ret);
 			goto error;
 		}
@@ -187,7 +189,7 @@ static int clsic_dsp_power_ev(struct snd_soc_dapm_widget *w,
 				   dsp->base + TACNA_DSP_CLOCK_FREQ_OFFS,
 				   freq);
 		if (ret) {
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"Failed to set HALO clock freq: %d\n", ret);
 			goto error;
 		}
@@ -279,8 +281,8 @@ static void clsic_micbias_init(struct clsic_codec *clsic_codec)
 static int clsic_micbias_ev(struct snd_soc_dapm_widget *w,
 			    struct snd_kcontrol *kcontrol, int event)
 {
-	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
-	struct clsic_codec *clsic_codec = snd_soc_codec_get_drvdata(codec);
+	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct clsic_codec *clsic_codec = snd_soc_component_get_drvdata(component);
 	int val = 0;
 	int ret;
 
@@ -321,8 +323,8 @@ static int clsic_micbias_ev(struct snd_soc_dapm_widget *w,
 static int clsic_in_ev(struct snd_soc_dapm_widget *w,
 		       struct snd_kcontrol *kcontrol, int event)
 {
-	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
-	struct tacna_priv *priv = snd_soc_codec_get_drvdata(codec);
+	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct tacna_priv *priv = snd_soc_component_get_drvdata(component);
 	unsigned int reg;
 
 	/*
@@ -352,15 +354,15 @@ static int clsic_in_ev(struct snd_soc_dapm_widget *w,
 		 * other other pending in_ev PMU events.
 		 */
 		if (!priv->in_up_pending)
-			snd_soc_update_bits(codec, reg,
+			snd_soc_component_update_bits(component, reg,
 					    TACNA_IN1L_MUTE | TACNA_IN_VU,
 					    TACNA_IN_VU);
 		else
-			snd_soc_update_bits(codec, reg, TACNA_IN1L_MUTE, 0);
+			snd_soc_component_update_bits(component, reg, TACNA_IN1L_MUTE, 0);
 
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
-		snd_soc_update_bits(codec, reg,
+		snd_soc_component_update_bits(component, reg,
 				    TACNA_IN1L_MUTE | TACNA_IN_VU,
 				    TACNA_IN1L_MUTE | TACNA_IN_VU);
 		break;
@@ -1968,48 +1970,48 @@ static const struct snd_kcontrol_new *clsic_dsp_tx_rate_controls[] = {
 	clsic_dsp2_tx_rate_controls
 };
 
-static void clsic_dsp_add_codec_controls(struct snd_soc_codec *codec,
+static void clsic_dsp_add_component_controls(struct snd_soc_component *component,
 					 unsigned int dsp_index,
 					 unsigned int n_rx_channels,
 					 unsigned int n_tx_channels)
 {
 	int ret;
 
-	ret = snd_soc_add_codec_controls(codec,
+	ret = snd_soc_add_component_controls(component,
 					 clsic_dsp_rx_rate_controls[dsp_index],
 					 n_rx_channels);
 	if (ret)
-		dev_err(codec->dev,
+		dev_err(component->dev,
 			"%s() ret:%d;Failed to add DSP%d rx rate ctls\n",
 			__func__, ret, dsp_index + 1);
 
-	ret = snd_soc_add_codec_controls(codec,
+	ret = snd_soc_add_component_controls(component,
 					 clsic_dsp_tx_rate_controls[dsp_index],
 					 n_tx_channels);
 	if (ret)
-		dev_err(codec->dev,
+		dev_err(component->dev,
 			"%s() ret:%d;Failed to add DSP%d tx rate ctls\n",
 			__func__, ret, dsp_index + 1);
 };
 
-static void clsic_dsps_add_codec_controls(struct clsic_codec *clsic_codec)
+static void clsic_dsps_add_component_controls(struct clsic_codec *clsic_codec)
 {
-	struct snd_soc_codec *codec = clsic_codec->codec;
+	struct snd_soc_component *component = clsic_codec->component;
 	int ret;
 
 	/* Set DSP1 controls */
-	clsic_dsp_add_codec_controls(codec, 0, CLSIC_DSP1_N_RX_CHANNELS,
+	clsic_dsp_add_component_controls(component, 0, CLSIC_DSP1_N_RX_CHANNELS,
 						CLSIC_DSP1_N_TX_CHANNELS);
 
 	/* Set DSP2 controls */
 	if (clsic_codec->host_controls_dsp2) {
-		ret = tacna_dsp_add_codec_controls(codec, CLSIC_NUM_DSP);
+		ret = tacna_dsp_add_component_controls(component, CLSIC_NUM_DSP);
 		if (ret)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"%s()ret:%d;Failed to add DSP rate ctls\n",
 				__func__, ret);
 	} else {
-		clsic_dsp_add_codec_controls(codec, 1,
+		clsic_dsp_add_component_controls(component, 1,
 						CLSIC_DSP2_N_RX_CHANNELS,
 						CLSIC_DSP2_N_TX_CHANNELS);
 	}
@@ -2018,8 +2020,8 @@ static void clsic_dsps_add_codec_controls(struct clsic_codec *clsic_codec)
 static int clsic_compr_open(struct snd_compr_stream *stream)
 {
 	struct snd_soc_pcm_runtime *rtd = stream->private_data;
-	struct clsic_codec *clsic_codec =
-			snd_soc_platform_get_drvdata(rtd->platform);
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+	struct clsic_codec *clsic_codec = snd_soc_component_get_drvdata(component);
 	struct tacna_priv *priv = &clsic_codec->core;
 
 	if (strcmp(rtd->codec_dai->name, "clsic-dsp-trace") != 0) {
@@ -2049,24 +2051,26 @@ static irqreturn_t clsic_dsp2_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int clsic_codec_probe(struct snd_soc_codec *codec)
+static int clsic_component_probe(struct snd_soc_component *component)
 {
 	struct clsic_codec *clsic_codec =
-		snd_soc_codec_get_drvdata(codec);
+		snd_soc_component_get_drvdata(component);
 	unsigned int revid;
 	int ret;
 
-	dev_dbg(codec->dev, "%s() %p\n", __func__, codec);
+	dev_dbg(component->dev, "%s() %p\n", __func__, component);
 
-	clsic_codec->core.tacna->dapm = snd_soc_codec_get_dapm(codec);
+	clsic_codec->core.tacna->dapm = snd_soc_component_get_dapm(component);
 
-	ret = tacna_init_inputs(codec);
+	snd_soc_component_init_regmap(component, clsic_codec->core.tacna->regmap);
+
+	ret = tacna_init_inputs(component);
 	if (ret)
 		return ret;
 
-	clsic_codec->codec = codec;
+	clsic_codec->component = component;
 
-	clsic_dsps_add_codec_controls(clsic_codec);
+	clsic_dsps_add_component_controls(clsic_codec);
 
 	if (clsic_codec->host_controls_dsp2) {
 		/*
@@ -2080,12 +2084,12 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 		if (!ret && ((revid & TACNA_AREVID_MASK) != CLSIC_REVID_A))
 			clsic_codec->check_dsp2_power_ok = true;
 
-		ret = snd_soc_add_codec_controls(codec,
+		ret = snd_soc_add_component_controls(component,
 			clsic_snd_controls_dsp2_visible,
 			ARRAY_SIZE(clsic_snd_controls_dsp2_visible));
 
 		if (ret != 0)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"%s():%u Failed to add DSP2 controls: %d\n",
 				__func__, __LINE__, ret);
 
@@ -2094,7 +2098,7 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 			ARRAY_SIZE(clsic_dapm_widgets_dsp2_visible));
 
 		if (ret != 0)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 			       "%s():%u Failed to add DSP2 dapm controls: %d\n",
 			       __func__, __LINE__, ret);
 
@@ -2103,19 +2107,19 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 			ARRAY_SIZE(clsic_dapm_routes_dsp2_visible));
 
 		if (ret != 0)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"%s():%u Failed to add DSP2 routes: %d\n",
 				__func__, __LINE__, ret);
 
-		wm_adsp2_codec_probe(&clsic_codec->core.dsp[CLSIC_TRACE_DSP],
-				     codec);
+		wm_adsp2_component_probe(&clsic_codec->core.dsp[CLSIC_TRACE_DSP],
+				component);
 	} else {
 		ret = snd_soc_dapm_new_controls(clsic_codec->core.tacna->dapm,
 			clsic_dapm_widgets_dsp2_hidden,
 			ARRAY_SIZE(clsic_dapm_widgets_dsp2_hidden));
 
 		if (ret != 0)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 			       "%s():%u Failed to add DSP2 dapm controls: %d\n",
 			       __func__, __LINE__, ret);
 
@@ -2124,7 +2128,7 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 			ARRAY_SIZE(clsic_dapm_routes_dsp2_hidden));
 
 		if (ret != 0)
-			dev_err(codec->dev,
+			dev_err(component->dev,
 				"%s():%u Failed to add DSP2 routes: %d\n",
 				__func__, __LINE__, ret);
 	}
@@ -2132,21 +2136,19 @@ static int clsic_codec_probe(struct snd_soc_codec *codec)
 	return ret;
 }
 
-static int clsic_codec_remove(struct snd_soc_codec *codec)
+static void clsic_component_remove(struct snd_soc_component *component)
 {
 	struct clsic_codec *clsic_codec =
-		snd_soc_codec_get_drvdata(codec);
+		snd_soc_component_get_drvdata(component);
 	struct tacna *tacna = clsic_codec->core.tacna;
 
-	dev_dbg(codec->dev, "%s() %p\n", __func__, codec);
+	dev_dbg(component->dev, "%s() %p\n", __func__, component);
 
 	tacna->dapm = NULL;
 
 	if (clsic_codec->host_controls_dsp2)
-		wm_adsp2_codec_remove(&clsic_codec->core.dsp[CLSIC_TRACE_DSP],
-				      codec);
-
-	return 0;
+		wm_adsp2_component_remove(&clsic_codec->core.dsp[CLSIC_TRACE_DSP],
+				component);
 }
 
 static const unsigned int clsic_digital_vu[] = {
@@ -2160,10 +2162,10 @@ static const unsigned int clsic_digital_vu[] = {
 	TACNA_IN4R_CONTROL2,
 };
 
-static int clsic_set_fll(struct snd_soc_codec *codec, int fll_id, int source,
+static int clsic_set_fll(struct snd_soc_component *component, int fll_id, int source,
 			 unsigned int fref, unsigned int fout)
 {
-	struct clsic_codec *clsic_codec = snd_soc_codec_get_drvdata(codec);
+	struct clsic_codec *clsic_codec = snd_soc_component_get_drvdata(component);
 	int idx;
 
 	switch (fll_id) {
@@ -2181,35 +2183,7 @@ static int clsic_set_fll(struct snd_soc_codec *codec, int fll_id, int source,
 				      source, fref, fout);
 }
 
-static struct regmap *clsic_get_regmap(struct device *dev)
-{
-	struct clsic_codec *clsic_codec = dev_get_drvdata(dev);
 
-	dev_dbg(dev, "%s() codec: %p regmap: %p\n", __func__,
-		clsic_codec, clsic_codec->core.tacna->regmap);
-
-	return clsic_codec->core.tacna->regmap;
-}
-
-static const struct snd_soc_codec_driver soc_codec_dev_clsic = {
-	.probe = &clsic_codec_probe,
-	.remove = &clsic_codec_remove,
-	.get_regmap = &clsic_get_regmap,
-
-	.idle_bias_off = true,
-
-	.set_sysclk = &tacna_set_sysclk,
-	.set_pll = &clsic_set_fll,
-
-	.component_driver = {
-		.controls = clsic_snd_controls,
-		.num_controls = ARRAY_SIZE(clsic_snd_controls),
-		.dapm_widgets = clsic_dapm_widgets,
-		.num_dapm_widgets = ARRAY_SIZE(clsic_dapm_widgets),
-		.dapm_routes = clsic_dapm_routes,
-		.num_dapm_routes = ARRAY_SIZE(clsic_dapm_routes),
-	},
-};
 
 static const struct snd_compr_ops clsic_compr_ops = {
 	.open = &clsic_compr_open,
@@ -2221,8 +2195,23 @@ static const struct snd_compr_ops clsic_compr_ops = {
 	.copy = &wm_adsp_compr_copy,
 };
 
-static const struct snd_soc_platform_driver clsic_compr_platform = {
+static const struct snd_soc_component_driver soc_component_dev_clsic = {
+	.probe = &clsic_component_probe,
+	.remove = &clsic_component_remove,
 	.compr_ops = &clsic_compr_ops,
+
+	.idle_bias_on 	= false,
+	.name		= DRV_NAME,
+
+	.set_sysclk = &tacna_set_sysclk,
+	.set_pll = &clsic_set_fll,
+
+	.controls = clsic_snd_controls,
+	.num_controls = ARRAY_SIZE(clsic_snd_controls),
+	.dapm_widgets = clsic_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(clsic_dapm_widgets),
+	.dapm_routes = clsic_dapm_routes,
+	.num_dapm_routes = ARRAY_SIZE(clsic_dapm_routes),
 };
 
 static int clsic_probe(struct platform_device *pdev)
@@ -2317,13 +2306,7 @@ static int clsic_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_idle(&pdev->dev);
 
-	ret = snd_soc_register_platform(&pdev->dev, &clsic_compr_platform);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to register platform: %d\n", ret);
-		goto err_plat;
-	}
-
-	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_clsic,
+	ret = devm_snd_soc_register_component(&pdev->dev, &soc_component_dev_clsic,
 				     clsic_dai, ARRAY_SIZE(clsic_dai));
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to register codec: %d\n", ret);
@@ -2335,8 +2318,6 @@ static int clsic_probe(struct platform_device *pdev)
 	return ret;
 
 err_codec:
-	snd_soc_unregister_platform(&pdev->dev);
-err_plat:
 	wm_adsp2_remove(&clsic_codec->core.dsp[CLSIC_TRACE_DSP]);
 err_dsp2:
 	clsic_tacna_free_irq(tacna, CLSIC_TACNA_IRQ_DSP2_0);
@@ -2355,8 +2336,6 @@ static int clsic_remove(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s() dev %p clsic %p priv %p\n",
 		__func__, &pdev->dev, clsic, clsic_codec);
 
-	snd_soc_unregister_platform(&pdev->dev);
-	snd_soc_unregister_codec(&pdev->dev);
 	clsic_tacna_free_irq(tacna, CLSIC_TACNA_IRQ_DSP2_0);
 	pm_runtime_disable(&pdev->dev);
 
@@ -2367,7 +2346,7 @@ static int clsic_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver clsic_codec_driver = {
+static struct platform_driver clsic_component_driver = {
 	.driver = {
 		.name = "clsic-codec",
 		.owner = THIS_MODULE,
@@ -2376,7 +2355,7 @@ static struct platform_driver clsic_codec_driver = {
 	.remove = &clsic_remove,
 };
 
-module_platform_driver(clsic_codec_driver);
+module_platform_driver(clsic_component_driver);
 
 MODULE_DESCRIPTION("ASoC Cirrus Logic CLSIC codec");
 MODULE_AUTHOR("Simon Trimmer <simont@opensource.cirrus.com>");
