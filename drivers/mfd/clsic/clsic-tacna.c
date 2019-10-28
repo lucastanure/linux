@@ -67,7 +67,7 @@ static int clsic_tacna_pinctrl_setactive(struct tacna *tacna)
 		return ret;
 	}
 
-	pinctrl_state = pinctrl_lookup_state(pinctrl, "active");
+	pinctrl_state = pinctrl_lookup_state(pinctrl, "default");
 	if (!IS_ERR(pinctrl_state)) {
 		ret = pinctrl_select_state(pinctrl, pinctrl_state);
 		if (ret)

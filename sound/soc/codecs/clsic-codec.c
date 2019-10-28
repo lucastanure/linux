@@ -2212,6 +2212,7 @@ static const struct snd_soc_component_driver soc_component_dev_clsic = {
 	.num_dapm_widgets = ARRAY_SIZE(clsic_dapm_widgets),
 	.dapm_routes = clsic_dapm_routes,
 	.num_dapm_routes = ARRAY_SIZE(clsic_dapm_routes),
+	.non_legacy_dai_naming	= 1,
 };
 
 static int clsic_probe(struct platform_device *pdev)
