@@ -3,6 +3,12 @@
 #
 comment "USB Miscellaneous drivers"
 
+config USB_CYPRESS_FX3_BOOT
+	tristate "Bootloader Driver for CYUSB3KIT-003 SuperSpeed Explorer Kit"
+	---help---
+	  To compile this driver as a module, choose M here: the
+	  module will be called cypress_fx3_bootloader.
+
 config USB_EMI62
 	tristate "EMI 6|2m USB Audio interface support"
 	---help---
