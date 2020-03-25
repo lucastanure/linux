@@ -3,6 +3,15 @@
 #
 comment "USB Miscellaneous drivers"
 
+config USB_CIRRUS_CLUBB
+	tristate "Cirrus Logic USB Bus Bridge support"
+	---help---
+	  This driver creates SPI / I2S / I2C interfaces over
+	  usb.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called clubb.
+
 config USB_CYPRESS_FX3_BOOT
 	tristate "Bootloader Driver for CYUSB3KIT-003 SuperSpeed Explorer Kit"
 	---help---
