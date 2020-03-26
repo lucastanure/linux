@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2018
+ * Copyright (c) 2018, 2020
  * Cirrus Logic, Inc. and Cirrus Logic International Semiconductor Ltd.
  * All rights reserved.
  * This software as well as any related documentation is furnished under
@@ -20,6 +20,10 @@
 #define CLSICMESSAGEDEFINESDIAGNOSTICS_DBG_H_
 
 #include "clsicmessagedefines.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  *  Service type identifier.
@@ -107,5 +111,9 @@ union clsic_dbg_msg {
 		struct clsic_rsp_hdr hdr;
 	} PACKED rsp_dump_stack;
 } PACKED;
+
+#if (defined __cplusplus)
+}
+#endif
 
 #endif /* CLSICMESSAGEDEFINESDIAGNOSTICS_DBG_H_ */
