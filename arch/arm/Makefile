@@ -375,6 +375,14 @@ define merge_into_defconfig
 	+$(Q)$(MAKE) -f $(srctree)/Makefile olddefconfig
 endef
 
+PHONY += pi4_clubb_defconfig
+pi4_clubb_defconfig:
+	$(call merge_into_defconfig,bcm2711_defconfig,clubb_defconfig)
+
+PHONY += pi_clubb_defconfig
+pi_clubb_defconfig:
+	$(call merge_into_defconfig,bcm2709_defconfig,clubb_defconfig)
+
 define archhelp
   echo  '* zImage        - Compressed kernel image (arch/$(ARCH)/boot/zImage)'
   echo  '  Image         - Uncompressed kernel image (arch/$(ARCH)/boot/Image)'
