@@ -15,6 +15,9 @@
 
 #define to_urb(d) container_of(d, struct urb, kref)
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/musb.h>
+
 
 static void urb_destroy(struct kref *kref)
 {
@@ -357,6 +360,8 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 	struct usb_host_endpoint	*ep;
 	int				is_out;
 	unsigned int			allowed;
+
+	trace_musb(__func__);
 
 	if (!urb || !urb->complete)
 		return -EINVAL;

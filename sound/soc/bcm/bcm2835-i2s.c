@@ -116,6 +116,9 @@
 /* Frame length register is 10 bit, maximum length 1024 */
 #define BCM2835_I2S_MAX_FRAME_LENGTH	1024
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/bcmi2s.h>
+
 /* General device struct */
 struct bcm2835_i2s_dev {
 	struct device				*dev;
@@ -136,6 +139,7 @@ struct bcm2835_i2s_dev {
 static void bcm2835_i2s_start_clock(struct bcm2835_i2s_dev *dev)
 {
 	unsigned int master = dev->fmt & SND_SOC_DAIFMT_MASTER_MASK;
+	trace_bcmi2s(__func__);
 
 	if (dev->clk_prepared)
 		return;
@@ -153,6 +157,7 @@ static void bcm2835_i2s_start_clock(struct bcm2835_i2s_dev *dev)
 
 static void bcm2835_i2s_stop_clock(struct bcm2835_i2s_dev *dev)
 {
+	trace_bcmi2s(__func__);
 	if (dev->clk_prepared)
 		clk_disable_unprepare(dev->clk);
 	dev->clk_prepared = false;
@@ -168,6 +173,7 @@ static void bcm2835_i2s_clear_fifos(struct bcm2835_i2s_dev *dev,
 	bool clk_was_prepared;
 	uint32_t off;
 	uint32_t clr;
+	trace_bcmi2s(__func__);
 
 	off =  tx ? BCM2835_I2S_TXON : 0;
 	off |= rx ? BCM2835_I2S_RXON : 0;
@@ -228,6 +234,7 @@ static int bcm2835_i2s_set_dai_fmt(struct snd_soc_dai *dai,
 				      unsigned int fmt)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 	dev->fmt = fmt;
 	return 0;
 }
@@ -236,6 +243,7 @@ static int bcm2835_i2s_set_dai_bclk_ratio(struct snd_soc_dai *dai,
 				      unsigned int ratio)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 
 	if (!ratio) {
 		dev->tdm_slots = 0;
@@ -259,6 +267,7 @@ static int bcm2835_i2s_set_dai_tdm_slot(struct snd_soc_dai *dai,
 	int slots, int width)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 
 	if (slots) {
 		if (slots < 0 || width < 0)
@@ -303,6 +312,7 @@ static int bcm2835_i2s_set_dai_tdm_slot(struct snd_soc_dai *dai,
  */
 static int bcm2835_i2s_convert_slot(unsigned int slot, unsigned int odd_offset)
 {
+	trace_bcmi2s(__func__);
 	if (!odd_offset)
 		return slot;
 
@@ -328,6 +338,7 @@ static void bcm2835_i2s_calc_channel_pos(
 	unsigned int mask, unsigned int width,
 	unsigned int bit_offset, unsigned int odd_offset)
 {
+	trace_bcmi2s(__func__);
 	*ch1_pos = bcm2835_i2s_convert_slot((ffs(mask) - 1), odd_offset)
 			* width + bit_offset;
 	*ch2_pos = bcm2835_i2s_convert_slot((fls(mask) - 1), odd_offset)
@@ -350,6 +361,7 @@ static int bcm2835_i2s_hw_params(struct snd_pcm_substream *substream,
 	bool frame_start_falling_edge = false;
 	uint32_t csreg;
 	int ret = 0;
+	trace_bcmi2s(__func__);
 
 	/*
 	 * If a stream is already enabled,
@@ -627,6 +639,7 @@ static int bcm2835_i2s_prepare(struct snd_pcm_substream *substream,
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
 	uint32_t cs_reg;
+	trace_bcmi2s(__func__);
 
 	/*
 	 * Clear both FIFOs if the one that should be started
@@ -651,6 +664,7 @@ static void bcm2835_i2s_stop(struct bcm2835_i2s_dev *dev,
 		struct snd_soc_dai *dai)
 {
 	uint32_t mask;
+	trace_bcmi2s(__func__);
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		mask = BCM2835_I2S_RXON;
@@ -673,8 +687,31 @@ static int bcm2835_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_START");
+		bcm2835_i2s_start_clock(dev);
+
+		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+			mask = BCM2835_I2S_RXON;
+		else
+			mask = BCM2835_I2S_TXON;
+
+		regmap_update_bits(dev->i2s_regmap,
+				BCM2835_I2S_CS_A_REG, mask, mask);
+		break;
 	case SNDRV_PCM_TRIGGER_RESUME:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_RESUME");
+		bcm2835_i2s_start_clock(dev);
+
+		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+			mask = BCM2835_I2S_RXON;
+		else
+			mask = BCM2835_I2S_TXON;
+
+		regmap_update_bits(dev->i2s_regmap,
+				BCM2835_I2S_CS_A_REG, mask, mask);
+		break;
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_PAUSE_RELEASE");
 		bcm2835_i2s_start_clock(dev);
 
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
@@ -687,8 +724,15 @@ static int bcm2835_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_STOP");
+		bcm2835_i2s_stop(dev, substream, dai);
+		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_SUSPEND");
+		bcm2835_i2s_stop(dev, substream, dai);
+		break;
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		trace_bcmi2s("bcm2835_i2s_trigger SNDRV_PCM_TRIGGER_PAUSE_PUSH");
 		bcm2835_i2s_stop(dev, substream, dai);
 		break;
 	default:
@@ -702,6 +746,7 @@ static int bcm2835_i2s_startup(struct snd_pcm_substream *substream,
 			       struct snd_soc_dai *dai)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 
 	if (dai->active)
 		return 0;
@@ -727,6 +772,7 @@ static void bcm2835_i2s_shutdown(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 
 	bcm2835_i2s_stop(dev, substream, dai);
 
@@ -759,6 +805,7 @@ static const struct snd_soc_dai_ops bcm2835_i2s_dai_ops = {
 static int bcm2835_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct bcm2835_i2s_dev *dev = snd_soc_dai_get_drvdata(dai);
+	trace_bcmi2s(__func__);
 
 	snd_soc_dai_init_dma_data(dai,
 			&dev->dma_data[SNDRV_PCM_STREAM_PLAYBACK],

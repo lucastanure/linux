@@ -19,7 +19,7 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-
+#define DEBUG
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
 #include <linux/time.h>
@@ -272,7 +272,9 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 	struct timespec audio_tstamp;
 	int crossed_boundary = 0;
 
+	trace_pcm_lib(__func__);
 	old_hw_ptr = runtime->status->hw_ptr;
+	trace_pcm_libsi("snd_pcm_update_hw_ptr0 old_hw_ptr ", old_hw_ptr);
 
 	/*
 	 * group pointer, time and jiffies reads to allow for more
@@ -281,6 +283,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 	 * corrections for hw_ptr position
 	 */
 	pos = substream->ops->pointer(substream);
+	trace_pcm_libsi("snd_pcm_update_hw_ptr0 pos from pointer ", pos);
 	curr_jiffies = jiffies;
 	if (runtime->tstamp_mode == SNDRV_PCM_TSTAMP_ENABLE) {
 		if ((substream->ops->get_time_info) &&
@@ -299,6 +302,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 
 	if (pos == SNDRV_PCM_POS_XRUN) {
 		__snd_pcm_xrun(substream);
+		pr_info("%s %d", __func__, __LINE__);
 		return -EPIPE;
 	}
 	if (pos >= runtime->buffer_size) {
@@ -379,6 +383,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 			     "(stream=%i, pos=%ld, new_hw_ptr=%ld, old_hw_ptr=%ld)\n",
 			     substream->stream, (long)pos,
 			     (long)new_hw_ptr, (long)old_hw_ptr);
+		pr_info("%s %d", __func__, __LINE__);
 		return 0;
 	}
 
@@ -471,6 +476,7 @@ static int snd_pcm_update_hw_ptr0(struct snd_pcm_substream *substream,
 /* CAUTION: call it with irq disabled */
 int snd_pcm_update_hw_ptr(struct snd_pcm_substream *substream)
 {
+	trace_pcm_lib(__func__);
 	return snd_pcm_update_hw_ptr0(substream, 0);
 }
 
@@ -1151,6 +1157,7 @@ int snd_pcm_hw_rule_add(struct snd_pcm_runtime *runtime, unsigned int cond,
 	while (1) {
 		if (snd_BUG_ON(k >= ARRAY_SIZE(c->deps))) {
 			va_end(args);
+			trace_pcm_lib_fl(__func__, __LINE__);
 			return -EINVAL;
 		}
 		c->deps[k++] = dep;
@@ -1849,6 +1856,7 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 		} else {
 			wait_time = 10;
 
+			pr_info("runtime->rate %u", runtime->rate);
 			if (runtime->rate) {
 				long t = runtime->period_size * 2 /
 					 runtime->rate;
@@ -1857,10 +1865,12 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 			wait_time = msecs_to_jiffies(wait_time * 1000);
 		}
 	}
+	pr_info("wait_time %ld", wait_time);
 
 	for (;;) {
 		if (signal_pending(current)) {
 			err = -ERESTARTSYS;
+			pr_info("Error %s %d %d", __func__, __LINE__, err);
 			break;
 		}
 
@@ -1876,20 +1886,24 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 			break;
 		snd_pcm_stream_unlock_irq(substream);
 
-		tout = schedule_timeout(wait_time);
+		tout = schedule_timeout2(wait_time);
 
 		snd_pcm_stream_lock_irq(substream);
 		set_current_state(TASK_INTERRUPTIBLE);
 		switch (runtime->status->state) {
 		case SNDRV_PCM_STATE_SUSPENDED:
 			err = -ESTRPIPE;
+			pr_info("Error %s %d %d", __func__, __LINE__, err);
 			goto _endloop;
 		case SNDRV_PCM_STATE_XRUN:
 			err = -EPIPE;
+			pr_info("Error %s %d %d", __func__, __LINE__, err);
 			goto _endloop;
 		case SNDRV_PCM_STATE_DRAINING:
-			if (is_playback)
+			if (is_playback) {
 				err = -EPIPE;
+				pr_info("Error %s %d %d", __func__, __LINE__, err);
+			}
 			else 
 				avail = 0; /* indicate draining */
 			goto _endloop;
@@ -1897,6 +1911,7 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 		case SNDRV_PCM_STATE_SETUP:
 		case SNDRV_PCM_STATE_DISCONNECTED:
 			err = -EBADFD;
+			pr_info("Error %s %d %d", __func__, __LINE__, err);
 			goto _endloop;
 		case SNDRV_PCM_STATE_PAUSED:
 			continue;
@@ -1905,6 +1920,7 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 			pcm_dbg(substream->pcm,
 				"%s write error (DMA or IRQ trouble?)\n",
 				is_playback ? "playback" : "capture");
+			pr_info("Error %s %d %d", __func__, __LINE__, err);
 			err = -EIO;
 			break;
 		}
@@ -1936,6 +1952,7 @@ static int default_write_copy(struct snd_pcm_substream *substream,
 			      int channel, unsigned long hwoff,
 			      void *buf, unsigned long bytes)
 {
+	trace_pcm_lib(__func__);
 	if (copy_from_user(get_dma_ptr(substream->runtime, channel, hwoff),
 			   (void __user *)buf, bytes))
 		return -EFAULT;
@@ -1947,6 +1964,7 @@ static int default_write_copy_kernel(struct snd_pcm_substream *substream,
 				     int channel, unsigned long hwoff,
 				     void *buf, unsigned long bytes)
 {
+	trace_pcm_lib(__func__);
 	memcpy(get_dma_ptr(substream->runtime, channel, hwoff), buf, bytes);
 	return 0;
 }
@@ -1959,6 +1977,7 @@ static int fill_silence(struct snd_pcm_substream *substream, int channel,
 			unsigned long hwoff, void *buf, unsigned long bytes)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	trace_pcm_lib(__func__);
 
 	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
 		return 0;
@@ -1977,6 +1996,7 @@ static int default_read_copy(struct snd_pcm_substream *substream,
 			     int channel, unsigned long hwoff,
 			     void *buf, unsigned long bytes)
 {
+	trace_pcm_lib(__func__);
 	if (copy_to_user((void __user *)buf,
 			 get_dma_ptr(substream->runtime, channel, hwoff),
 			 bytes))
@@ -1989,6 +2009,7 @@ static int default_read_copy_kernel(struct snd_pcm_substream *substream,
 				    int channel, unsigned long hwoff,
 				    void *buf, unsigned long bytes)
 {
+	trace_pcm_lib(__func__);
 	memcpy(buf, get_dma_ptr(substream->runtime, channel, hwoff), bytes);
 	return 0;
 }
@@ -2004,10 +2025,12 @@ static int interleaved_copy(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
+
 	/* convert to bytes */
 	hwoff = frames_to_bytes(runtime, hwoff);
 	off = frames_to_bytes(runtime, off);
 	frames = frames_to_bytes(runtime, frames);
+	trace_pcm_libsi(__func__, frames);
 	return transfer(substream, 0, hwoff, data + off, frames);
 }
 
@@ -2024,6 +2047,7 @@ static int noninterleaved_copy(struct snd_pcm_substream *substream,
 	int channels = runtime->channels;
 	void **bufs = data;
 	int c, err;
+	trace_pcm_lib(__func__);
 
 	/* convert to bytes; note that it's not frames_to_bytes() here.
 	 * in non-interleaved mode, we copy for each channel, thus
@@ -2131,43 +2155,69 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 	bool is_playback;
 	int err;
 
+	trace_pcm_lib(__func__);
+
 	err = pcm_sanity_check(substream);
-	if (err < 0)
+	if (err < 0){
+		pr_info("Error %s %d", __func__, __LINE__);
 		return err;
+	}
 
 	is_playback = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
 	if (interleaved) {
+		trace_pcm_lib("interleaved");
 		if (runtime->access != SNDRV_PCM_ACCESS_RW_INTERLEAVED &&
-		    runtime->channels > 1)
+		    runtime->channels > 1){
+			pr_info("Error %s %d", __func__, __LINE__);
 			return -EINVAL;
+		}
 		writer = interleaved_copy;
 	} else {
-		if (runtime->access != SNDRV_PCM_ACCESS_RW_NONINTERLEAVED)
+		trace_pcm_lib("not interleaved");
+		if (runtime->access != SNDRV_PCM_ACCESS_RW_NONINTERLEAVED){
+			pr_info("Error %s %d", __func__, __LINE__);
 			return -EINVAL;
+		}
 		writer = noninterleaved_copy;
 	}
 
 	if (!data) {
 		if (is_playback)
 			transfer = fill_silence;
-		else
+		else{
+			pr_info("Error %s %d", __func__, __LINE__);
 			return -EINVAL;
+		}
 	} else if (in_kernel) {
+		trace_pcm_lib("in_kernel");
 		if (substream->ops->copy_kernel)
 			transfer = substream->ops->copy_kernel;
 		else
-			transfer = is_playback ?
-				default_write_copy_kernel : default_read_copy_kernel;
+			 if(is_playback) {
+				trace_pcm_lib("transfer = default_write_copy_kernel");
+				transfer = default_write_copy_kernel;
+			 } else {
+				 trace_pcm_lib("transfer = default_read_copy_kernel;");
+				transfer = default_read_copy_kernel;
+			 }
 	} else {
+		trace_pcm_lib("not in_kernel");
 		if (substream->ops->copy_user)
 			transfer = (pcm_transfer_f)substream->ops->copy_user;
 		else
-			transfer = is_playback ?
-				default_write_copy : default_read_copy;
+			if (is_playback) {
+				trace_pcm_lib("transfer = default_write_copy");
+				transfer = default_write_copy;
+			} else {
+				trace_pcm_lib("transfer = default_read_copy");
+				transfer = default_read_copy;
+			}
 	}
 
-	if (size == 0)
+	if (size == 0){
+		pr_info("Error %s %d", __func__, __LINE__);
 		return 0;
+	}
 
 	nonblock = !!(substream->f_flags & O_NONBLOCK);
 
@@ -2180,32 +2230,53 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 	    runtime->status->state == SNDRV_PCM_STATE_PREPARED &&
 	    size >= runtime->start_threshold) {
 		err = snd_pcm_start(substream);
-		if (err < 0)
+		if (err < 0){
+			pr_info("Error %s %d", __func__, __LINE__);
 			goto _end_unlock;
+		}
 	}
 
 	runtime->twake = runtime->control->avail_min ? : 1;
-	if (runtime->status->state == SNDRV_PCM_STATE_RUNNING)
-		snd_pcm_update_hw_ptr(substream);
+
+
+	if (runtime->status->state == SNDRV_PCM_STATE_OPEN){pr_info("SNDRV_PCM_STATE_OPEN\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_SETUP){pr_info("SNDRV_PCM_STATE_SETUP\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_PREPARED){pr_info("SNDRV_PCM_STATE_PREPARED\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_RUNNING){pr_info("SNDRV_PCM_STATE_RUNNING\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_XRUN){pr_info("SNDRV_PCM_STATE_XRUN\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_DRAINING){pr_info("SNDRV_PCM_STATE_DRAINING\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_PAUSED){pr_info("SNDRV_PCM_STATE_PAUSED\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_SUSPENDED){pr_info("SNDRV_PCM_STATE_SUSPENDED\n");}
+	if (runtime->status->state == SNDRV_PCM_STATE_DISCONNECTED){pr_info("SNDRV_PCM_STATE_DISCONNECTED\n");}
+
+
+	if (runtime->status->state == SNDRV_PCM_STATE_RUNNING){
+		err = snd_pcm_update_hw_ptr(substream);
+		pr_info("err %d", err);
+	}
 	avail = snd_pcm_avail(substream);
+	trace_pcm_libsi("1avail ", avail);
 	while (size > 0) {
 		snd_pcm_uframes_t frames, appl_ptr, appl_ofs;
 		snd_pcm_uframes_t cont;
+		pr_info("2avail %lu", avail);
 		if (!avail) {
 			if (!is_playback &&
 			    runtime->status->state == SNDRV_PCM_STATE_DRAINING) {
 				snd_pcm_stop(substream, SNDRV_PCM_STATE_SETUP);
+				pr_info("Error %s %d", __func__, __LINE__);
 				goto _end_unlock;
 			}
 			if (nonblock) {
 				err = -EAGAIN;
+				pr_info("Error %s %d", __func__, __LINE__);
 				goto _end_unlock;
 			}
 			runtime->twake = min_t(snd_pcm_uframes_t, size,
 					runtime->control->avail_min ? : 1);
 			err = wait_for_avail(substream, &avail);
 			if (err < 0)
-				goto _end_unlock;
+			{pr_info("Error %s %d %d", __func__, __LINE__, err);goto _end_unlock;}
 			if (!avail)
 				continue; /* draining */
 		}
@@ -2218,6 +2289,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 		if (snd_BUG_ON(!frames)) {
 			runtime->twake = 0;
 			snd_pcm_stream_unlock_irq(substream);
+			pr_info("Error %s %d", __func__, __LINE__);
 			return -EINVAL;
 		}
 		snd_pcm_stream_unlock_irq(substream);
@@ -2225,16 +2297,16 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 			     transfer);
 		snd_pcm_stream_lock_irq(substream);
 		if (err < 0)
-			goto _end_unlock;
+		{pr_info("Error %s %d", __func__, __LINE__);goto _end_unlock;}
 		err = pcm_accessible_state(runtime);
 		if (err < 0)
-			goto _end_unlock;
+		{pr_info("Error %s %d", __func__, __LINE__);goto _end_unlock;}
 		appl_ptr += frames;
 		if (appl_ptr >= runtime->boundary)
 			appl_ptr -= runtime->boundary;
 		err = pcm_lib_apply_appl_ptr(substream, appl_ptr);
 		if (err < 0)
-			goto _end_unlock;
+		{pr_info("Error %s %d", __func__, __LINE__);goto _end_unlock;}
 
 		offset += frames;
 		size -= frames;
@@ -2245,7 +2317,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 		    snd_pcm_playback_hw_avail(runtime) >= (snd_pcm_sframes_t)runtime->start_threshold) {
 			err = snd_pcm_start(substream);
 			if (err < 0)
-				goto _end_unlock;
+			{pr_info("Error %s %d", __func__, __LINE__);goto _end_unlock;}
 		}
 	}
  _end_unlock:

@@ -16,6 +16,7 @@
  * General Public License for more details.
  *
  */
+#define DEBUG
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/slab.h>
@@ -30,6 +31,9 @@
 #define CLUBB_PERIODS_MAX		6000	/* Max periods in buffer */
 #define CLUBB_PERIODS_MIN		4	/* Min periods in buffer */
 #define CLUBB_BUFFER_BYTES_MAX	(CLUBB_PERIOD_BYTES_MAX * CLUBB_PERIODS_MAX)
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/clubb.h>
 
 struct urbs_pending {
 	unsigned long id;
@@ -57,8 +61,11 @@ static void clubb_bulk_callback(struct urb *urb)
 	int status = urb->status;
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
 
-	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN))
+	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
 		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
+		trace_clubb("Error sending urb!!!!!!!!!!!!!!");
+	}
+	trace_clubb_2(__func__, "urbs->id", urbs->id, " urbs->sub_id ", urbs->sub_id);
 
 	//usb_free_coherent(urb->dev, urb->transfer_buffer_length, urb->transfer_buffer, urb->transfer_dma);
 	//usb_free_urb(urb);
@@ -114,6 +121,7 @@ static int clubb_create_lr_urb(uint16_t *buffer, unsigned long bytes, unsigned l
 	if (clubb_priv->playing && !list_empty(&clubb_priv->pending_list))
 		schedule_delayed_work(&clubb_priv->send_worker, msecs_to_jiffies(1));
 
+	trace_clubb_3(__func__, "urbs->id", urbs->id, "urbs->sub_id", urbs->sub_id, "bytes", bytes);
 	return 0;
 }
 
@@ -123,6 +131,8 @@ static int clubb_i2s_copy(struct snd_pcm_substream *substream, int channel, unsi
 	unsigned long writesize, pos, sub_id;
 	char *buffer;
 	int ret;
+
+	trace_clubb(__func__);
 
 	buffer = kmalloc(bytes, GFP_KERNEL);
 	if (!buffer)
@@ -153,6 +163,7 @@ void clubb_urb_sender(struct work_struct *data)
 
 	to_send = list_first_entry_or_null(&clubb_priv->pending_list, struct urbs_pending, node);
 	if (to_send) {
+		trace_clubb_2(__func__, "to_send->id", to_send->id, "to_send->sub_id", to_send->sub_id);
 
 		retval = usb_submit_urb(to_send->l_urb, GFP_KERNEL);
 		if (retval) {
@@ -174,6 +185,7 @@ void clubb_urb_sender(struct work_struct *data)
 		//if (clubb_priv->hwptr_done >= 24000)//???????
 	//		clubb_priv->hwptr_done -= 24000;
 		mutex_unlock(&clubb_priv->lock);
+		trace_clubb_1(__func__, "clubb_priv->hwptr_done", clubb_priv->hwptr_done);
 
 	}
 	if (clubb_priv->playing && !list_empty(&clubb_priv->pending_list))
@@ -187,6 +199,8 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	struct urb *l_urb, *r_urb;
 	int retval;
 
+	trace_clubb(__func__);
+
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		clubb_priv->playing = 1;
@@ -194,6 +208,8 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		to_send = list_first_entry_or_null(&clubb_priv->pending_list, struct urbs_pending, node);
 		if (!to_send)
 			break;
+
+		trace_clubb_2(__func__, "to_send->id", to_send->id, "to_send->sub_id", to_send->sub_id);
 
 		l_urb = to_send->l_urb;
 		retval = usb_submit_urb(to_send->l_urb, GFP_KERNEL);
@@ -220,11 +236,13 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		//if (clubb_priv->hwptr_done >= 24000)//???????
 		//	clubb_priv->hwptr_done -= 24000;
 		mutex_unlock(&clubb_priv->lock);
+		trace_clubb_1(__func__, "clubb_priv->hwptr_done", clubb_priv->hwptr_done);
 
 		schedule_delayed_work(&clubb_priv->send_worker, msecs_to_jiffies(1));
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		clubb_priv->playing = 0;
+		trace_clubb_0(__func__, "SNDRV_PCM_TRIGGER_STOP");
 		break;
 	default:
 		break;
@@ -237,6 +255,7 @@ static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *subs)
 {
 	struct snd_pcm_runtime *runtime = subs->runtime;
 
+	trace_clubb_1(__func__, "hwptr_done", clubb_priv->hwptr_done);
 	//mutex_lock(&clubb_priv->lock);
 	//if (clubb_priv->hwptr_done >= 24000)//???????
 	//	clubb_priv->hwptr_done -= 24000;
@@ -264,6 +283,7 @@ static const struct snd_pcm_hardware clubb_pcm_hw = {
 
 static int clubb_pcm_open(struct snd_pcm_substream *substream)
 {
+	trace_clubb(__func__);
 	clubb_priv->pkg_id = 0;
 	clubb_priv->playing = 0;
 
@@ -276,6 +296,7 @@ static int clubb_pcm_open(struct snd_pcm_substream *substream)
 
 static int clubb_i2s_probe(struct snd_soc_dai *dai)
 {
+	trace_clubb(__func__);
 	return 0;
 }
 
@@ -321,6 +342,8 @@ static int clubb_usb_probe(struct usb_interface *intf,
 	clubb_priv = kzalloc(sizeof(struct clubb_data), GFP_KERNEL);
 	if (!clubb_priv)
 		return -ENOMEM;
+
+	dev_dbg(&intf->dev, "%s\n", __func__);
 
 	INIT_LIST_HEAD(&clubb_priv->pending_list);
 	clubb_priv->udev = udev;

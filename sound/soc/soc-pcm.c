@@ -9,7 +9,7 @@
 //
 // Authors: Liam Girdwood <lrg@ti.com>
 //          Mark Brown <broonie@opensource.wolfsonmicro.com>
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -27,6 +27,9 @@
 #include <sound/initval.h>
 
 #define DPCM_MAX_BE_USERS	8
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/socpcm.h>
 
 /*
  * snd_soc_dai_stream_valid() - check if a DAI supports the given stream
@@ -154,6 +157,8 @@ int snd_soc_set_runtime_hwparams(struct snd_pcm_substream *substream,
 	const struct snd_pcm_hardware *hw)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	pr_info("snd_soc_set_runtime_hwparams");
+	trace_socpcm(__func__);
 	runtime->hw.info = hw->info;
 	runtime->hw.formats = hw->formats;
 	runtime->hw.period_bytes_min = hw->period_bytes_min;

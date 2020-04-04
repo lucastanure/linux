@@ -33,6 +33,9 @@
 #include "pcm.h"
 #include "quirks.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/endpoint.h>
+
 #define EP_FLAG_RUNNING		1
 #define EP_FLAG_STOPPING	2
 
@@ -86,6 +89,7 @@ static inline unsigned get_usb_high_speed_rate(unsigned int rate)
  */
 static void release_urb_ctx(struct snd_urb_ctx *u)
 {
+	trace_endp_func(__func__);
 	if (u->buffer_size)
 		usb_free_coherent(u->ep->chip->dev, u->buffer_size,
 				  u->urb->transfer_buffer,
@@ -129,6 +133,7 @@ static const char *usb_error_string(int err)
  */
 int snd_usb_endpoint_implicit_feedback_sink(struct snd_usb_endpoint *ep)
 {
+	trace_endp_func(__func__);
 	return  ep->sync_master &&
 		ep->sync_master->type == SND_USB_ENDPOINT_TYPE_DATA &&
 		ep->type == SND_USB_ENDPOINT_TYPE_DATA &&
@@ -146,6 +151,7 @@ int snd_usb_endpoint_next_packet_size(struct snd_usb_endpoint *ep)
 {
 	unsigned long flags;
 	int ret;
+	trace_endp_func(__func__);
 
 	if (ep->fill_max)
 		return ep->maxframesize;
@@ -162,6 +168,7 @@ int snd_usb_endpoint_next_packet_size(struct snd_usb_endpoint *ep)
 static void retire_outbound_urb(struct snd_usb_endpoint *ep,
 				struct snd_urb_ctx *urb_ctx)
 {
+	trace_endp_func(__func__);
 	if (ep->retire_data_urb)
 		ep->retire_data_urb(ep->data_subs, urb_ctx->urb);
 }
@@ -170,6 +177,7 @@ static void retire_inbound_urb(struct snd_usb_endpoint *ep,
 			       struct snd_urb_ctx *urb_ctx)
 {
 	struct urb *urb = urb_ctx->urb;
+	trace_endp_func(__func__);
 
 	if (unlikely(ep->skip_packets > 0)) {
 		ep->skip_packets--;
@@ -191,6 +199,7 @@ static void prepare_silent_urb(struct snd_usb_endpoint *ep,
 	unsigned int extra = 0;
 	__le32 packet_length;
 	int i;
+	trace_endp_func(__func__);
 
 	/* For tx_length_quirk, put packet length at start of packet */
 	if (ep->chip->tx_length_quirk)
@@ -232,6 +241,7 @@ static void prepare_outbound_urb(struct snd_usb_endpoint *ep,
 {
 	struct urb *urb = ctx->urb;
 	unsigned char *cp = urb->transfer_buffer;
+	trace_endp_func(__func__);
 
 	urb->dev = ep->chip->dev; /* we need to set this at each time */
 
@@ -281,6 +291,7 @@ static inline void prepare_inbound_urb(struct snd_usb_endpoint *ep,
 {
 	int i, offs;
 	struct urb *urb = urb_ctx->urb;
+	trace_endp_func(__func__);
 
 	urb->dev = ep->chip->dev; /* we need to set this at each time */
 
@@ -320,6 +331,7 @@ static inline void prepare_inbound_urb(struct snd_usb_endpoint *ep,
  */
 static void queue_pending_output_urbs(struct snd_usb_endpoint *ep)
 {
+	trace_endp_func(__func__);
 	while (test_bit(EP_FLAG_RUNNING, &ep->flags)) {
 
 		unsigned long flags;
@@ -372,6 +384,7 @@ static void snd_complete_urb(struct urb *urb)
 	struct snd_pcm_substream *substream;
 	unsigned long flags;
 	int err;
+	trace_endp_func(__func__);
 
 	if (unlikely(urb->status == -ENOENT ||		/* unlinked */
 		     urb->status == -ENODEV ||		/* device removed */
@@ -452,6 +465,7 @@ struct snd_usb_endpoint *snd_usb_add_endpoint(struct snd_usb_audio *chip,
 {
 	struct snd_usb_endpoint *ep;
 	int is_playback = direction == SNDRV_PCM_STREAM_PLAYBACK;
+	trace_endp_func(__func__);
 
 	if (WARN_ON(!alts))
 		return NULL;
@@ -523,6 +537,7 @@ static int wait_clear_urbs(struct snd_usb_endpoint *ep)
 {
 	unsigned long end_time = jiffies + msecs_to_jiffies(1000);
 	int alive;
+	trace_endp_func(__func__);
 
 	do {
 		alive = bitmap_weight(&ep->active_mask, ep->nurbs);
@@ -551,6 +566,7 @@ static int wait_clear_urbs(struct snd_usb_endpoint *ep)
  */
 void snd_usb_endpoint_sync_pending_stop(struct snd_usb_endpoint *ep)
 {
+	trace_endp_func(__func__);
 	if (ep && test_bit(EP_FLAG_STOPPING, &ep->flags))
 		wait_clear_urbs(ep);
 }
@@ -561,6 +577,7 @@ void snd_usb_endpoint_sync_pending_stop(struct snd_usb_endpoint *ep)
 static int deactivate_urbs(struct snd_usb_endpoint *ep, bool force)
 {
 	unsigned int i;
+	trace_endp_func(__func__);
 
 	if (!force && atomic_read(&ep->chip->shutdown)) /* to be sure... */
 		return -EBADFD;
@@ -589,6 +606,7 @@ static int deactivate_urbs(struct snd_usb_endpoint *ep, bool force)
 static void release_urbs(struct snd_usb_endpoint *ep, int force)
 {
 	int i;
+	trace_endp_func(__func__);
 
 	/* route incoming urbs to nirvana */
 	ep->retire_data_urb = NULL;
@@ -628,6 +646,10 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 	int tx_length_quirk = (ep->chip->tx_length_quirk &&
 			       usb_pipeout(ep->pipe));
 
+	trace_endp_func(__func__);
+	pr_info("data_ep_set_params");
+	pr_info("frame_bits %d", frame_bits);
+
 	if (pcm_format == SNDRV_PCM_FORMAT_DSD_U16_LE && fmt->dsd_dop) {
 		/*
 		 * When operating in DSD DOP mode, the size of a sample frame
@@ -636,6 +658,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 		 */
 		frame_bits += channels << 3;
 	}
+	pr_info("frame_bits %d", frame_bits);
 
 	ep->datainterval = fmt->datainterval;
 	ep->stride = frame_bits >> 3;
@@ -676,6 +699,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 			 (frame_bits >> 3);
 	if (tx_length_quirk)
 		maxsize += sizeof(__le32); /* Space for length descriptor */
+	pr_info("maxsize %u", maxsize);
 	/* but wMaxPacketSize might reduce this */
 	if (ep->maxpacksize && ep->maxpacksize < maxsize) {
 		/* whatever fits into a max. size packet */
@@ -704,6 +728,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 		max_packs_per_urb = min(max_packs_per_urb,
 					1U << sync_ep->syncinterval);
 	max_packs_per_urb = max(1u, max_packs_per_urb >> ep->datainterval);
+	pr_info("max_packs_per_urb %u", max_packs_per_urb);
 
 	/*
 	 * Capture endpoints need to use small URBs because there's no way
@@ -750,15 +775,19 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 		if (sync_ep)
 			minsize -= minsize >> 3;
 		minsize = max(minsize, 1u);
+		pr_info("minsize %u", minsize);
 
 		/* how many packets will contain an entire ALSA period? */
 		max_packs_per_period = DIV_ROUND_UP(period_bytes, minsize);
+		pr_info("max_packs_per_period %u", max_packs_per_period);
 
 		/* how many URBs will contain a period? */
 		urbs_per_period = DIV_ROUND_UP(max_packs_per_period,
 				max_packs_per_urb);
+		pr_info("urbs_per_period %u", urbs_per_period);
 		/* how many packets are needed in each URB? */
 		urb_packs = DIV_ROUND_UP(max_packs_per_period, urbs_per_period);
+		pr_info("urb_packs %u", urb_packs);
 
 		/* limit the number of frames in a single URB */
 		ep->max_urb_frames = DIV_ROUND_UP(frames_per_period,
@@ -767,16 +796,19 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 		/* try to use enough URBs to contain an entire ALSA buffer */
 		max_urbs = min((unsigned) MAX_URBS,
 				MAX_QUEUE * packs_per_ms / urb_packs);
+		pr_info("max_urbs %u", max_urbs);
 		ep->nurbs = min(max_urbs, urbs_per_period * periods_per_buffer);
+		pr_info("ep->nurbs %u", ep->nurbs);
 	}
-
 	/* allocate and initialize data urbs */
 	for (i = 0; i < ep->nurbs; i++) {
 		struct snd_urb_ctx *u = &ep->urb[i];
+		pr_info("urb %u ##################################", i);
 		u->index = i;
 		u->ep = ep;
 		u->packets = urb_packs;
 		u->buffer_size = maxsize * u->packets;
+		pr_info("u->buffer_size %u", u->buffer_size);
 
 		if (fmt->fmt_type == UAC_FORMAT_TYPE_II)
 			u->packets++; /* for transfer delimiter */
@@ -795,6 +827,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 		u->urb->context = u;
 		u->urb->complete = snd_complete_urb;
 		INIT_LIST_HEAD(&u->ready_list);
+
 	}
 
 	return 0;
@@ -810,6 +843,7 @@ out_of_memory:
 static int sync_ep_set_params(struct snd_usb_endpoint *ep)
 {
 	int i;
+	trace_endp_func(__func__);
 
 	ep->syncbuf = usb_alloc_coherent(ep->chip->dev, SYNC_URBS * 4,
 					 GFP_KERNEL, &ep->sync_dma);
@@ -872,6 +906,7 @@ int snd_usb_endpoint_set_params(struct snd_usb_endpoint *ep,
 				struct snd_usb_endpoint *sync_ep)
 {
 	int err;
+	trace_endp_func(__func__);
 
 	if (ep->use_count != 0) {
 		usb_audio_warn(ep->chip,
@@ -935,6 +970,7 @@ int snd_usb_endpoint_start(struct snd_usb_endpoint *ep)
 {
 	int err;
 	unsigned int i;
+	trace_endp_func(__func__);
 
 	if (atomic_read(&ep->chip->shutdown))
 		return -EBADFD;
@@ -991,6 +1027,8 @@ int snd_usb_endpoint_start(struct snd_usb_endpoint *ep)
 		}
 		set_bit(i, &ep->active_mask);
 	}
+
+	trace_endp_func("snd_usb_endpoint_start END");
 
 	return 0;
 
@@ -1093,6 +1131,8 @@ void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 	int shift;
 	unsigned int f;
 	unsigned long flags;
+
+	trace_endp_func(__func__);
 
 	snd_BUG_ON(ep == sender);
 

@@ -133,6 +133,34 @@ TRACE_EVENT(hw_interval_param,
 	)
 );
 
+TRACE_EVENT(pcm_nat,
+	TP_PROTO(const char *func),
+	TP_ARGS(func),
+	TP_STRUCT__entry(
+		__field(const char *, func)
+	),
+	TP_fast_assign(
+		__entry->func = func;
+	),
+	TP_printk("%s", __entry->func)
+);
+
+TRACE_EVENT(pcm_fl,
+	TP_PROTO(const char *func,
+		 unsigned int line
+	),
+	TP_ARGS(func, line),
+	TP_STRUCT__entry(
+		__field(const char *, func)
+		__field(unsigned int, line)
+	),
+	TP_fast_assign(
+		__entry->func = func;
+		__entry->line = line;
+	),
+	TP_printk("%s %u\n", __entry->func, __entry->line)
+);
+
 #endif /* _PCM_PARAMS_TRACE_H */
 
 /* This part must be outside protection */

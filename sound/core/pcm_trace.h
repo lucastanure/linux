@@ -141,6 +141,50 @@ TRACE_EVENT(applptr,
 	)
 );
 
+TRACE_EVENT(pcm_lib,
+	TP_PROTO(const char *func),
+	TP_ARGS(func),
+	TP_STRUCT__entry(
+		__field(const char *, func)
+	),
+	TP_fast_assign(
+		__entry->func = func;
+	),
+	TP_printk("%s", __entry->func)
+);
+
+TRACE_EVENT(pcm_libsi,
+	TP_PROTO(const char *name,
+		 unsigned int devid
+	),
+	TP_ARGS(name, devid),
+	TP_STRUCT__entry(
+		__field(const char *, name)
+		__field(unsigned int, devid)
+	),
+	TP_fast_assign(
+		__entry->name = name;
+		__entry->devid = devid;
+	),
+	TP_printk("%s Size %u",__entry->name, __entry->devid)
+);
+
+TRACE_EVENT(pcm_lib_fl,
+	TP_PROTO(const char *func,
+		 unsigned int line
+	),
+	TP_ARGS(func, line),
+	TP_STRUCT__entry(
+		__field(const char *, func)
+		__field(unsigned int, line)
+	),
+	TP_fast_assign(
+		__entry->func = func;
+		__entry->line = line;
+	),
+	TP_printk("%s %u\n", __entry->func, __entry->line)
+);
+
 #endif /* _PCM_TRACE_H */
 
 /* This part must be outside protection */
