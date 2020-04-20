@@ -884,6 +884,12 @@ int clsic_setup_message_interface(struct clsic *clsic)
 		return -ENOMEM;
 	}
 
+	clsic->incoming_messages = clsic_allocate_msg(clsic);
+	if (clsic->incoming_messages == NULL){
+		kmem_cache_destroy(clsic->message_cache);
+		return -ENOMEM;
+	}
+
 	INIT_WORK(&clsic->message_work, clsic_message_worker);
 
 	INIT_DELAYED_WORK(&clsic->clsic_msgproc_shutdown_work,
@@ -997,6 +1003,7 @@ void clsic_shutdown_message_interface(struct clsic *clsic)
 	}
 	mutex_unlock(&clsic->message_lock);
 
+	clsic_release_msg(clsic, clsic->incoming_messages);
 	kmem_cache_destroy(clsic->message_cache);
 }
 
@@ -1786,7 +1793,7 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 {
 	int ret;
 	uint32_t sts;
-	struct clsic_message msg;
+	struct clsic_message *msg = clsic->incoming_messages;
 
 	/* If debugcontrol is asserted then do nothing */
 	if (clsic->state == CLSIC_STATE_DEBUGCONTROL_GRANTED) {
@@ -1813,14 +1820,14 @@ void clsic_handle_incoming_messages(struct clsic *clsic)
 		 * handler to progress it
 		 */
 		if ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0) {
-			memset(&msg, 0, sizeof(struct clsic_message));
-			ret = clsic_fifo_readmessage(clsic, &msg);
+			memset(msg, 0, sizeof(struct clsic_message));
+			ret = clsic_fifo_readmessage(clsic, msg);
 			if (ret != 0) {
 				clsic_err(clsic, "readmessage %d\n", ret);
 				return;
 			}
 
-			clsic_message_handler(clsic, &msg);
+			clsic_message_handler(clsic, msg);
 		}
 		/* the loop handled a FIFO message then go around again */
 	} while ((sts & TACNA_CPF1_TX_FIFO_NOT_EMPTY_STS) != 0);

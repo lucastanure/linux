@@ -238,6 +238,8 @@ struct clsic {
 	/* Slab cache of messages */
 	struct kmem_cache *message_cache;
 
+	/* Single message to handle messages and data being received. */
+	struct clsic_message *incoming_messages;
 	/*
 	 * Single pointer to the message currently blocking the bus,
 	 * if this is NULL then the bus is available
