@@ -337,7 +337,7 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 	int ret;
 	union t_clsic_generic_message msg_cmd;
 	struct clsic_fwheader *hdr;
-	uint8_t err;
+	uint8_t err, *buf;
 	u32 fw_crc;
 	struct clsic_bootsrv_struct *bootsrv =
 		clsic->service_handlers[CLSIC_SRV_INST_BLD]->data;
@@ -419,9 +419,14 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 
 	msg_cmd.bulk_cmd.hdr.bulk_sz = firmware->size;
 
+	buf = kmalloc(firmware->size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	memcpy(buf, firmware->data, firmware->size);
+
 	ret = clsic_send_msg_sync(clsic, &msg_cmd,
 				  (union t_clsic_generic_message *)msg_rsp,
-				  firmware->data, firmware->size,
+				  buf, firmware->size,
 				  CLSIC_NO_RXBUF, CLSIC_NO_RXBUF_LEN);
 
 	if (ret != 0) {
@@ -440,6 +445,7 @@ static int clsic_bootsrv_sendfile(struct clsic *clsic,
 
 release_exit:
 	release_firmware(firmware);
+	kfree(buf);
 exit:
 	/*
 	 * Any failures to send files to the bootloader are considered fatal.
