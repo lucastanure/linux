@@ -26,6 +26,8 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 
+#define DRV_NAME "clubb-i2s-comp"
+
 #define CLUBB_PERIOD_BYTES_MAX	24000	/* DMA transfer/period size */
 #define CLUBB_PERIOD_BYTES_MIN	256	/* DMA transfer/period size */
 #define CLUBB_PERIODS_MAX		6000	/* Max periods in buffer */
@@ -40,6 +42,7 @@ struct urbs_pending {
 	unsigned long sub_id;
 	struct urb *l_urb;
 	struct urb *r_urb;
+	struct clubb_data *priv;
 	struct list_head node;
 };
 
@@ -53,13 +56,12 @@ struct clubb_data {
 	struct list_head pending_list;
 };
 
-struct clubb_data *clubb_priv;
-
 static void clubb_bulk_callback(struct urb *urb)
 {
-	struct usb_device *udev = clubb_priv->udev;
-	int status = urb->status;
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
+	struct usb_device *udev = urbs->priv->udev;
+	int status = urb->status;
+
 
 	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
 		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
@@ -72,9 +74,10 @@ static void clubb_bulk_callback(struct urb *urb)
 
 }
 
-static int clubb_create_lr_urb(uint16_t *buffer, unsigned long bytes, unsigned long sub_id)
+static int clubb_create_lr_urb(struct clubb_data *priv, uint16_t *buffer, unsigned long bytes,
+			       unsigned long sub_id)
 {
-	struct usb_device *udev = clubb_priv->udev;
+	struct usb_device *udev = priv->udev;
 	struct urbs_pending *urbs;
 	struct urb *l_urb, *r_urb;
 	uint16_t *l_buf, *r_buf;
@@ -110,24 +113,27 @@ static int clubb_create_lr_urb(uint16_t *buffer, unsigned long bytes, unsigned l
 	}
 	urbs->l_urb = l_urb;
 	urbs->r_urb = r_urb;
-	urbs->id = clubb_priv->pkg_id;
+	urbs->id = priv->pkg_id;
 	urbs->sub_id = sub_id;
+	urbs->priv = priv;
 
 	usb_fill_bulk_urb(l_urb, udev, usb_sndbulkpipe(udev, 1), l_buf, bytes/2, clubb_bulk_callback, urbs);
 	usb_fill_bulk_urb(r_urb, udev, usb_sndbulkpipe(udev, 2), r_buf, bytes/2, clubb_bulk_callback, urbs);
 
-	list_add_tail(&urbs->node, &clubb_priv->pending_list);
+	list_add_tail(&urbs->node, &priv->pending_list);
 
-	if (clubb_priv->playing && !list_empty(&clubb_priv->pending_list))
-		schedule_delayed_work(&clubb_priv->send_worker, msecs_to_jiffies(1));
+	if (priv->playing && !list_empty(&priv->pending_list))
+		schedule_delayed_work(&priv->send_worker, msecs_to_jiffies(1));
 
 	trace_clubb_3(__func__, "urbs->id", urbs->id, "urbs->sub_id", urbs->sub_id, "bytes", bytes);
 	return 0;
 }
 
-static int clubb_i2s_copy(struct snd_pcm_substream *substream, int channel, unsigned long hwoff,
+static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned long hwoff,
 			  void __user *user_buf, unsigned long bytes)
 {
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
+	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
 	unsigned long writesize, pos, sub_id;
 	char *buffer;
 	int ret;
@@ -144,7 +150,7 @@ static int clubb_i2s_copy(struct snd_pcm_substream *substream, int channel, unsi
 	sub_id = 0;
 	while (bytes) {
 		writesize = min_t(unsigned long, bytes, 1024);
-		ret = clubb_create_lr_urb((uint16_t *)(&buffer[pos]), writesize, sub_id);
+		ret = clubb_create_lr_urb(priv, (uint16_t *)(&buffer[pos]), writesize, sub_id);
 		if (ret)
 			return ret;
 		pos += writesize;
@@ -152,16 +158,17 @@ static int clubb_i2s_copy(struct snd_pcm_substream *substream, int channel, unsi
 		sub_id++;
 	}
 	kfree(buffer);
-	clubb_priv->pkg_id++;
+	priv->pkg_id++;
 	return 0;
 }
 
-void clubb_urb_sender(struct work_struct *data)
+void clubb_urb_sender(struct work_struct *work)
 {
+	struct clubb_data *priv = container_of(work, struct clubb_data, send_worker.work);
 	struct urbs_pending *to_send;
 	int retval = 0;
 
-	to_send = list_first_entry_or_null(&clubb_priv->pending_list, struct urbs_pending, node);
+	to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
 	if (to_send) {
 		trace_clubb_2(__func__, "to_send->id", to_send->id, "to_send->sub_id", to_send->sub_id);
 
@@ -179,22 +186,23 @@ void clubb_urb_sender(struct work_struct *data)
 
 		list_del(&to_send->node);
 
-		mutex_lock(&clubb_priv->lock);
-		clubb_priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
-		clubb_priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
-		//if (clubb_priv->hwptr_done >= 24000)//???????
-	//		clubb_priv->hwptr_done -= 24000;
-		mutex_unlock(&clubb_priv->lock);
-		trace_clubb_1(__func__, "clubb_priv->hwptr_done", clubb_priv->hwptr_done);
+		mutex_lock(&priv->lock);
+		priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
+		priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
+		//if (priv->hwptr_done >= 24000)//???????
+	//		priv->hwptr_done -= 24000;
+		mutex_unlock(&priv->lock);
+		trace_clubb_1(__func__, "priv->hwptr_done", priv->hwptr_done);
 
 	}
-	if (clubb_priv->playing && !list_empty(&clubb_priv->pending_list))
-		schedule_delayed_work(&clubb_priv->send_worker, msecs_to_jiffies(1));
+	if (priv->playing && !list_empty(&priv->pending_list))
+		schedule_delayed_work(&priv->send_worker, msecs_to_jiffies(1));
 }
 
-int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
-		      struct snd_soc_dai *dai)
+int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai *dai)
 {
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
+	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
 	struct urbs_pending *to_send;
 	struct urb *l_urb, *r_urb;
 	int retval;
@@ -203,9 +211,9 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
-		clubb_priv->playing = 1;
-		clubb_priv->hwptr_done = 0;
-		to_send = list_first_entry_or_null(&clubb_priv->pending_list, struct urbs_pending, node);
+		priv->playing = 1;
+		priv->hwptr_done = 0;
+		to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
 		if (!to_send)
 			break;
 
@@ -230,18 +238,18 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		}
 		list_del(&to_send->node);
 
-		mutex_lock(&clubb_priv->lock);
-		clubb_priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
-		clubb_priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
-		//if (clubb_priv->hwptr_done >= 24000)//???????
-		//	clubb_priv->hwptr_done -= 24000;
-		mutex_unlock(&clubb_priv->lock);
-		trace_clubb_1(__func__, "clubb_priv->hwptr_done", clubb_priv->hwptr_done);
+		mutex_lock(&priv->lock);
+		priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
+		priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
+		//if (priv->hwptr_done >= 24000)//???????
+		//	priv->hwptr_done -= 24000;
+		mutex_unlock(&priv->lock);
+		trace_clubb_1(__func__, "priv->hwptr_done", priv->hwptr_done);
 
-		schedule_delayed_work(&clubb_priv->send_worker, msecs_to_jiffies(1));
+		schedule_delayed_work(&priv->send_worker, msecs_to_jiffies(1));
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		clubb_priv->playing = 0;
+		priv->playing = 0;
 		trace_clubb_0(__func__, "SNDRV_PCM_TRIGGER_STOP");
 		break;
 	default:
@@ -251,17 +259,19 @@ int clubb_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	return 0;
 }
 
-static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *subs)
+static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *sub)
 {
-	struct snd_pcm_runtime *runtime = subs->runtime;
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
+	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct snd_pcm_runtime *runtime = sub->runtime;
 
-	trace_clubb_1(__func__, "hwptr_done", clubb_priv->hwptr_done);
-	//mutex_lock(&clubb_priv->lock);
-	//if (clubb_priv->hwptr_done >= 24000)//???????
-	//	clubb_priv->hwptr_done -= 24000;
-	//mutex_unlock(&clubb_priv->lock);
+	trace_clubb_1(__func__, "hwptr_done", priv->hwptr_done);
+	//mutex_lock(&priv->lock);
+	//if (priv->hwptr_done >= 24000)//???????
+	//	priv->hwptr_done -= 24000;
+	//mutex_unlock(&priv->lock);
 
-	return bytes_to_frames(runtime, clubb_priv->hwptr_done);
+	return bytes_to_frames(runtime, priv->hwptr_done);
 }
 
 static const struct snd_pcm_hardware clubb_pcm_hw = {
@@ -281,22 +291,19 @@ static const struct snd_pcm_hardware clubb_pcm_hw = {
 	.periods_max		= CLUBB_PERIODS_MAX,
 };
 
-static int clubb_pcm_open(struct snd_pcm_substream *substream)
+static int clubb_pcm_open(struct snd_pcm_substream *sub)
 {
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
+	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+
 	trace_clubb(__func__);
-	clubb_priv->pkg_id = 0;
-	clubb_priv->playing = 0;
+	priv->pkg_id = 0;
+	priv->playing = 0;
 
-	snd_soc_set_runtime_hwparams(substream, &clubb_pcm_hw);
+	snd_soc_set_runtime_hwparams(sub, &clubb_pcm_hw);
 
-	INIT_DELAYED_WORK(&clubb_priv->send_worker, clubb_urb_sender);
+	INIT_DELAYED_WORK(&priv->send_worker, clubb_urb_sender);
 
-	return 0;
-}
-
-static int clubb_i2s_probe(struct snd_soc_dai *dai)
-{
-	trace_clubb(__func__);
 	return 0;
 }
 
@@ -307,7 +314,6 @@ static struct snd_soc_dai_ops clubb_i2s_dai_ops = {
 static struct snd_soc_dai_driver clubb_i2s_dai[] = {
 	{
 		.name	= "clubb-i2s-sai1",
-		.probe	= clubb_i2s_probe,
 		.id = 1,
 		.playback = {
 			.channels_min = 2,
@@ -328,27 +334,29 @@ static struct snd_pcm_ops clubb_i2s_pcm_ops = {
 };
 
 const struct snd_soc_component_driver clubb_i2s_component = {
-	.name	= "clubb-i2s-comp",
+	.name	= DRV_NAME,
 	.ops	= &clubb_i2s_pcm_ops,
 	.non_legacy_dai_naming	= 1,
 };
 
-static int clubb_usb_probe(struct usb_interface *intf,
-			const struct usb_device_id *id)
+static int clubb_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
-	int ret = 0;
 	struct usb_device *udev = interface_to_usbdev(intf);
+	struct clubb_data *priv;
+	int ret = 0;
 
-	clubb_priv = kzalloc(sizeof(struct clubb_data), GFP_KERNEL);
-	if (!clubb_priv)
+	priv = devm_kzalloc(&udev->dev, sizeof(struct clubb_data), GFP_KERNEL);
+	if (!priv)
 		return -ENOMEM;
 
 	dev_dbg(&intf->dev, "%s\n", __func__);
 
-	INIT_LIST_HEAD(&clubb_priv->pending_list);
-	clubb_priv->udev = udev;
-	clubb_priv->udev->dev.init_name = "clubb-i2s";
-	mutex_init(&clubb_priv->lock);
+	INIT_LIST_HEAD(&priv->pending_list);
+	priv->udev = udev;
+	priv->udev->dev.init_name = "clubb-i2s";
+	mutex_init(&priv->lock);
+
+	dev_set_drvdata(&udev->dev, priv);
 
 	ret = devm_snd_soc_register_component(&udev->dev, &clubb_i2s_component, clubb_i2s_dai,
 					      ARRAY_SIZE(clubb_i2s_dai));
