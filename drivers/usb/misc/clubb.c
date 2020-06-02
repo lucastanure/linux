@@ -256,6 +256,18 @@ static const struct snd_pcm_hardware clubb_pcm_hw = {
 	.periods_max		= CLUBB_PERIODS_MAX,
 };
 
+static int clubb_i2s_prepare(struct snd_pcm_substream *sub)
+{
+        unsigned long bufsize, periodsize;
+
+        bufsize = snd_pcm_lib_buffer_bytes(sub);
+        periodsize = snd_pcm_lib_period_bytes(sub);
+
+        pr_info("%s (buf_size %lu) (period_size %lu)\n", __func__, bufsize, periodsize);
+
+        return 0;
+}
+
 static int clubb_pcm_open(struct snd_pcm_substream *sub)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
@@ -293,9 +305,10 @@ static struct snd_soc_dai_driver clubb_i2s_dai[] = {
 };
 
 static struct snd_pcm_ops clubb_i2s_pcm_ops = {
-	.open		= clubb_pcm_open,
+	.open		= &clubb_pcm_open,
 	.copy_user	= &clubb_i2s_copy,
 	.pointer	= &clubb_i2s_pointer,
+	.prepare	= &clubb_i2s_prepare,
 };
 
 const struct snd_soc_component_driver clubb_i2s_component = {
