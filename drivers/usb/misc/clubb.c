@@ -203,8 +203,6 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
 	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
-	struct urbs_pending *to_send;
-	struct urb *l_urb, *r_urb;
 	int retval;
 
 	trace_clubb(__func__);
@@ -213,40 +211,7 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 	case SNDRV_PCM_TRIGGER_START:
 		priv->playing = 1;
 		priv->hwptr_done = 0;
-		to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
-		if (!to_send)
-			break;
-
-		trace_clubb_2(__func__, "to_send->id", to_send->id, "to_send->sub_id", to_send->sub_id);
-
-		l_urb = to_send->l_urb;
-		retval = usb_submit_urb(to_send->l_urb, GFP_KERNEL);
-		if (retval) {
-			pr_err("%s l_urb failed submitting write urb, error %d\n", __func__, retval);
-			usb_free_coherent(l_urb->dev, l_urb->transfer_buffer_length, l_urb->transfer_buffer, l_urb->transfer_dma);
-			usb_free_urb(l_urb);
-			return retval;
-		}
-
-		r_urb = to_send->r_urb;
-		retval = usb_submit_urb(r_urb, GFP_KERNEL);
-		if (retval) {
-			pr_err("%s r_urb failed submitting write urb, error %d\n", __func__, retval);
-			usb_free_coherent(r_urb->dev, r_urb->transfer_buffer_length, r_urb->transfer_buffer, r_urb->transfer_dma);
-			usb_free_urb(r_urb);
-			return retval;
-		}
-		list_del(&to_send->node);
-
-		mutex_lock(&priv->lock);
-		priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
-		priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
-		//if (priv->hwptr_done >= 24000)//???????
-		//	priv->hwptr_done -= 24000;
-		mutex_unlock(&priv->lock);
-		trace_clubb_1(__func__, "priv->hwptr_done", priv->hwptr_done);
-
-		schedule_delayed_work(&priv->send_worker, msecs_to_jiffies(1));
+		schedule_delayed_work(&priv->send_worker, 0);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		priv->playing = 0;
