@@ -361,8 +361,6 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 	int				is_out;
 	unsigned int			allowed;
 
-	trace_musb(__func__);
-
 	if (!urb || !urb->complete)
 		return -EINVAL;
 	if (urb->hcpriv) {
