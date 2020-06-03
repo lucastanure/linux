@@ -43,6 +43,7 @@ struct urbs_pending {
 	struct urb *l_urb;
 	struct urb *r_urb;
 	struct clubb_data *priv;
+	struct snd_pcm_substream *sub;
 	struct list_head node;
 };
 
@@ -52,6 +53,8 @@ struct clubb_data {
 	unsigned int hwptr_done;
 	int playing;
 	unsigned long pkg_id;
+	unsigned long period_ptr;
+	unsigned long period_size;
 	struct mutex lock;
 	struct list_head pending_list;
 };
@@ -59,7 +62,8 @@ struct clubb_data {
 static void clubb_bulk_callback(struct urb *urb)
 {
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
-	struct usb_device *udev = urbs->priv->udev;
+	struct clubb_data *priv = urbs->priv;
+	struct usb_device *udev = priv->udev;
 	int status = urb->status;
 
 
@@ -69,13 +73,25 @@ static void clubb_bulk_callback(struct urb *urb)
 	}
 	trace_clubb_2(__func__, "urbs->id", urbs->id, " urbs->sub_id ", urbs->sub_id);
 
+	mutex_lock(&priv->lock);
+	priv->hwptr_done += urb->transfer_buffer_length;
+	if (priv->hwptr_done >= 24000)//???????
+		priv->hwptr_done -= 24000;
+	mutex_unlock(&priv->lock);
+
+	priv->period_ptr += urb->transfer_buffer_length;
+	if (priv->period_ptr >= priv->period_size) {
+		priv->period_ptr -= priv->period_size;
+		snd_pcm_period_elapsed(urbs->sub);
+	}
+
 	//usb_free_coherent(urb->dev, urb->transfer_buffer_length, urb->transfer_buffer, urb->transfer_dma);
 	//usb_free_urb(urb);
 
 }
 
-static int clubb_create_lr_urb(struct clubb_data *priv, uint16_t *buffer, unsigned long bytes,
-			       unsigned long sub_id)
+static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream *sub,
+			       uint16_t *buffer, unsigned long bytes, unsigned long sub_id)
 {
 	struct usb_device *udev = priv->udev;
 	struct urbs_pending *urbs;
@@ -116,6 +132,7 @@ static int clubb_create_lr_urb(struct clubb_data *priv, uint16_t *buffer, unsign
 	urbs->id = priv->pkg_id;
 	urbs->sub_id = sub_id;
 	urbs->priv = priv;
+	urbs->sub = sub;
 
 	usb_fill_bulk_urb(l_urb, udev, usb_sndbulkpipe(udev, 1), l_buf, bytes/2, clubb_bulk_callback, urbs);
 	usb_fill_bulk_urb(r_urb, udev, usb_sndbulkpipe(udev, 2), r_buf, bytes/2, clubb_bulk_callback, urbs);
@@ -150,7 +167,7 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 	sub_id = 0;
 	while (bytes) {
 		writesize = min_t(unsigned long, bytes, 1024);
-		ret = clubb_create_lr_urb(priv, (uint16_t *)(&buffer[pos]), writesize, sub_id);
+		ret = clubb_create_lr_urb(priv, sub, (uint16_t *)(&buffer[pos]), writesize, sub_id);
 		if (ret)
 			return ret;
 		pos += writesize;
@@ -185,13 +202,6 @@ void clubb_urb_sender(struct work_struct *work)
 		}
 
 		list_del(&to_send->node);
-
-		mutex_lock(&priv->lock);
-		priv->hwptr_done += to_send->r_urb->transfer_buffer_length;
-		priv->hwptr_done += to_send->l_urb->transfer_buffer_length;
-		//if (priv->hwptr_done >= 24000)//???????
-	//		priv->hwptr_done -= 24000;
-		mutex_unlock(&priv->lock);
 		trace_clubb_1(__func__, "priv->hwptr_done", priv->hwptr_done);
 
 	}
@@ -203,7 +213,6 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
 	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
-	int retval;
 
 	trace_clubb(__func__);
 
@@ -258,12 +267,16 @@ static const struct snd_pcm_hardware clubb_pcm_hw = {
 
 static int clubb_i2s_prepare(struct snd_pcm_substream *sub)
 {
-        unsigned long bufsize, periodsize;
+	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
+	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	unsigned long bufsize;
 
         bufsize = snd_pcm_lib_buffer_bytes(sub);
-        periodsize = snd_pcm_lib_period_bytes(sub);
+        priv->period_size = snd_pcm_lib_period_bytes(sub);
 
-        pr_info("%s (buf_size %lu) (period_size %lu)\n", __func__, bufsize, periodsize);
+
+
+        pr_info("%s (buf_size %lu) (period_size %lu)\n", __func__, bufsize, priv->period_size);
 
         return 0;
 }
