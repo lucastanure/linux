@@ -58,9 +58,16 @@ config SND_EP93XX_SOC_EDB93XX
 	help
 	  Say Y or M here if you want to add support for I2S audio on the
 	  Cirrus Logic EDB93xx boards.
-   
+
 config SND_SOC_CLUBB_SOUNDCARD
        tristate "Support for Clubb soundcard"
+       depends on !SND_SOC_CLUBB_SIMPLE_SOUNDCARD
        select SND_SOC_CLSIC_CODEC
        help
           Say Y or M if you want to add support for Clubb soundcard
+
+config SND_SOC_CLUBB_SIMPLE_SOUNDCARD
+       tristate "Support for simple Clubb soundcard"
+       select SND_SOC_PCM5102A
+       help
+          Say Y or M if you want to add support for simple Clubb soundcard

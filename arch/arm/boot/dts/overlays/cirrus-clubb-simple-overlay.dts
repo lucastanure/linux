@@ -1,0 +1,35 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/pinctrl/bcm2835.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/{
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&i2s>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@1 {
+		target = <&sound>;
+		__overlay__ {
+			/* String to be used to load the correct machine driver */
+			compatible = "cirrus,clubb-soundcard";
+			status = "okay";
+		};
+	};
+
+	fragment@2 {
+		target-path = "/";
+		__overlay__ {
+			pcm5102a-codec {
+				#sound-dai-cells = <0>;
+				compatible = "ti,pcm5102a";
+				status = "okay";
+			};
+		};
+	};
+};

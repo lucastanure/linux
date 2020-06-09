@@ -369,16 +369,28 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 	}
 
 	dev = urb->dev;
-	if ((!dev) || (dev->state < USB_STATE_UNAUTHENTICATED))
+	if ((!dev) || (dev->state < USB_STATE_UNAUTHENTICATED)) {
+		if (!dev) {
+			WARN(1, "usb_submit_urb dev=NULL\n");
+		} else {
+			dev_err(&dev->dev, "Bad dev->state %d\n", dev->state);
+		}
 		return -ENODEV;
+	}
 
 	/* For now, get the endpoint from the pipe.  Eventually drivers
 	 * will be required to set urb->ep directly and we will eliminate
 	 * urb->pipe.
 	 */
 	ep = usb_pipe_endpoint(dev, urb->pipe);
-	if (!ep)
+	if (!ep) {
+		dev_err(&dev->dev, "No endpoint\n");
+		dev_err(&dev->dev, "urb->pipe=%d dir=%s\n",
+				urb->pipe,
+				usb_pipein(urb->pipe) ? "in" : "out");
+
 		return -ENOENT;
+	}
 
 	urb->ep = ep;
 	urb->status = -EINPROGRESS;

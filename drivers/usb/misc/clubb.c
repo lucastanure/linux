@@ -28,6 +28,10 @@
 
 #define DRV_NAME "clubb-i2s-comp"
 
+/*
+ * Left and right are sent to separate endpoints so max period size
+ * is 2* max USB packet size
+ */
 #define CLUBB_PERIOD_BYTES_MAX	1024	/* DMA transfer/period size */
 #define CLUBB_PERIOD_BYTES_MIN	2	/* DMA transfer/period size */
 #define CLUBB_PERIODS_MAX		6000	/* Max periods in buffer */
@@ -42,6 +46,8 @@ struct urbs_pending {
 	unsigned long sub_id;
 	struct urb *l_urb;
 	struct urb *r_urb;
+	unsigned long end_jiffies;
+	int urbs_in_transmission;
 	struct clubb_data *priv;
 	struct snd_pcm_substream *sub;
 	struct list_head node;
@@ -51,14 +57,13 @@ struct clubb_data {
 	struct usb_device *udev;
 	struct delayed_work send_worker;
 	unsigned int hwptr_done;
-	int playing;
+	volatile int playing;
 	unsigned long pkg_id;
-	unsigned long jiffies_sec;
-	unsigned long last_sent_jiffies;
-	unsigned long jiffies_delay;
+	unsigned long jiffies_per_period;
 	unsigned long period_ptr;
 	unsigned long period_size;
-	struct mutex lock;
+	unsigned long urbs_sent_ok;
+	spinlock_t lock;
 	struct list_head pending_list;
 };
 
@@ -68,36 +73,72 @@ static void clubb_bulk_callback(struct urb *urb)
 	struct clubb_data *priv = urbs->priv;
 	struct usb_device *udev = priv->udev;
 	int status = urb->status;
+	int urbs_remaining;
+	unsigned long delay, jiffies_now;
+	int period_elapsed = 0;
+	unsigned long irq_flags;
+
+//	dev_info(&udev->dev, "clubb_bulk_callback: %s urb=%p bulk status: %d\n",
+//			urb == urbs->l_urb ? "left" : "right",
+//			urb, status);
 
 	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
-		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
+		dev_err(&udev->dev, "urb=%p bulk status: %d (ok count=%lu)\n",
+			urb, status, priv->urbs_sent_ok);
 		trace_clubb("Error sending urb!!!!!!!!!!!!!!");
 	}
 	trace_clubb_2(__func__, "urbs->id", urbs->id, " urbs->sub_id ", urbs->sub_id);
 
-	mutex_lock(&priv->lock);
-	priv->hwptr_done += urb->transfer_buffer_length;
-	if (priv->hwptr_done >= 24000)//???????
-		priv->hwptr_done -= 24000;
-	mutex_unlock(&priv->lock);
-
+	spin_lock_irqsave(&priv->lock, irq_flags);
+	++priv->urbs_sent_ok;
+	urbs_remaining = --urbs->urbs_in_transmission;
 	priv->period_ptr += urb->transfer_buffer_length;
 	if (priv->period_ptr >= priv->period_size) {
 		priv->period_ptr -= priv->period_size;
+		period_elapsed = 1;
+	}
+	spin_unlock_irqrestore(&priv->lock, irq_flags);
+
+//	dev_info(&udev->dev, "clubb_bulk_callback: txlen=%u new period_ptr=%lu\n",
+//			urb->transfer_buffer_length, priv->period_ptr);
+
+	usb_free_coherent(urb->dev, urb->transfer_buffer_length, urb->transfer_buffer, urb->transfer_dma);
+	usb_free_urb(urb);
+	urb = NULL;
+
+	if (!priv->playing)
+		return;
+
+	/*
+	 * More URBs to be sent in this period?
+	 * A period can't elapse until we've sent all URBs in the period.
+	 */
+	if (urbs_remaining > 0)
+		return;
+
+	if (period_elapsed) {
+//		dev_info(&udev->dev, "period\n");
 		snd_pcm_period_elapsed(urbs->sub);
 	}
 
-	if (urb == urbs->l_urb || !priv->playing)
-		return;
-
-	if (priv->last_sent_jiffies + priv->jiffies_delay >= jiffies)
-		schedule_delayed_work(&priv->send_worker, 0);
+	/*
+	 * urbs->end_jiffes isn't changed after it was created so
+	 * we don't need to lock to read it.
+	 * Take a snapshot of jiffes so that we are calculating using
+	 * the same value that we tested in the if().
+	 */
+	jiffies_now = jiffies;
+/*	if (time_before(urbs->end_jiffies, jiffies_now))
+		delay = 0; // next packet already overdue
 	else
-		schedule_delayed_work(&priv->send_worker, jiffies - (priv->last_sent_jiffies + priv->jiffies_delay));
+		delay = urbs->end_jiffies - jiffies_now;
+*/
+	delay = jiffies_now + priv->jiffies_per_period;
 
-	//usb_free_coherent(urb->dev, urb->transfer_buffer_length, urb->transfer_buffer, urb->transfer_dma);
-	//usb_free_urb(urb);
+//	dev_info(&udev->dev, "rq %lu\n", delay);
+	schedule_delayed_work(&priv->send_worker, delay);
 
+	kfree(urbs);
 }
 
 static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream *sub,
@@ -107,7 +148,9 @@ static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream
 	struct urbs_pending *urbs;
 	struct urb *l_urb, *r_urb;
 	uint16_t *l_buf, *r_buf;
-	unsigned int sample, schedule_work = 0;
+	unsigned int sample/*, schedule_work = 0*/;
+
+//	dev_info(&priv->udev->dev, "create_lr_urb\n");
 
 	urbs = kzalloc(sizeof(struct urbs_pending), GFP_KERNEL);
 	if (!urbs)
@@ -139,27 +182,28 @@ static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream
 	}
 	urbs->l_urb = l_urb;
 	urbs->r_urb = r_urb;
+	urbs->urbs_in_transmission = 2;
 	urbs->id = priv->pkg_id;
 	urbs->sub_id = sub_id;
 	urbs->priv = priv;
 	urbs->sub = sub;
 
 	usb_fill_bulk_urb(l_urb, udev, usb_sndbulkpipe(udev, 1), l_buf, bytes/2, clubb_bulk_callback, urbs);
+	l_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	usb_fill_bulk_urb(r_urb, udev, usb_sndbulkpipe(udev, 2), r_buf, bytes/2, clubb_bulk_callback, urbs);
+	r_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 
-	if (list_empty(&priv->pending_list) && priv->playing)
-		schedule_work = 1;
-
+	spin_lock(&priv->lock);
 	list_add_tail(&urbs->node, &priv->pending_list);
 
-	if (schedule_work) {
-		if (priv->last_sent_jiffies + priv->jiffies_delay >= jiffies)
-			schedule_delayed_work(&priv->send_worker, 0);
-		else
-			schedule_delayed_work(&priv->send_worker, jiffies - (priv->last_sent_jiffies + priv->jiffies_delay));
-	}
+	/* hwptr_done calculation adapted from sound/usb/pcm.c */
+	priv->hwptr_done += bytes;
+	if (priv->hwptr_done >= snd_pcm_lib_buffer_bytes(sub))
+		priv->hwptr_done -= snd_pcm_lib_buffer_bytes(sub);
+	spin_unlock(&priv->lock);
 
 	trace_clubb_3(__func__, "urbs->id", urbs->id, "urbs->sub_id", urbs->sub_id, "bytes", bytes);
+
 	return 0;
 }
 
@@ -183,7 +227,7 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 	pos = 0;
 	sub_id = 0;
 	while (bytes) {
-		writesize = min_t(unsigned long, bytes, 1024);
+		writesize = min_t(unsigned long, bytes, CLUBB_PERIOD_BYTES_MAX);
 		ret = clubb_create_lr_urb(priv, sub, (uint16_t *)(&buffer[pos]), writesize, sub_id);
 		if (ret)
 			return ret;
@@ -200,35 +244,58 @@ void clubb_urb_sender(struct work_struct *work)
 {
 	struct clubb_data *priv = container_of(work, struct clubb_data, send_worker.work);
 	struct urbs_pending *to_send;
-	unsigned long bytes_sent;
+//	unsigned long bytes_sent;
+	unsigned long jiffies_delay;
 	int retval = 0;
 
-	if (!priv->playing || list_empty(&priv->pending_list))
+	if (!priv->playing)
 		return;
 
+	spin_lock(&priv->lock);
 	to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
-	if (to_send) {
+	if (to_send)
+		list_del(&to_send->node);
+	spin_unlock(&priv->lock);
+
+	if (!to_send) {
+		/*
+		 * Underflow: really we should sent a silent period here, but
+		 * for now just requeue after a period interval.
+		 */
+		dev_warn(&priv->udev->dev, "underflow\n");
+		schedule_delayed_work(&priv->send_worker,
+							  priv->jiffies_per_period);
+		return;
+	} else {
 		trace_clubb_2(__func__, "to_send->id", to_send->id, "to_send->sub_id", to_send->sub_id);
 
-		retval = usb_submit_urb(to_send->l_urb, GFP_KERNEL);
+//		bytes_sent = to_send->l_urb->transfer_buffer_length +
+//					 to_send->r_urb->transfer_buffer_length;
+		jiffies_delay = priv->jiffies_per_period;
+
+		/*
+		 * end_jiffies must be valid when the callback runs
+		 * so must be set before submitting any URBs
+		 */
+		to_send->end_jiffies = jiffies + jiffies_delay;
+
+//		dev_info(&priv->udev->dev, "+sub l\n");
+		retval = usb_submit_urb(to_send->l_urb, GFP_ATOMIC);
+//		dev_info(&priv->udev->dev, "-sub l\n");
 		if (retval) {
-			pr_err("%s l_urb failed submitting write urb, error %d\n", __func__, retval);
+			dev_err(&priv->udev->dev,
+				    "%s l_urb failed submitting write urb, error %d\n", __func__, retval);
 			return;
 		}
-		bytes_sent = to_send->l_urb->transfer_buffer_length;
 
-		retval = usb_submit_urb(to_send->r_urb, GFP_KERNEL);
+//		dev_info(&priv->udev->dev, "+sub r\n");
+		retval = usb_submit_urb(to_send->r_urb, GFP_ATOMIC);
+//		dev_info(&priv->udev->dev, "-sub r\n");
 		if (retval) {
-			pr_err("%s r_urb failed submitting write urb, error %d\n", __func__, retval);
+			dev_err(&priv->udev->dev,
+					"%s r_urb failed submitting write urb, error %d\n", __func__, retval);
 			return;
 		}
-		bytes_sent += to_send->l_urb->transfer_buffer_length;
-
-		priv->last_sent_jiffies = jiffies;
-		priv->jiffies_delay = priv->jiffies_sec * bytes_sent; //how many jiffies until the next should be sent
-
-		list_del(&to_send->node);
-		trace_clubb_1(__func__, "priv->hwptr_done", priv->hwptr_done);
 	}
 }
 
@@ -241,12 +308,18 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
+//		dev_info(&priv->udev->dev, "TRIGGER_START\n");
 		priv->playing = 1;
 		priv->hwptr_done = 0;
 		schedule_delayed_work(&priv->send_worker, 0);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		priv->playing = 0;
+		/*
+		 * trigger is called in an atomic section so can't use
+		 * cancel_delayed_work_sync()
+		 */
+		cancel_delayed_work(&priv->send_worker);
 		trace_clubb_0(__func__, "SNDRV_PCM_TRIGGER_STOP");
 		break;
 	default:
@@ -256,19 +329,25 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 	return 0;
 }
 
+/*
+ * This function returns where the next available position is within
+ * the DMA ring buffer, and so is always 0..(runtime->buffer_size-1).
+ * It tells the upper layers how much more data our buffer can accept.
+ */
 static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *sub)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
 	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
 	struct snd_pcm_runtime *runtime = sub->runtime;
+	unsigned long hwptr_done;
+	unsigned long irq_flags;
 
-	trace_clubb_1(__func__, "hwptr_done", priv->hwptr_done);
-	//mutex_lock(&priv->lock);
-	//if (priv->hwptr_done >= 24000)//???????
-	//	priv->hwptr_done -= 24000;
-	//mutex_unlock(&priv->lock);
+	spin_lock_irqsave(&priv->lock, irq_flags);
+	hwptr_done = priv->hwptr_done;
+	spin_unlock_irqrestore(&priv->lock, irq_flags);
 
-	return bytes_to_frames(runtime, priv->hwptr_done);
+//	dev_info(&priv->udev->dev, "hwptr_done=%lu\n", hwptr_done);
+	return bytes_to_frames(runtime, hwptr_done);
 }
 
 static const struct snd_pcm_hardware clubb_pcm_hw = {
@@ -297,7 +376,9 @@ static int clubb_i2s_prepare(struct snd_pcm_substream *sub)
         bufsize = snd_pcm_lib_buffer_bytes(sub);
         priv->period_size = snd_pcm_lib_period_bytes(sub);
 
-        pr_info("%s (buf_size %lu) (period_size %lu)\n", __func__, bufsize, priv->period_size);
+        dev_info(&priv->udev->dev,
+		 "%s (buf_size %lu) (period_size %lu)\n",
+		 __func__, bufsize, priv->period_size);
 
         return 0;
 }
@@ -323,9 +404,12 @@ static int clubb_i2s_hw_params(struct snd_pcm_substream *sub, struct snd_pcm_hw_
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
 	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	unsigned long frames_per_second = params_rate(params);
+	unsigned long frames_per_period = params_period_size(params);
+	unsigned long jiffies_per_second = msecs_to_jiffies(1000);
+	priv->jiffies_per_period = (jiffies_per_second * frames_per_period) / frames_per_second;
 
-	priv->jiffies_sec = msecs_to_jiffies(1000) / snd_soc_params_to_bclk(params) / BITS_PER_BYTE;
-
+	dev_info(&priv->udev->dev, "jiffies_per_second %lu\n", jiffies_per_second);
 	return 0;
 }
 
@@ -378,7 +462,7 @@ static int clubb_usb_probe(struct usb_interface *intf, const struct usb_device_i
 	INIT_LIST_HEAD(&priv->pending_list);
 	priv->udev = udev;
 	priv->udev->dev.init_name = "clubb-i2s";
-	mutex_init(&priv->lock);
+	spin_lock_init(&priv->lock);
 
 	dev_set_drvdata(&udev->dev, priv);
 

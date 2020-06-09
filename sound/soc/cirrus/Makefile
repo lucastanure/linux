@@ -20,3 +20,7 @@ obj-$(CONFIG_SND_EP93XX_SOC_EDB93XX)		+= snd-soc-edb93xx.o
 # Clubb SoundCard Support
 snd-soc-clubb-soundcard-objs			:= clubb-soundcard.o
 obj-$(CONFIG_SND_SOC_CLUBB_SOUNDCARD)		+= snd-soc-clubb-soundcard.o
+
+snd-soc-clubb-simple-soundcard-objs			:= clubb-simple-soundcard.o
+obj-$(CONFIG_SND_SOC_CLUBB_SIMPLE_SOUNDCARD)	+= snd-soc-clubb-simple-soundcard.o
+
