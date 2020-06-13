@@ -166,7 +166,7 @@ TRACE_EVENT(pcm_libsi,
 		__entry->name = name;
 		__entry->devid = devid;
 	),
-	TP_printk("%s Size %u",__entry->name, __entry->devid)
+	TP_printk("%s %u",__entry->name, __entry->devid)
 );
 
 TRACE_EVENT(pcm_lib_fl,
@@ -183,6 +183,22 @@ TRACE_EVENT(pcm_lib_fl,
 		__entry->line = line;
 	),
 	TP_printk("%s %u\n", __entry->func, __entry->line)
+);
+
+TRACE_EVENT(pcmlib2,
+	TP_PROTO(signed long int1,
+		 signed  long int2
+	),
+	TP_ARGS(int1, int2),
+	TP_STRUCT__entry(
+		__field(signed long, int1)
+		__field(signed long, int2)
+	),
+	TP_fast_assign(
+		__entry->int1 = int1;
+		__entry->int2 = int2;
+	),
+	TP_printk("delta %ld > %ld", __entry->int1, __entry->int2)
 );
 
 #endif /* _PCM_TRACE_H */
