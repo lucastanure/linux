@@ -61,9 +61,8 @@ static int clubb_set_bias_level(struct snd_soc_card *card,
 	return ret;
 }
 
-static int clubb_set_bias_level_post(struct snd_soc_card *card,
-				       struct snd_soc_dapm_context *dapm,
-				       enum snd_soc_bias_level level)
+static int clubb_set_bias_level_post(struct snd_soc_card *card, struct snd_soc_dapm_context *dapm,
+				     enum snd_soc_bias_level level)
 {
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_dai *cdc_dai;
@@ -77,8 +76,7 @@ static int clubb_set_bias_level_post(struct snd_soc_card *card,
 
 	switch (level) {
 	case SND_SOC_BIAS_STANDBY:
-		ret = snd_soc_component_set_pll(cdc_dai->component, TACNA_CLK_SYSCLK_1,
-					    0, 0, 0);
+		ret = snd_soc_component_set_pll(cdc_dai->component, TACNA_CLK_SYSCLK_1, 0, 0, 0);
 		if (ret < 0) {
 			pr_err("Failed to stop FLL: %d\n", ret);
 			return ret;
@@ -103,16 +101,13 @@ static int clubb_amp_late_probe(struct snd_soc_card *card, unsigned int amp)
 	comp = asp_dai->component;
 
 	/* CLKID has a hardcoded source */
-	ret = snd_soc_component_set_sysclk(comp, 0, 0,
-				       AMPCLK_RATE,
-				       SND_SOC_CLOCK_IN);
+	ret = snd_soc_component_set_sysclk(comp, 0, 0, AMPCLK_RATE, SND_SOC_CLOCK_IN);
 	if (ret != 0) {
 		dev_err(comp->dev, "Failed to set amp SYSCLK: %d\n", ret);
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_sysclk(asp_dai, 0, AMPCLK_RATE,
-				     SND_SOC_CLOCK_IN);
+	ret = snd_soc_dai_set_sysclk(asp_dai, 0, AMPCLK_RATE, SND_SOC_CLOCK_IN);
 	if (ret != 0) {
 		dev_err(card->dev, "Failed to set %s clock: %d\n",
 				   asp_dai->name, ret);
@@ -134,10 +129,8 @@ static int clubb_late_probe(struct snd_soc_card *card)
 	asp_dai = rtd->codec_dai;
 	comp = asp_dai->component;
 
-	ret = snd_soc_component_set_sysclk(comp, TACNA_CLK_SYSCLK_1,
-				       TACNA_CLK_SRC_FLL1,
-				       SYSCLK_RATE,
-				       SND_SOC_CLOCK_IN);
+	ret = snd_soc_component_set_sysclk(comp, TACNA_CLK_SYSCLK_1, TACNA_CLK_SRC_FLL1, SYSCLK_RATE,
+					   SND_SOC_CLOCK_IN);
 	if (ret != 0) {
 		dev_err(comp->dev, "Failed to set SYSCLK: %d\n", ret);
 		return ret;
@@ -217,9 +210,7 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.platform_name = "clubb-i2s",
 		.codec_dai_name = "clsic-asp3",
 		.codec_name = "clsic-codec",
-		.dai_fmt = SND_SOC_DAIFMT_I2S |
-			   SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBM_CFM,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
 	},
 #ifdef CONFIG_SND_SOC_CS35L41
 	{
@@ -228,9 +219,7 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.cpu_dai_name = "clsic-asp4",
 		.codec_dai_name = "cs35l41.1-0040",
 		.codec_name = "cs35l41.1-0040",
-		.dai_fmt = SND_SOC_DAIFMT_I2S |
-			   SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBS_CFS,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
 		.params = &cs35l41_params,
 	},
 	{
@@ -239,9 +228,7 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.cpu_dai_name = "clsic-asp4",
 		.codec_dai_name = "cs35l41.1-0041",
 		.codec_name = "cs35l41.1-0041",
-		.dai_fmt = SND_SOC_DAIFMT_I2S |
-			   SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBS_CFS,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
 		.params = &cs35l41_params,
 	},
 #endif
@@ -257,9 +244,7 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.stream_name = "cpu-codec1",
 		.codec_dai_name = "clsic-asp1",
 		.codec_name = "clsic-codec",
-		.dai_fmt = SND_SOC_DAIFMT_I2S |
-			   SND_SOC_DAIFMT_NB_NF |
-			   SND_SOC_DAIFMT_CBM_CFM,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM,
 	},
 };
 
@@ -294,8 +279,7 @@ static int clubb_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 	dev_info(card->dev, "Clubb SoundCard\n");
 
-	i2s_node = of_parse_phandle(pdev->dev.of_node,
-				    "i2s-controller", 0);
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "i2s-controller", 0);
 	if (!i2s_node) {
 		dev_err(&pdev->dev, "i2s-controller missing in DT\n");
 		return -ENODEV;
@@ -304,8 +288,7 @@ static int clubb_probe(struct platform_device *pdev)
 	clubb_dai[ASP1].cpu_of_node = i2s_node;
 	clubb_dai[ASP1].platform_of_node = i2s_node;
 
-	i2s_node = of_parse_phandle(pdev->dev.of_node,
-				    "platform-controller", 0);
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "platform-controller", 0);
 	if (!i2s_node) {
 		dev_err(&pdev->dev, "platform-controller missing in DT\n");
 		return -ENODEV;
