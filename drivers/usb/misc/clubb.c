@@ -193,11 +193,9 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 
 	//trace_clubb(__func__);
 
-	buffer = kmalloc(bytes, GFP_KERNEL);
-	if (!buffer)
-		return -ENOMEM;
-	if (copy_from_user(buffer, user_buf, bytes))
-		return -EFAULT;
+	buffer = memdup_user(user_buf, bytes);
+	if (IS_ERR(buffer))
+		return PTR_ERR(buffer);
 
 	pos = 0;
 	sub_id = 0;
@@ -205,15 +203,15 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 		writesize = min_t(unsigned long, bytes, CLUBB_PERIOD_BYTES_MAX);
 		ret = clubb_create_lr_urb(priv, sub, (uint16_t *)(&buffer[pos]), writesize, sub_id);
 		if (ret)
-			return ret;
+			goto free;
 		pos += writesize;
 		bytes -= writesize;
 		sub_id++;
 	}
-	kfree(buffer);
 	priv->pkg_id++;
-
-	return 0;
+free:
+	kfree(buffer);
+	return ret;
 }
 
 void clubb_urb_sender(struct work_struct *work)
@@ -252,6 +250,8 @@ void clubb_urb_sender(struct work_struct *work)
 		if (wait_for_completion_timeout(&priv->r_completion, msecs_to_jiffies(5000)) == 0) {
 			dev_err(&priv->udev->dev, "Right Urb timeout\n");
 		}
+
+		list_del(&to_send->node);
 
 		//kfree(to_send);
 
