@@ -45,6 +45,7 @@
 struct urbs_pending {
 	struct urb *l_urb;
 	struct urb *r_urb;
+	unsigned long size_bytes;
 	struct clubb_data *priv;
 	struct list_head node;
 };
@@ -59,11 +60,19 @@ struct clubb_data {
 	struct completion l_completion;
 	struct completion r_completion;
 	struct snd_pcm_substream *sub;
-	spinlock_t lock;
+	spinlock_t send_lock;
+	spinlock_t reuse_lock;
 	struct list_head pending_list;
+	struct list_head reuse_list;
 };
 
-static void clubb_bulk_callback(struct urb *urb)
+static inline void clubb_free_urb(struct urb *urb)
+{
+  usb_free_coherent(urb->dev, urb->transfer_buffer_length, urb->transfer_buffer, urb->transfer_dma);
+  usb_free_urb(urb);
+}
+
+static void clubb_callback(struct urb *urb)
 {
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
 	struct clubb_data *priv = urbs->priv;
@@ -76,7 +85,7 @@ static void clubb_bulk_callback(struct urb *urb)
 		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
 	}
 
-	spin_lock_irqsave(&priv->lock, irq_flags);
+	spin_lock_irqsave(&priv->send_lock, irq_flags);
 
 	priv->period_ptr += urb->transfer_buffer_length;
 	if (priv->period_ptr >= priv->period_size) {
@@ -89,7 +98,7 @@ static void clubb_bulk_callback(struct urb *urb)
 	if (priv->hwptr_done >= snd_pcm_lib_buffer_bytes(priv->sub))
 		priv->hwptr_done -= snd_pcm_lib_buffer_bytes(priv->sub);
 
-	spin_unlock_irqrestore(&priv->lock, irq_flags);
+	spin_unlock_irqrestore(&priv->send_lock, irq_flags);
 
 	if (urb == urbs->r_urb)
 		complete(&priv->r_completion);
@@ -102,58 +111,94 @@ static void clubb_bulk_callback(struct urb *urb)
 		snd_pcm_period_elapsed(priv->sub);
 }
 
-static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream *sub,
-			       uint16_t *buffer, unsigned long bytes, unsigned long sub_id)
+static struct urbs_pending *clubb_create_pkg(struct clubb_data *priv, unsigned long bytes)
 {
 	struct usb_device *udev = priv->udev;
 	struct urbs_pending *urbs;
 	struct urb *l_urb, *r_urb;
 	uint16_t *l_buf, *r_buf;
-	unsigned int sample, schedule_work = 0;
 
 	urbs = kzalloc(sizeof(struct urbs_pending), GFP_KERNEL);
 	if (!urbs)
-		return -ENOMEM;
+		return NULL;
 
 	/* left channel */
 	l_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!l_urb)
-		return -ENOMEM;
+		return NULL;
 	l_buf = usb_alloc_coherent(udev, bytes/2, GFP_KERNEL, &l_urb->transfer_dma);
 	if (!l_buf) {
 		usb_free_urb(l_urb);
-		return -ENOMEM;
+		return NULL;
 	}
 
 	/* right channel */
 	r_urb = usb_alloc_urb(0, GFP_KERNEL);
-	if (!r_urb)
-		return -ENOMEM;
+	if (!r_urb) {
+		clubb_free_urb(l_urb);
+		return NULL;
+	}
 	r_buf = usb_alloc_coherent(udev, bytes/2, GFP_KERNEL, &r_urb->transfer_dma);
 	if (!r_buf) {
 		usb_free_urb(r_urb);
-		return -ENOMEM;
+		clubb_free_urb(l_urb);
+		return NULL;
 	}
+
+	urbs->l_urb = l_urb;
+	urbs->r_urb = r_urb;
+	urbs->size_bytes = bytes;
+	urbs->priv = priv;
+
+	usb_fill_bulk_urb(l_urb, udev, usb_sndbulkpipe(udev, 1), l_buf, bytes/2, clubb_callback, urbs);
+	l_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+	usb_fill_bulk_urb(r_urb, udev, usb_sndbulkpipe(udev, 2), r_buf, bytes/2, clubb_callback, urbs);
+	r_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+
+	return urbs;
+}
+
+static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream *sub,
+			       uint16_t *buffer, unsigned long bytes)
+{
+	struct urbs_pending *urbs;
+	uint16_t *l_buf, *r_buf;
+	unsigned int sample, schedule_work = 0;
+
+	spin_lock(&priv->reuse_lock);
+	urbs = list_first_entry_or_null(&priv->reuse_list, struct urbs_pending, node);
+	if (urbs != NULL) {
+		if (urbs->size_bytes < bytes)
+			goto create;
+		else
+			list_del(&urbs->node);
+
+	} else {
+create:
+		urbs = clubb_create_pkg(priv, bytes);
+		if (!urbs) {
+			spin_unlock(&priv->reuse_lock);
+			return -ENOMEM;
+		}
+	}
+	spin_unlock(&priv->reuse_lock);
+
+	urbs->l_urb->transfer_buffer_length = bytes/2;
+	urbs->r_urb->transfer_buffer_length = bytes/2;
+	l_buf = urbs->l_urb->transfer_buffer;
+	r_buf = urbs->r_urb->transfer_buffer;
 
 	for (sample = 0; sample < bytes/2; sample += 2) {
 		l_buf[sample/2] = buffer[sample];
 		r_buf[sample/2] = buffer[sample+1];
 	}
-	urbs->l_urb = l_urb;
-	urbs->r_urb = r_urb;
-	urbs->priv = priv;
-
-	usb_fill_bulk_urb(l_urb, udev, usb_sndbulkpipe(udev, 1), l_buf, bytes/2, clubb_bulk_callback, urbs);
-	l_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
-	usb_fill_bulk_urb(r_urb, udev, usb_sndbulkpipe(udev, 2), r_buf, bytes/2, clubb_bulk_callback, urbs);
-	r_urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 
 	if (list_empty(&priv->pending_list) && priv->playing)
 		schedule_work = 1;
 
-	spin_lock(&priv->lock);
+	spin_lock(&priv->send_lock);
 	list_add_tail(&urbs->node, &priv->pending_list);
-	spin_unlock(&priv->lock);
+	spin_unlock(&priv->send_lock);
 
 	if (schedule_work)
 		schedule_delayed_work(&priv->send_worker, 0);
@@ -166,7 +211,7 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
 	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
-	unsigned long writesize, pos, sub_id;
+	unsigned long writesize, pos;
 	char *buffer;
 	int ret;
 
@@ -175,10 +220,9 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 		return PTR_ERR(buffer);
 
 	pos = 0;
-	sub_id = 0;
 	while (bytes) {
 		writesize = min_t(unsigned long, bytes, CLUBB_PERIOD_BYTES_MAX);
-		ret = clubb_create_lr_urb(priv, sub, (uint16_t *)(&buffer[pos]), writesize, sub_id);
+		ret = clubb_create_lr_urb(priv, sub, (uint16_t *)(&buffer[pos]), writesize);
 		if (ret)
 			goto free;
 		pos += writesize;
@@ -192,26 +236,22 @@ free:
 void clubb_urb_sender(struct work_struct *work)
 {
 	struct clubb_data *priv = container_of(work, struct clubb_data, send_worker.work);
-	struct urbs_pending *to_send;
+	struct urbs_pending *to_send, *to_save;
 	int retval = 0;
 
-	spin_lock(&priv->lock);
+	spin_lock(&priv->send_lock);
 	to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
-	spin_unlock(&priv->lock);
+	spin_unlock(&priv->send_lock);
 
 	while (priv->playing && to_send) {
 
 		retval = usb_submit_urb(to_send->l_urb, GFP_ATOMIC);
-		if (retval) {
-			dev_err(&priv->udev->dev, "%s l_urb failed submitting write urb, error %d\n", __func__, retval);
-			return;
-		}
+		if (retval)
+			dev_err(&priv->udev->dev, "Failed submitting urb %d\n", retval);
 
 		retval = usb_submit_urb(to_send->r_urb, GFP_ATOMIC);
-		if (retval) {
-			dev_err(&priv->udev->dev, "%s r_urb failed submitting write urb, error %d\n", __func__, retval);
-			return;
-		}
+		if (retval)
+			dev_err(&priv->udev->dev, "Failed submitting urb %d\n",  retval);
 
 		if (wait_for_completion_timeout(&priv->l_completion, msecs_to_jiffies(5000)) == 0)
 			dev_err(&priv->udev->dev, "Left Urb timeout\n");
@@ -219,11 +259,16 @@ void clubb_urb_sender(struct work_struct *work)
 		if (wait_for_completion_timeout(&priv->r_completion, msecs_to_jiffies(5000)) == 0)
 			dev_err(&priv->udev->dev, "Right Urb timeout\n");
 
-		list_del(&to_send->node);
+		to_save = to_send;
 
-		spin_lock(&priv->lock);
+		spin_lock(&priv->send_lock);
+		list_del(&to_send->node);
 		to_send = list_first_entry_or_null(&priv->pending_list, struct urbs_pending, node);
-		spin_unlock(&priv->lock);
+		spin_unlock(&priv->send_lock);
+
+		spin_lock(&priv->reuse_lock);
+		list_add_tail(&to_save->node, &priv->reuse_list);
+		spin_unlock(&priv->reuse_lock);
 	}
 }
 
@@ -266,9 +311,9 @@ static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *sub)
 	unsigned long hwptr_done;
 	unsigned long irq_flags;
 
-	spin_lock_irqsave(&priv->lock, irq_flags);
+	spin_lock_irqsave(&priv->send_lock, irq_flags);
 	hwptr_done = priv->hwptr_done;
-	spin_unlock_irqrestore(&priv->lock, irq_flags);
+	spin_unlock_irqrestore(&priv->send_lock, irq_flags);
 
 	return bytes_to_frames(runtime, hwptr_done);
 }
@@ -360,9 +405,11 @@ static int clubb_usb_probe(struct usb_interface *intf, const struct usb_device_i
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&priv->pending_list);
+	INIT_LIST_HEAD(&priv->reuse_list);
 	priv->udev = udev;
 	priv->udev->dev.init_name = "clubb-i2s";
-	spin_lock_init(&priv->lock);
+	spin_lock_init(&priv->send_lock);
+	spin_lock_init(&priv->reuse_lock);
 	init_completion(&priv->l_completion);
 	init_completion(&priv->r_completion);
 
