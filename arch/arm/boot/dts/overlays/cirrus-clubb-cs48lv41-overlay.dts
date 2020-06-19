@@ -4,6 +4,7 @@
 /plugin/;
 #include <dt-bindings/pinctrl/bcm2835.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/mfd/arizona.h>
 
 /{
 	compatible = "brcm,bcm2835";
@@ -209,6 +210,58 @@
 					cirrus,gpio-output-enable;
 				};
 			};
+			
+			wm8998: wm8998@1a {
+				#sound-dai-cells = <1>;
+				compatible = "wlf,wm8998";
+				reg = <0x1a>;
+				status = "okay";
+
+				interrupts = <6 8>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&gpio>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+				clocks = <&mclk1 &mclk2>;
+				clock-names = "mclk1", "mclk2";
+
+				pinctrl-names = "default";
+				pinctrl-0 = <&cdc_pins>;
+
+				wlf,ldoena = <&gpio 23 GPIO_ACTIVE_HIGH>;
+				wlf,reset  = <&gpio 13 GPIO_ACTIVE_HIGH>;
+
+				CPVDD-supply = <&regulator_dummy_1v8>;
+				AVDD-supply = <&regulator_dummy_1v8>;
+				DBVDD1-supply = <&regulator_dummy_1v8>;
+				DBVDD2-supply = <&regulator_dummy_1v8>;
+				DBVDD3-supply = <&regulator_dummy_1v8>;
+				SPKVDDL-supply = <&regulator_dummy_5v>;
+				SPKVDDR-supply = <&regulator_dummy_5v>;
+
+				wlf,jd-invert = <1>;
+				wlf,inmode   = <0 0 1 0>;/*IN1 Single-ended*/
+				wlf,dmic-ref = <0 0 0 0>;
+
+				wlf,gpio-defaults = <
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+				>;
+
+				ldo1 {
+					regulator-name = "LDO1";
+					// default constraints as in
+					// arizona-ldo1.c
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1800000>;
+				};
+			};
 		};
 	};
 
@@ -283,6 +336,20 @@
 					BCM2835_PUD_OFF
 				>;
 			};
+			
+			cdc_pins: cdc_pins {
+				/*CDC_RST_3v3, CDC_LDOENA_3v3, CDC_IRQ_3v3 */
+				brcm,pins = <13 23 6>;
+				brcm,function = <
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_IN
+				>;
+				brcm,pull = <BCM2835_PUD_UP
+					     BCM2835_PUD_OFF /* Unpop */
+					     BCM2835_PUD_OFF
+				>;
+			};
 		};
 	};
 	
@@ -290,6 +357,23 @@
 		target = <&i2s>;
 		__overlay__ {
 			status = "okay";
+		};
+	};
+	
+	fragment@7 {
+		target = <&clocks>;
+		__overlay__ {
+			mclk1: mclk1 {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <24576000>;
+			};
+
+			mclk2: mclk2 {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <32768>;
+			};
 		};
 	};
 };
