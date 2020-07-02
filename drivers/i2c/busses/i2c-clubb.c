@@ -16,14 +16,80 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 
+/* USB vendor request to write to I2C EEPROM connected. The EEPROM page size is
+ * fixed to 64 bytes. The I2C EEPROM address is provided in the value field. The
+ * memory address to start writing is provided in the index field of the request.
+ * The maximum allowed request length is 4KB. */
+#define I2C_WRITE              (0xBA)
+
+/* USB vendor request to read from I2C EEPROM connected. The EEPROM page size is
+ * fixed to 64 bytes. The I2C EEPROM address is provided in the value field. The
+ * memory address to start reading from is provided in the index field of the
+ * request. The maximum allowed request length is 4KB. */
+#define I2C_READ               (0xBB)
+
+#define I2C_ADDR		(0xB0)
+
+#define PRINCE_LFT	0x80
 
 struct clubb_i2c_dev {
 	struct device *dev;
+	struct usb_device *udev;
 	struct i2c_adapter adapter;
+	uint16_t i2c_addr;
 };
+
+static inline int clubb_i2c_addr(struct usb_device *udev, uint8_t i2c_addr)
+{
+	return usb_control_msg(udev, usb_sndctrlpipe(udev, 0), I2C_ADDR, USB_DIR_OUT | USB_TYPE_VENDOR , i2c_addr, 0, NULL, 0, 5000);
+}
+
+static inline int clubb_i2c_read(struct usb_device *udev, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
+{
+	return usb_control_msg(udev, usb_sndctrlpipe(udev, 0), I2C_READ, USB_DIR_IN | USB_TYPE_VENDOR , high_addr, low_addr, data, len, 1000);
+}
+
+static inline int clubb_i2c_write(struct usb_device *udev, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
+{
+	return usb_control_msg(udev, usb_sndctrlpipe(udev, 0), I2C_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR , high_addr, low_addr, data, len, 5000);
+}
 
 static int clubb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
+	struct clubb_i2c_dev *i2c_dev = i2c_get_adapdata(adap);
+	uint16_t high_addr, low_addr;
+	int ret;
+
+	if (num == 2){
+		if ( (!(msgs[0].flags & I2C_M_RD)) && (msgs[1].flags & I2C_M_RD) ){
+			high_addr = ((uint16_t)(msgs[0].buf[0] << 8 )) | msgs[0].buf[1];
+			low_addr  = ((uint16_t)(msgs[0].buf[2] << 8 )) | msgs[0].buf[3];
+			if (i2c_dev->i2c_addr != msgs[0].addr) {
+				clubb_i2c_addr(i2c_dev->udev, msgs[0].addr << 1);
+				i2c_dev->i2c_addr = msgs[0].addr;
+			}
+			ret = clubb_i2c_read(i2c_dev->udev, high_addr, low_addr, msgs[1].buf, msgs[1].len);
+			if (ret != msgs[1].len)
+				return -EIO;
+			return num;
+		}
+	} else {
+		if (num == 1 && (!(msgs[0].flags & I2C_M_RD)) ) {
+			high_addr = ((uint16_t)(msgs[0].buf[0] << 8 )) | msgs[0].buf[1];
+			low_addr  = ((uint16_t)(msgs[0].buf[2] << 8 )) | msgs[0].buf[3];
+			if (i2c_dev->i2c_addr != msgs[0].addr) {
+				clubb_i2c_addr(i2c_dev->udev, msgs[0].addr << 1);
+				i2c_dev->i2c_addr = msgs[0].addr;
+			}
+			ret = clubb_i2c_write(i2c_dev->udev, high_addr, low_addr, msgs[0].buf, msgs[0].len);
+			if (ret != msgs[1].len)
+				return -EIO;
+			return num;
+
+		}
+	}
+
+	pr_err("BAD I2C format for clubb");
 	return -EIO;
 }
 
@@ -36,7 +102,6 @@ static const struct i2c_algorithm blubb_i2c_algo = {
 	.master_xfer	= clubb_i2c_xfer,
 	.functionality	= clubb_i2c_func,
 };
-
 
 static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
@@ -51,13 +116,13 @@ static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_i
 	dev_set_drvdata(&udev->dev, i2c_dev);
 	i2c_dev->dev = &udev->dev;
 	adap = &i2c_dev->adapter;
+	i2c_dev->udev = udev;
 
 	i2c_set_adapdata(adap, i2c_dev);
 	adap->class = I2C_CLASS_DEPRECATED;
 	strlcpy(adap->name, "Clubb I2C adapter", sizeof(adap->name));
 	adap->algo = &blubb_i2c_algo;
 	adap->dev.parent = &udev->dev;
-
 
 	np = of_find_compatible_node(NULL, NULL, "cirrus,clubb-i2c");
 	if (np) {
@@ -73,9 +138,7 @@ static void clubb_i2c_disconnect(struct usb_interface *intf)
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct clubb_i2c_dev *i2c_dev = dev_get_drvdata(&udev->dev);
 
-	dev_dbg(i2c_dev->dev, "%s\n", __func__);
 	i2c_del_adapter(&i2c_dev->adapter);
-
 }
 
 static const struct usb_device_id clubb_i2c_id_table[] = {
