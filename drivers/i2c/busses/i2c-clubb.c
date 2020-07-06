@@ -15,6 +15,7 @@
 #include <linux/usb.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/debugfs.h>
 
 /* USB vendor request to write to I2C EEPROM connected. The EEPROM page size is
  * fixed to 64 bytes. The I2C EEPROM address is provided in the value field. The
@@ -29,6 +30,7 @@
 #define I2C_READ               (0xBB)
 
 #define I2C_ADDR		(0xB0)
+#define   IRQ_READ             (0xAA)
 
 #define PRINCE_LFT	0x80
 
@@ -37,6 +39,7 @@ struct clubb_i2c_dev {
 	struct usb_device *udev;
 	struct i2c_adapter adapter;
 	uint16_t i2c_addr;
+	struct dentry *debugfs_root;
 };
 
 static inline int clubb_i2c_addr(struct usb_device *udev, uint8_t i2c_addr)
@@ -103,6 +106,71 @@ static const struct i2c_algorithm blubb_i2c_algo = {
 	.functionality	= clubb_i2c_func,
 };
 
+static void clubb_i2c_callback(struct urb *urb)
+{
+	struct clubb_i2c_dev *i2c_dev = (struct clubb_i2c_dev *)urb->context;
+	struct usb_device *udev = i2c_dev->udev;
+	int status = urb->status;
+	uint8_t *buf = urb->transfer_buffer;
+
+	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
+		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
+		return;
+	}
+
+	if (buf[0] != 0) {
+	    pr_info(" IRQ %d", buf[0]);
+	}
+
+	usb_submit_urb(urb, GFP_ATOMIC);
+
+}
+#define USB_PKT_LEN 4
+static ssize_t clubb_file(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
+{
+	struct clubb_i2c_dev *i2c_dev = file_inode(file)->i_private;
+	struct urb *urb;
+	uint8_t *buf;
+	int retval;
+	struct usb_ctrlrequest *dr;
+
+	pr_info("clubb_file \n");
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb)
+		pr_err("usb_alloc_urb err");
+	buf = usb_alloc_coherent(i2c_dev->udev, USB_PKT_LEN, GFP_KERNEL, &urb->transfer_dma);
+	if (!buf) {
+		usb_free_urb(urb);
+		pr_err("usb_alloc_coherent err");
+	}
+
+	dr = kmalloc(sizeof(*dr), GFP_KERNEL);
+	if (!dr) {
+		usb_free_urb(urb);
+		return -ENOMEM;
+	}
+
+	dr->bRequestType = USB_DIR_IN | USB_TYPE_VENDOR;
+	dr->bRequest     = IRQ_READ;
+	dr->wIndex       = 0;
+	dr->wValue       = 0;
+	dr->wLength      = __cpu_to_le16(USB_PKT_LEN);
+
+	usb_fill_control_urb(urb, i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), (void *) dr, buf, 4, clubb_i2c_callback, i2c_dev);
+	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+
+	retval = usb_submit_urb(urb, GFP_ATOMIC);
+	if (retval)
+		pr_err("usb_submit_urb %d\n", retval);
+
+	return 0;
+}
+
+static const struct file_operations clubb_fops = {
+	.read = &clubb_file,
+};
+
 static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
@@ -129,6 +197,13 @@ static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_i
 		udev->dev.of_node = np;
 		adap->dev.of_node = np;
 	}
+
+	i2c_dev->debugfs_root = debugfs_create_dir("clubb", NULL);
+	if (i2c_dev->debugfs_root == NULL) {
+		pr_err("Failed to create debugfs dir\n");
+	}
+
+	debugfs_create_file("exec", 0660, i2c_dev->debugfs_root, i2c_dev, &clubb_fops);
 
 	return i2c_add_adapter(adap);
 }
