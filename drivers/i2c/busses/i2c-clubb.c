@@ -16,6 +16,8 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>
+#include <linux/gpio.h>
+#include <linux/gpio/driver.h>
 
 /* USB vendor request to write to I2C EEPROM connected. The EEPROM page size is
  * fixed to 64 bytes. The I2C EEPROM address is provided in the value field. The
@@ -31,6 +33,7 @@
 
 #define I2C_ADDR		(0xB0)
 #define   IRQ_READ             (0xAA)
+#define   GPIO_SET             (0xAE)
 
 #define PRINCE_LFT	0x80
 
@@ -39,6 +42,7 @@ struct clubb_i2c_dev {
 	struct usb_device *udev;
 	struct i2c_adapter adapter;
 	uint16_t i2c_addr;
+	struct gpio_chip gc;
 	struct dentry *debugfs_root;
 };
 
@@ -55,6 +59,11 @@ static inline int clubb_i2c_read(struct usb_device *udev, uint16_t high_addr, ui
 static inline int clubb_i2c_write(struct usb_device *udev, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
 {
 	return usb_control_msg(udev, usb_sndctrlpipe(udev, 0), I2C_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR , high_addr, low_addr, data, len, 5000);
+}
+
+static inline int clubb_usb_gpio_set(struct usb_device *udev, uint16_t offset, uint16_t value)
+{
+	return usb_control_msg(udev, usb_sndctrlpipe(udev, 0), GPIO_SET, USB_DIR_OUT | USB_TYPE_VENDOR , offset, value, NULL, 0, 5000);
 }
 
 static int clubb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
@@ -171,12 +180,38 @@ static const struct file_operations clubb_fops = {
 	.read = &clubb_file,
 };
 
+static int clubb_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
+{
+
+	return 0;
+}
+
+static int clubb_gpio_direction_output(struct gpio_chip *chip, unsigned offset, int value)
+{
+
+	return 0;
+}
+
+static void clubb_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
+{
+	struct clubb_i2c_dev *i2c_dev = gpiochip_get_data(chip);
+
+	clubb_usb_gpio_set(i2c_dev->udev, offset, value);
+}
+
+static int clubb_gpio_get(struct gpio_chip *chip, unsigned int offset)
+{
+
+	return 0;
+}
+
 static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct clubb_i2c_dev *i2c_dev;
 	struct i2c_adapter *adap;
 	struct device_node *np;
+	int ret;
 
 	i2c_dev = devm_kzalloc(&udev->dev, sizeof(*i2c_dev), GFP_KERNEL);
 	if (!i2c_dev)
@@ -205,7 +240,26 @@ static int clubb_i2c_probe(struct usb_interface *intf, const struct usb_device_i
 
 	debugfs_create_file("exec", 0660, i2c_dev->debugfs_root, i2c_dev, &clubb_fops);
 
-	return i2c_add_adapter(adap);
+
+	i2c_dev->gc.label		= "clubb_gpio";
+	i2c_dev->gc.direction_input	= clubb_gpio_direction_input;
+	i2c_dev->gc.direction_output	= clubb_gpio_direction_output;
+	i2c_dev->gc.set			= clubb_gpio_set;
+	i2c_dev->gc.get			= clubb_gpio_get;
+	i2c_dev->gc.base		= -1;
+	i2c_dev->gc.ngpio		= 2;
+	i2c_dev->gc.can_sleep		= 1;
+	i2c_dev->gc.parent		= i2c_dev->dev;
+
+	ret = gpiochip_add_data(&i2c_dev->gc, i2c_dev);
+	if (ret < 0)
+		pr_err("error registering gpio chip\n");
+
+	ret = i2c_add_adapter(adap);
+	if (ret)
+		pr_err("Failed to i2c_add_adapter\n");
+
+	return ret;
 }
 
 static void clubb_i2c_disconnect(struct usb_interface *intf)
