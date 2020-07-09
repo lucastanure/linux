@@ -10,6 +10,16 @@ config USB_CLUBB
 	  To compile this driver as a module, choose M here: the
 	  module will be called core-clubb.
 
+config GPIO_CLUBB
+	tristate "Cirrus Logics USB I2C bridge"
+	help
+	  This driver creates GPIO interfaces over usb.
+
+	  If you don't know what to do here, say N.
+
+	  This support is also available as a module. If so, the module
+	  will be called i2c-clubb.
+
 config I2C_CLUBB
 	tristate "Cirrus Logics USB I2C bridge"
 	help

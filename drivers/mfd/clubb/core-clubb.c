@@ -18,35 +18,48 @@
 #include <linux/mfd/clubb/clubb.h>
 
 static const struct mfd_cell clubb_devs[] = {
+	{ .name = "clubb-gpio", },
 	{ .name = "clubb-i2c", },
 };
+
+int clubb_control_msg(struct clubb *clubb, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size)
+{
+	int ret = 0;
+	mutex_lock(&clubb->mutex_ep0);
+	ret = usb_control_msg(clubb->udev, usb_sndctrlpipe(clubb->udev, 0), request, requesttype, value, index, data, size, 5000);
+	mutex_unlock(&clubb->mutex_ep0);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(clubb_control_msg);
 
 static int clubb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct device_node *np;
-	struct clubb *drvdata;
+	struct clubb *clubb;
 	int ret;
 
-	drvdata = devm_kzalloc(&udev->dev, sizeof(struct clubb), GFP_KERNEL);
-	if (!drvdata)
+	clubb = devm_kzalloc(&udev->dev, sizeof(struct clubb), GFP_KERNEL);
+	if (!clubb)
 		return -ENOMEM;
 
-	drvdata->udev = udev;
+	mutex_init(&clubb->mutex_ep0);
 
-	udev->dev.init_name = "TANURE";
+	clubb->udev = udev;
 
-	dev_set_drvdata(&udev->dev, drvdata);
+	udev->dev.init_name = "Clubb Core";
+
+	dev_set_drvdata(&udev->dev, clubb);
 
 	np = of_find_compatible_node(NULL, NULL, "cirrus,clubb");
 	if (np)
 		udev->dev.of_node = np;
 	of_node_put(np);
 
-	ret = mfd_add_devices(&udev->dev, PLATFORM_DEVID_AUTO, clubb_devs, ARRAY_SIZE(clubb_devs),
-			      NULL, 0, NULL);
+	ret = mfd_add_devices(&udev->dev, PLATFORM_DEVID_AUTO, clubb_devs, ARRAY_SIZE(clubb_devs), NULL, 0, NULL);
 	if (ret)
 		dev_err(&udev->dev, "Failed to add subdevices: %d\n", ret);
+	pr_info("end clubb_probe");
 	return 0;
 }
 

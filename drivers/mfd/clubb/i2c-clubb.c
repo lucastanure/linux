@@ -29,49 +29,24 @@
 #define GPIO_SET	(0xAE)
 
 struct clubb_i2c {
-	struct device *dev;
-	struct usb_device *udev;
+	struct clubb *clubb;
 	struct i2c_adapter adapter;
 	uint16_t i2c_addr;
-	struct gpio_chip gc;
-	struct dentry *debugfs_root;
-	struct mutex usb_mutex;
 };
 
-static inline int clubb_i2c_addr(struct clubb_i2c *i2c_dev, uint8_t i2c_addr)
+static inline int clubb_i2c_addr(struct clubb *clubb, uint8_t i2c_addr)
 {
-	int ret = 0;
-	mutex_lock(&i2c_dev->usb_mutex);
-	ret = usb_control_msg(i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), I2C_ADDR, USB_DIR_OUT | USB_TYPE_VENDOR , i2c_addr, 0, NULL, 0, 5000);
-	mutex_unlock(&i2c_dev->usb_mutex);
-	return ret;
+	return clubb_control_msg(clubb, I2C_ADDR, USB_DIR_OUT | USB_TYPE_VENDOR , i2c_addr, 0, NULL, 0);
 }
 
-static inline int clubb_i2c_read(struct clubb_i2c *i2c_dev, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
+static inline int clubb_i2c_read(struct clubb *clubb, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
 {
-	int ret = 0;
-	mutex_lock(&i2c_dev->usb_mutex);
-	ret = usb_control_msg(i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), I2C_READ, USB_DIR_IN | USB_TYPE_VENDOR , high_addr, low_addr, data, len, 1000);
-	mutex_unlock(&i2c_dev->usb_mutex);
-	return ret;
+	return clubb_control_msg(clubb, I2C_READ, USB_DIR_IN | USB_TYPE_VENDOR , high_addr, low_addr, data, len);
 }
 
-static inline int clubb_i2c_write(struct clubb_i2c *i2c_dev, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
+static inline int clubb_i2c_write(struct clubb *clubb, uint16_t high_addr, uint16_t low_addr, void *data, uint16_t len)
 {
-	int ret = 0;
-	mutex_lock(&i2c_dev->usb_mutex);
-	ret = usb_control_msg(i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), I2C_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR , high_addr, low_addr, data, len, 5000);
-	mutex_unlock(&i2c_dev->usb_mutex);
-	return ret;
-}
-
-static inline int clubb_usb_gpio_set(struct clubb_i2c *i2c_dev, uint16_t offset, uint16_t value)
-{
-	int ret = 0;
-	mutex_lock(&i2c_dev->usb_mutex);
-	ret = usb_control_msg(i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), GPIO_SET, USB_DIR_OUT | USB_TYPE_VENDOR , offset, value, NULL, 0, 5000);
-	mutex_unlock(&i2c_dev->usb_mutex);
-	return ret;
+	return clubb_control_msg(clubb, I2C_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR , high_addr, low_addr, data, len);
 }
 
 static int clubb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
@@ -85,10 +60,10 @@ static int clubb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int n
 			high_addr = ((uint16_t)(msgs[0].buf[0] << 8 )) | msgs[0].buf[1];
 			low_addr  = ((uint16_t)(msgs[0].buf[2] << 8 )) | msgs[0].buf[3];
 			if (i2c_dev->i2c_addr != msgs[0].addr) {
-				clubb_i2c_addr(i2c_dev, msgs[0].addr << 1);
+				clubb_i2c_addr(i2c_dev->clubb, msgs[0].addr << 1);
 				i2c_dev->i2c_addr = msgs[0].addr;
 			}
-			ret = clubb_i2c_read(i2c_dev, high_addr, low_addr, msgs[1].buf, msgs[1].len);
+			ret = clubb_i2c_read(i2c_dev->clubb, high_addr, low_addr, msgs[1].buf, msgs[1].len);
 			if (ret != msgs[1].len)
 				return -EIO;
 			return num;
@@ -98,10 +73,10 @@ static int clubb_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int n
 			high_addr = ((uint16_t)(msgs[0].buf[0] << 8 )) | msgs[0].buf[1];
 			low_addr  = ((uint16_t)(msgs[0].buf[2] << 8 )) | msgs[0].buf[3];
 			if (i2c_dev->i2c_addr != msgs[0].addr) {
-				clubb_i2c_addr(i2c_dev, msgs[0].addr << 1);
+				clubb_i2c_addr(i2c_dev->clubb, msgs[0].addr << 1);
 				i2c_dev->i2c_addr = msgs[0].addr;
 			}
-			ret = clubb_i2c_write(i2c_dev, high_addr, low_addr, msgs[0].buf, msgs[0].len);
+			ret = clubb_i2c_write(i2c_dev->clubb, high_addr, low_addr, msgs[0].buf, msgs[0].len);
 			if (ret != msgs[1].len)
 				return -EIO;
 			return num;
@@ -118,158 +93,46 @@ static u32 clubb_i2c_func(struct i2c_adapter *adap)
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 }
 
-static const struct i2c_algorithm blubb_i2c_algo = {
+static const struct i2c_algorithm clubb_i2c_algo = {
 	.master_xfer	= clubb_i2c_xfer,
 	.functionality	= clubb_i2c_func,
 };
 
-static void clubb_i2c_callback(struct urb *urb)
-{
-	struct clubb_i2c *i2c_dev = (struct clubb_i2c *)urb->context;
-	struct usb_device *udev = i2c_dev->udev;
-	int status = urb->status;
-	uint8_t *buf = urb->transfer_buffer;
-
-	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
-		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
-		return;
-	}
-
-	if (buf[0] != 0) {
-	    pr_info(" IRQ %d", buf[0]);
-	}
-
-	usb_submit_urb(urb, GFP_ATOMIC);
-
-}
-#define USB_PKT_LEN 4
-static ssize_t clubb_file(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
-{
-	struct clubb_i2c *i2c_dev = file_inode(file)->i_private;
-	struct urb *urb;
-	uint8_t *buf;
-	int retval;
-	struct usb_ctrlrequest *dr;
-
-	pr_info("clubb_file \n");
-
-	urb = usb_alloc_urb(0, GFP_KERNEL);
-	if (!urb)
-		pr_err("usb_alloc_urb err");
-	buf = usb_alloc_coherent(i2c_dev->udev, USB_PKT_LEN, GFP_KERNEL, &urb->transfer_dma);
-	if (!buf) {
-		usb_free_urb(urb);
-		pr_err("usb_alloc_coherent err");
-	}
-
-	dr = kmalloc(sizeof(*dr), GFP_KERNEL);
-	if (!dr) {
-		usb_free_urb(urb);
-		return -ENOMEM;
-	}
-
-	dr->bRequestType = USB_DIR_IN | USB_TYPE_VENDOR;
-	dr->bRequest     = IRQ_READ;
-	dr->wIndex       = 0;
-	dr->wValue       = 0;
-	dr->wLength      = __cpu_to_le16(USB_PKT_LEN);
-
-	usb_fill_control_urb(urb, i2c_dev->udev, usb_sndctrlpipe(i2c_dev->udev, 0), (void *) dr, buf, 4, clubb_i2c_callback, i2c_dev);
-	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
-
-	retval = usb_submit_urb(urb, GFP_ATOMIC);
-	if (retval)
-		pr_err("usb_submit_urb %d\n", retval);
-
-	return 0;
-}
-
-static const struct file_operations clubb_fops = {
-	.read = &clubb_file,
-};
-
-static int clubb_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
-{
-
-	return 0;
-}
-
-static int clubb_gpio_direction_output(struct gpio_chip *chip, unsigned offset, int value)
-{
-
-	return 0;
-}
-
-static void clubb_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
-{
-	struct clubb_i2c *i2c_dev = gpiochip_get_data(chip);
-
-	clubb_usb_gpio_set(i2c_dev, offset, value);
-}
-
-static int clubb_gpio_get(struct gpio_chip *chip, unsigned int offset)
-{
-
-	return 0;
-}
-
 static int clubb_i2c_probe(struct platform_device *pdev)
 {
-	struct clubb *drvdata;
+	struct clubb *clubb;
 	struct clubb_i2c *i2c_dev;
 	struct i2c_adapter *adap;
 	struct device_node *np;
 	int ret;
 
-	drvdata = dev_get_drvdata(pdev->dev.parent);
-	if (!drvdata)
+	clubb = dev_get_drvdata(pdev->dev.parent);
+	if (!clubb)
 		return -EPROBE_DEFER;
 
 	i2c_dev = devm_kzalloc(&pdev->dev, sizeof(*i2c_dev), GFP_KERNEL);
 	if (!i2c_dev)
 		return -ENOMEM;
 	adap = &i2c_dev->adapter;
-
-	i2c_dev->dev = &pdev->dev;
-	i2c_dev->udev = drvdata->udev;
+	i2c_dev->clubb = clubb;
 
 	adap->class = I2C_CLASS_DEPRECATED;
-	strlcpy(adap->name, "Clubb I2C adapter", sizeof(adap->name));
-	adap->algo = &blubb_i2c_algo;
-	adap->dev.parent = i2c_dev->dev;
+	strlcpy(adap->name, "Clubb I2C", sizeof(adap->name));
+	adap->algo = &clubb_i2c_algo;
+	adap->dev.parent = &pdev->dev;
 
 	i2c_set_adapdata(adap, i2c_dev);
 
 	np = of_find_compatible_node(NULL, NULL, "cirrus,clubb-i2c");
 	if (np)
 		adap->dev.of_node = np;
-
-	i2c_dev->debugfs_root = debugfs_create_dir("clubb", NULL);
-	if (i2c_dev->debugfs_root == NULL) {
-		pr_err("Failed to create debugfs dir\n");
-	}
-
-	debugfs_create_file("exec", 0660, i2c_dev->debugfs_root, i2c_dev, &clubb_fops);
-
-	mutex_init(&i2c_dev->usb_mutex);
-
-	i2c_dev->gc.label		= "clubb_gpio";
-	i2c_dev->gc.direction_input	= clubb_gpio_direction_input;
-	i2c_dev->gc.direction_output	= clubb_gpio_direction_output;
-	i2c_dev->gc.set			= clubb_gpio_set;
-	i2c_dev->gc.get			= clubb_gpio_get;
-	i2c_dev->gc.base		= -1;
-	i2c_dev->gc.ngpio		= 2;
-	i2c_dev->gc.can_sleep		= 1;
-	i2c_dev->gc.parent		= i2c_dev->dev;
-
-	ret = gpiochip_add_data(&i2c_dev->gc, i2c_dev);
-	if (ret < 0)
-		pr_err("error registering gpio chip\n");
+	of_node_put(np);
 
 	ret = i2c_add_adapter(adap);
 	if (ret)
 		pr_err("Failed to i2c_add_adapter\n");
+
+	pr_info("end i2c_add_adapter");
 
 	return ret;
 }
