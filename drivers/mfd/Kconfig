@@ -2,6 +2,8 @@
 # Multifunction miscellaneous devices
 #
 
+source "drivers/mfd/clubb/Kconfig"
+
 if HAS_IOMEM
 menu "Multifunction device drivers"
 

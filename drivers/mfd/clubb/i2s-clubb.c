@@ -26,6 +26,8 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <linux/completion.h>
+#include <linux/platform_device.h>
+#include <linux/mfd/clubb/clubb.h>
 
 #define DRV_NAME "clubb-i2s-comp"
 
@@ -46,11 +48,11 @@ struct urbs_pending {
 	struct urb *l_urb;
 	struct urb *r_urb;
 	unsigned long size_bytes;
-	struct clubb_data *priv;
+	struct clubb_i2s *priv;
 	struct list_head node;
 };
 
-struct clubb_data {
+struct clubb_i2s {
 	struct usb_device *udev;
 	struct delayed_work send_worker;
 	unsigned int hwptr_done;
@@ -75,7 +77,7 @@ static inline void clubb_free_urb(struct urb *urb)
 static void clubb_callback(struct urb *urb)
 {
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
-	struct clubb_data *priv = urbs->priv;
+	struct clubb_i2s *priv = urbs->priv;
 	struct usb_device *udev = priv->udev;
 	int status = urb->status;
 	int period_elapsed = 0;
@@ -111,34 +113,34 @@ static void clubb_callback(struct urb *urb)
 		snd_pcm_period_elapsed(priv->sub);
 }
 
-static struct urbs_pending *clubb_create_pkg(struct clubb_data *priv, unsigned long bytes)
+static struct urbs_pending *clubb_create_pkg(struct clubb_i2s *priv, unsigned long bytes)
 {
 	struct usb_device *udev = priv->udev;
 	struct urbs_pending *urbs;
 	struct urb *l_urb, *r_urb;
 	uint16_t *l_buf, *r_buf;
 
-	urbs = kzalloc(sizeof(struct urbs_pending), GFP_KERNEL);
+	urbs = kzalloc(sizeof(struct urbs_pending), GFP_ATOMIC);
 	if (!urbs)
 		return NULL;
 
 	/* left channel */
-	l_urb = usb_alloc_urb(0, GFP_KERNEL);
+	l_urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!l_urb)
 		return NULL;
-	l_buf = usb_alloc_coherent(udev, bytes/2, GFP_KERNEL, &l_urb->transfer_dma);
+	l_buf = usb_alloc_coherent(udev, bytes/2, GFP_ATOMIC, &l_urb->transfer_dma);
 	if (!l_buf) {
 		usb_free_urb(l_urb);
 		return NULL;
 	}
 
 	/* right channel */
-	r_urb = usb_alloc_urb(0, GFP_KERNEL);
+	r_urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!r_urb) {
 		clubb_free_urb(l_urb);
 		return NULL;
 	}
-	r_buf = usb_alloc_coherent(udev, bytes/2, GFP_KERNEL, &r_urb->transfer_dma);
+	r_buf = usb_alloc_coherent(udev, bytes/2, GFP_ATOMIC, &r_urb->transfer_dma);
 	if (!r_buf) {
 		usb_free_urb(r_urb);
 		clubb_free_urb(l_urb);
@@ -158,7 +160,7 @@ static struct urbs_pending *clubb_create_pkg(struct clubb_data *priv, unsigned l
 	return urbs;
 }
 
-static int clubb_create_lr_urb(struct clubb_data *priv, struct snd_pcm_substream *sub,
+static int clubb_create_lr_urb(struct clubb_i2s *priv, struct snd_pcm_substream *sub,
 			       uint16_t *buffer, unsigned long bytes)
 {
 	struct urbs_pending *urbs;
@@ -210,7 +212,7 @@ static int clubb_i2s_copy(struct snd_pcm_substream *sub, int channel, unsigned l
 			  void __user *user_buf, unsigned long bytes)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
-	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct clubb_i2s *priv = snd_soc_component_get_drvdata(component);
 	unsigned long writesize, pos;
 	char *buffer;
 	int ret;
@@ -235,7 +237,7 @@ free:
 
 void clubb_urb_sender(struct work_struct *work)
 {
-	struct clubb_data *priv = container_of(work, struct clubb_data, send_worker.work);
+	struct clubb_i2s *priv = container_of(work, struct clubb_i2s, send_worker.work);
 	struct urbs_pending *to_send, *to_save;
 	int retval = 0;
 
@@ -275,7 +277,7 @@ void clubb_urb_sender(struct work_struct *work)
 int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai *dai)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
-	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct clubb_i2s *priv = snd_soc_component_get_drvdata(component);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -306,7 +308,7 @@ int clubb_i2s_trigger(struct snd_pcm_substream *sub, int cmd, struct snd_soc_dai
 static snd_pcm_uframes_t clubb_i2s_pointer(struct snd_pcm_substream *sub)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
-	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct clubb_i2s *priv = snd_soc_component_get_drvdata(component);
 	struct snd_pcm_runtime *runtime = sub->runtime;
 	unsigned long hwptr_done;
 	unsigned long irq_flags;
@@ -338,7 +340,7 @@ static const struct snd_pcm_hardware clubb_pcm_hw = {
 static int clubb_i2s_prepare(struct snd_pcm_substream *sub)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
-	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct clubb_i2s *priv = snd_soc_component_get_drvdata(component);
 	unsigned long bufsize;
 
         bufsize = snd_pcm_lib_buffer_bytes(sub);
@@ -351,11 +353,34 @@ static int clubb_i2s_prepare(struct snd_pcm_substream *sub)
 static int clubb_pcm_open(struct snd_pcm_substream *sub)
 {
 	struct snd_soc_component *component = snd_soc_rtdcom_lookup(sub->private_data, DRV_NAME);
-	struct clubb_data *priv = snd_soc_component_get_drvdata(component);
+	struct clubb_i2s *priv = snd_soc_component_get_drvdata(component);
 
 	priv->playing = 0;
 	snd_soc_set_runtime_hwparams(sub, &clubb_pcm_hw);
 	INIT_DELAYED_WORK(&priv->send_worker, clubb_urb_sender);
+
+	return 0;
+}
+
+static  int clubb_i2s_comp_probe(struct snd_soc_component *component)
+{
+	struct clubb *drvdata = dev_get_drvdata(component->dev);
+	struct clubb_i2s *priv;
+
+	priv = devm_kzalloc(component->dev, sizeof(struct clubb_i2s), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&priv->pending_list);
+	INIT_LIST_HEAD(&priv->reuse_list);
+	priv->udev = drvdata->udev;
+	priv->udev->dev.init_name = "clubb-i2s";
+	spin_lock_init(&priv->send_lock);
+	spin_lock_init(&priv->reuse_lock);
+	init_completion(&priv->l_completion);
+	init_completion(&priv->r_completion);
+
+	snd_soc_component_set_drvdata(component, priv);
 
 	return 0;
 }
@@ -392,57 +417,44 @@ const struct snd_soc_component_driver clubb_i2s_component = {
 	.name	= DRV_NAME,
 	.ops	= &clubb_i2s_pcm_ops,
 	.non_legacy_dai_naming	= 1,
+	.probe = &clubb_i2s_comp_probe,
 };
 
-static int clubb_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
+static int clubb_i2s_probe(struct platform_device *pdev)
 {
-	struct usb_device *udev = interface_to_usbdev(intf);
-	struct clubb_data *priv;
+	struct clubb *drvdata;
 	int ret = 0;
 
-	priv = devm_kzalloc(&udev->dev, sizeof(struct clubb_data), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
+	drvdata = dev_get_drvdata(pdev->dev.parent);
+	if (!drvdata)
+		return -EPROBE_DEFER;
+	platform_set_drvdata(pdev, drvdata);
 
-	INIT_LIST_HEAD(&priv->pending_list);
-	INIT_LIST_HEAD(&priv->reuse_list);
-	priv->udev = udev;
-	priv->udev->dev.init_name = "clubb-i2s";
-	spin_lock_init(&priv->send_lock);
-	spin_lock_init(&priv->reuse_lock);
-	init_completion(&priv->l_completion);
-	init_completion(&priv->r_completion);
-
-	dev_set_drvdata(&udev->dev, priv);
-
-	ret = devm_snd_soc_register_component(&udev->dev, &clubb_i2s_component, clubb_i2s_dai,
+	ret = devm_snd_soc_register_component(&pdev->dev, &clubb_i2s_component, clubb_i2s_dai,
 					      ARRAY_SIZE(clubb_i2s_dai));
 	if (ret)
-		dev_err(&intf->dev, "Could not register DAI: %d\n", ret);
+		pr_err("Could not register DAI: %d\n", ret);
 
 	return ret;
 }
 
-static void clubb_usb_disconnect(struct usb_interface *intf)
+static int clubb_i2s_remove(struct platform_device *pdev)
 {
-	dev_dbg(&intf->dev, "%s\n", __func__);
+	return 0;
 }
 
-static const struct usb_device_id clubb_usb_id_table[] = {
-	{ USB_DEVICE(0x0429, 0x00f0) },
-	{}
-};
-MODULE_DEVICE_TABLE(usb, clubb_usb_id_table);
 
-static struct usb_driver clubb_driver = {
-	.name		= "Clubb_I2S",
-	.probe		= clubb_usb_probe,
-	.disconnect	= clubb_usb_disconnect,
-	.id_table	= clubb_usb_id_table,
+static struct platform_driver clubb_i2s_driver = {
+	.probe		= clubb_i2s_probe,
+	.remove		= clubb_i2s_remove,
+	.driver		= {
+		.name	= "clubb-i2s",
+	},
 };
 
-module_usb_driver(clubb_driver);
+module_platform_driver(clubb_i2s_driver);
 
 MODULE_AUTHOR("Lucas Tanure <tanureal@opensource.cirrus.com>");
-MODULE_DESCRIPTION("Driver for Cirrus USB Bus Bridge");
+MODULE_DESCRIPTION("Driver for Cirrus I2S USB Bridge");
 MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("platform:clubb-i2s");

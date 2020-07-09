@@ -431,17 +431,6 @@ config I2C_BCM2835
 	  This support is also available as a module.  If so, the module
 	  will be called i2c-bcm2835.
 
-config I2C_CLUBB
-	tristate "Cirrus Logics USB I2C bridge"
-	help
-	  If you say yes to this option, support will be included for the
-	  Clubb I2C USB Bridge.
-
-	  If you don't know what to do here, say N.
-
-	  This support is also available as a module.  If so, the module
-	  will be called i2c-clubb.
-
 config I2C_BCM_IPROC
 	tristate "Broadcom iProc I2C controller"
 	depends on ARCH_BCM_IPROC || COMPILE_TEST
