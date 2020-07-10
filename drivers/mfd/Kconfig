@@ -1952,4 +1952,7 @@ config RAVE_SP_CORE
 	  device found on several devices in RAVE line of hardware.
 
 endmenu
+
+source "drivers/mfd/clsic/Kconfig"
+
 endif
