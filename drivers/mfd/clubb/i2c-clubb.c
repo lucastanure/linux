@@ -22,12 +22,6 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/clubb/clubb.h>
 
-#define I2C_WRITE	(0xBA)
-#define I2C_READ	(0xBB)
-#define I2C_ADDR	(0xB0)
-#define IRQ_READ	(0xAA)
-#define GPIO_SET	(0xAE)
-
 struct clubb_i2c {
 	struct clubb *clubb;
 	struct i2c_adapter adapter;
@@ -131,8 +125,6 @@ static int clubb_i2c_probe(struct platform_device *pdev)
 	ret = i2c_add_adapter(adap);
 	if (ret)
 		pr_err("Failed to i2c_add_adapter\n");
-
-	pr_info("end i2c_add_adapter");
 
 	return ret;
 }

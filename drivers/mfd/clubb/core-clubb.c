@@ -59,7 +59,6 @@ static int clubb_probe(struct usb_interface *intf, const struct usb_device_id *i
 	ret = mfd_add_devices(&udev->dev, PLATFORM_DEVID_AUTO, clubb_devs, ARRAY_SIZE(clubb_devs), NULL, 0, NULL);
 	if (ret)
 		dev_err(&udev->dev, "Failed to add subdevices: %d\n", ret);
-	pr_info("end clubb_probe");
 	return 0;
 }
 
