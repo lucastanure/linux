@@ -14,8 +14,9 @@
 #define GPIO_SET	(0xAE)
 #define IRQ_READ	(0xAA)
 
-#define SPI_WRITE       (0xC2)
-#define SPI_READ        (0xC3)
+#define SPI_WRITE	(0xC2)
+#define SPI_READ	(0xC3)
+#define SPI_CS		(0xCC)
 
 struct clubb {
 	struct usb_device *udev;

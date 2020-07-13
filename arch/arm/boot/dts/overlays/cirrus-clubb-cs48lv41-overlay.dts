@@ -21,116 +21,115 @@
 	};
 
 	fragment@1 {
-		target = <&spi0>;
+		target = <&clubb_usb>;
 		__overlay__ {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			status = "okay";
-
-			spidev@1{
-				status = "disabled";
-			};
-/*
-			cs48lv41: cs48lv41@1 {
-				#sound-dai-cells = <1>;
-				spi-max-frequency = <12500000>;
-				spi-pad-bits = <32>;
-				compatible = "cirrus,clsic";
-				reg = <1>;
+			
+			clubb_spi: clubb_spi {
+				#address-cells = <1>;
+				#size-cells = <0>;
 				status = "okay";
+				
+				compatible = "cirrus,clubb-spi";
 
-				interrupts = <0 8>;
-				interrupt-controller;
-				#interrupt-cells = <2>;
-				interrupt-parent = <&clubb_gpio>;
+				cs48lv41: cs48lv41@0 {
+					#sound-dai-cells = <1>;
+					spi-max-frequency = <12500000>;
+					spi-pad-bits = <32>;
+					compatible = "cirrus,clsic";
+					reg = <0>;
+					status = "okay";
 
-				gpio-controller;
-				#gpio-cells = <2>;
+					interrupts = <0 8>;
+					interrupt-controller;
+					#interrupt-cells = <2>;
+					interrupt-parent = <&clubb_gpio>;
 
-				VDD_A-supply   =  <&regulator_dummy_1v8>;
-				VDD_IO1-supply =  <&regulator_dummy_1v8>;
-				VDD_D-supply   =  <&regulator_dummy_0v9>;
+					gpio-controller;
+					#gpio-cells = <2>;
 
-				reset-gpio = <&clubb_gpio 1 GPIO_ACTIVE_HIGH>;
+					VDD_A-supply   =  <&regulator_dummy_1v8>;
+					VDD_IO1-supply =  <&regulator_dummy_1v8>;
+					VDD_D-supply   =  <&regulator_dummy_0v9>;
 
-				volatile_memory;
+					reset-gpio = <&clubb_gpio 1 GPIO_ACTIVE_HIGH>;
 
-				pinctrl-names = "default";
-				pinctrl-0 = <&cs48lv41_defaults &ff_pins>;
-				cs48lv40_pinctrl: tacna-pinctrl {
-					compatible = "cirrus,tacna-pinctrl";
+					volatile_memory;
 
-					cs48lv41_defaults: defaults {
-						asp1 {
-							groups = "asp1";
-							function = "asp1";
-							bias-bus-hold;
-						};
-						asp2 {
-							groups = "asp2";
-							function = "asp2";
-							bias-bus-hold;
-						};
-						asp3 {
-							groups = "asp3";
-							function = "asp3";
-							bias-bus-hold;
-						};
-						asp4 {
-							groups = "asp4";
-							function = "asp4";
-							bias-bus-hold;
-						};
-						in1-pdm {
-							groups = "in1-pdm";
-							function ="in1-pdm";
-							bias-bus-hold;
-						};
-						in2-pdm {
-							groups = "in2-pdm";
-							function ="in2-pdm";
-							bias-bus-hold;
-						};
-						in3-pdm {
-							groups = "in3-pdm";
-							function ="in3-pdm";
-							bias-bus-hold;
-						};
-						in4-pdm {
-							groups = "in4-pdm";
-							function ="in4-pdm";
-							bias-bus-hold;
+					pinctrl-names = "default";
+					pinctrl-0 = <&cs48lv41_defaults &ff_pins>;
+					cs48lv40_pinctrl: tacna-pinctrl {
+						compatible = "cirrus,tacna-pinctrl";
+
+						cs48lv41_defaults: defaults {
+							asp1 {
+								groups = "asp1";
+								function = "asp1";
+								bias-bus-hold;
+							};
+							asp2 {
+								groups = "asp2";
+								function = "asp2";
+								bias-bus-hold;
+							};
+							asp3 {
+								groups = "asp3";
+								function = "asp3";
+								bias-bus-hold;
+							};
+							asp4 {
+								groups = "asp4";
+								function = "asp4";
+								bias-bus-hold;
+							};
+							in1-pdm {
+								groups = "in1-pdm";
+								function ="in1-pdm";
+								bias-bus-hold;
+							};
+							in2-pdm {
+								groups = "in2-pdm";
+								function ="in2-pdm";
+								bias-bus-hold;
+							};
+							in3-pdm {
+								groups = "in3-pdm";
+								function ="in3-pdm";
+								bias-bus-hold;
+							};
+							in4-pdm {
+								groups = "in4-pdm";
+								function ="in4-pdm";
+								bias-bus-hold;
+							};
 						};
 					};
-				};
 
-				MICBIAS1A {
-					regulator-active-discharge = <1>;
-				};
+					MICBIAS1A {
+						regulator-active-discharge = <1>;
+					};
 
-				MICBIAS1B {
-					regulator-active-discharge = <1>;
-				};
+					MICBIAS1B {
+						regulator-active-discharge = <1>;
+					};
 
-				MICBIAS1C {
-					regulator-active-discharge = <1>;
-				};
+					MICBIAS1C {
+						regulator-active-discharge = <1>;
+					};
 
-				MICBIAS1D {
-					regulator-active-discharge = <1>;
-				};
+					MICBIAS1D {
+						regulator-active-discharge = <1>;
+					};
 
-				cs48lv41_alg: cs48lv41_alg@0 {
-					compatible = "cirrus,clsic-alg";
-					#sound-dai-cells = <1>;
-					cirrus,service-type = <0x4C41>;
+					cs48lv41_alg: cs48lv41_alg@0 {
+						compatible = "cirrus,clsic-alg";
+						#sound-dai-cells = <1>;
+						cirrus,service-type = <0x4C41>;
+					};
 				};
 			};
-			*/
 		};
-	
 	};
-
+/*
 	fragment@3 {
 		target = <&clubb_usb>;
 		__overlay__ {
@@ -211,7 +210,7 @@
 			};
 		};
 	};
-
+*/
 	fragment@4 {
 		target = <&soc>;
 		__overlay__ {

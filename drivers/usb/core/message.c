@@ -4,7 +4,7 @@
  *
  * Released under the GPLv2 only.
  */
-
+#define DEBUG
 #include <linux/pci.h>	/* for scatterlist macros */
 #include <linux/usb.h>
 #include <linux/module.h>
@@ -63,7 +63,7 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 		usb_kill_urb(urb);
 		retval = (ctx.status == -ENOENT ? -ETIMEDOUT : ctx.status);
 
-		dev_dbg(&urb->dev->dev,
+		dev_err(&urb->dev->dev,
 			"%s timed out on ep%d%s len=%u/%u\n",
 			current->comm,
 			usb_endpoint_num(&urb->ep->desc),

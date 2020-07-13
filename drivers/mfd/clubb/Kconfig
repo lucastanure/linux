@@ -30,6 +30,16 @@ config I2C_CLUBB
 	  This support is also available as a module. If so, the module
 	  will be called i2c-clubb.
 
+config SPI_CLUBB
+	tristate "Cirrus Logics USB I2C bridge"
+	help
+	  This driver creates I2C interfaces over usb.
+
+	  If you don't know what to do here, say N.
+
+	  This support is also available as a module. If so, the module
+	  will be called i2c-clubb.
+
 config I2S_CLUBB
 	tristate "Cirrus Logic USB Bus Bridge support"
 	---help---
