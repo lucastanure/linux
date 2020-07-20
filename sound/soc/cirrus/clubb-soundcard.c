@@ -232,20 +232,6 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.params = &cs35l41_params,
 	},
 #endif
-	{
-		.name = "voice-ctrl",
-		.stream_name = "voice-ctrl",
-		.cpu_dai_name = "cs48lv41-cpu-voicectrl",
-		.codec_dai_name = "cs48lv41-dsp-voicectrl",
-		.codec_name = "cs48lv41_alg",
-	},
-	{
-		.name = "cpu-codec1",
-		.stream_name = "cpu-codec1",
-		.codec_dai_name = "clsic-asp1",
-		.codec_name = "clsic-codec",
-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM,
-	},
 };
 
 static struct snd_soc_card clubb_sndcard = {
@@ -278,24 +264,6 @@ static int clubb_probe(struct platform_device *pdev)
 
 	card->dev = &pdev->dev;
 	dev_info(card->dev, "Clubb SoundCard\n");
-
-	i2s_node = of_parse_phandle(pdev->dev.of_node, "i2s-controller", 0);
-	if (!i2s_node) {
-		dev_err(&pdev->dev, "i2s-controller missing in DT\n");
-		return -ENODEV;
-	}
-
-	clubb_dai[ASP1].cpu_of_node = i2s_node;
-	clubb_dai[ASP1].platform_of_node = i2s_node;
-
-	i2s_node = of_parse_phandle(pdev->dev.of_node, "platform-controller", 0);
-	if (!i2s_node) {
-		dev_err(&pdev->dev, "platform-controller missing in DT\n");
-		return -ENODEV;
-	}
-
-	clubb_dai[COMPRESS_STREAM].cpu_of_node = i2s_node;
-	clubb_dai[COMPRESS_STREAM].platform_of_node = i2s_node;
 
 	ret = devm_snd_soc_register_card(card->dev, card);
 	if (ret && ret != -EPROBE_DEFER)

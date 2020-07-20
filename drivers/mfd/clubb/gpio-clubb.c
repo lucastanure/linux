@@ -27,7 +27,6 @@ struct clubb_gpio {
 
 	bool irq_poll;
 	struct delayed_work irq_poll_worker;
-	int max;
 };
 
 static void clubb_irq_poll_callback(struct work_struct *work)
@@ -44,14 +43,18 @@ static void clubb_irq_poll_callback(struct work_struct *work)
 		memset(buf, 0 , 4);
 		clubb_control_msg(gpio->clubb, IRQ_READ , USB_DIR_IN | USB_TYPE_VENDOR,  0,  0, buf, 4);
 		if (buf[0]) {
-			//pr_info("CLSIC IRQ");
 			irq = gpio->gc.to_irq(&gpio->gc, 0);
 			handle_nested_irq(irq);
 		}
+		if (buf[1]) {
+			irq = gpio->gc.to_irq(&gpio->gc, 1);
+			handle_nested_irq(irq);
+		}
+		if (buf[2]) {
+			irq = gpio->gc.to_irq(&gpio->gc, 2);
+			handle_nested_irq(irq);
+		}
 		msleep(10);
-		//gpio->max++;
-		//if(gpio->max > 10)
-		//	break;
 	}
 
 	kfree(buf);
@@ -65,7 +68,6 @@ static unsigned int clubb_irq_startup(struct irq_data *d)
 	INIT_DELAYED_WORK(&gpio->irq_poll_worker, clubb_irq_poll_callback);
 
 	gpio->irq_poll = true;
-	gpio->max = 0;
 
 	schedule_delayed_work(&gpio->irq_poll_worker, 0);
 
@@ -131,9 +133,12 @@ static int clubb_gpio_probe(struct platform_device *pdev)
 	struct irq_chip *irqchip;
 	int ret;
 
+	pr_info("clubb_gpio_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
-	if (!clubb)
+	if (!clubb){
+		pr_info("fuck clubb_gpio_probe!!");
 		return -EPROBE_DEFER;
+	}
 
 	gpio = devm_kzalloc(&pdev->dev, sizeof(struct clubb_gpio), GFP_KERNEL);
 	if (!gpio)

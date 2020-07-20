@@ -123,9 +123,12 @@ static int clubb_spi_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	int ret;
 
+	pr_info("clubb_spi_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
-	if (!clubb)
+	if (!clubb) {
+		pr_info("fuck clubb_spi_probe!!");
 		return -EPROBE_DEFER;
+	}
 
 	master = spi_alloc_master(&pdev->dev, sizeof(struct clubb_spi));
 	if (!master) {

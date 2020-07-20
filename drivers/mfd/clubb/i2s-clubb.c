@@ -29,7 +29,7 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/clubb/clubb.h>
 
-#define DRV_NAME "clubb-i2s-comp"
+#define DRV_NAME "clubb-i2s"
 
 /*
  * Left and right are sent to separate endpoints so max period size
@@ -53,7 +53,7 @@ struct urbs_pending {
 };
 
 struct clubb_i2s {
-	struct usb_device *udev;
+	struct clubb *clubb;
 	struct delayed_work send_worker;
 	unsigned int hwptr_done;
 	volatile int playing;
@@ -78,13 +78,12 @@ static void clubb_callback(struct urb *urb)
 {
 	struct urbs_pending *urbs = (struct urbs_pending *)urb->context;
 	struct clubb_i2s *priv = urbs->priv;
-	struct usb_device *udev = priv->udev;
 	int status = urb->status;
 	int period_elapsed = 0;
 	unsigned long irq_flags;
 
 	if (status && !(status == -ENOENT || status == -ECONNRESET || status == -ESHUTDOWN)) {
-		dev_err(&udev->dev, "urb=%p bulk status: %d\n", urb, status);
+		pr_err("urb=%p bulk status: %d\n", urb, status);
 	}
 
 	spin_lock_irqsave(&priv->send_lock, irq_flags);
@@ -107,7 +106,7 @@ static void clubb_callback(struct urb *urb)
 	else if (urb == urbs->l_urb)
 		complete(&priv->l_completion);
 	else
-		dev_err(&udev->dev, "Received unexpected urb");
+		pr_err("Received unexpected urb");
 
 	if (period_elapsed && priv->playing)
 		snd_pcm_period_elapsed(priv->sub);
@@ -115,7 +114,7 @@ static void clubb_callback(struct urb *urb)
 
 static struct urbs_pending *clubb_create_pkg(struct clubb_i2s *priv, unsigned long bytes)
 {
-	struct usb_device *udev = priv->udev;
+	struct usb_device *udev = priv->clubb->udev;
 	struct urbs_pending *urbs;
 	struct urb *l_urb, *r_urb;
 	uint16_t *l_buf, *r_buf;
@@ -238,6 +237,7 @@ free:
 void clubb_urb_sender(struct work_struct *work)
 {
 	struct clubb_i2s *priv = container_of(work, struct clubb_i2s, send_worker.work);
+	struct usb_device *udev = priv->clubb->udev;
 	struct urbs_pending *to_send, *to_save;
 	int retval = 0;
 
@@ -249,17 +249,17 @@ void clubb_urb_sender(struct work_struct *work)
 
 		retval = usb_submit_urb(to_send->l_urb, GFP_ATOMIC);
 		if (retval)
-			dev_err(&priv->udev->dev, "Failed submitting urb %d\n", retval);
+			dev_err(&udev->dev, "Failed submitting urb %d\n", retval);
 
 		retval = usb_submit_urb(to_send->r_urb, GFP_ATOMIC);
 		if (retval)
-			dev_err(&priv->udev->dev, "Failed submitting urb %d\n",  retval);
+			dev_err(&udev->dev, "Failed submitting urb %d\n",  retval);
 
 		if (wait_for_completion_timeout(&priv->l_completion, msecs_to_jiffies(5000)) == 0)
-			dev_err(&priv->udev->dev, "Left Urb timeout\n");
+			dev_err(&udev->dev, "Left Urb timeout\n");
 
 		if (wait_for_completion_timeout(&priv->r_completion, msecs_to_jiffies(5000)) == 0)
-			dev_err(&priv->udev->dev, "Right Urb timeout\n");
+			dev_err(&udev->dev, "Right Urb timeout\n");
 
 		to_save = to_send;
 
@@ -364,8 +364,9 @@ static int clubb_pcm_open(struct snd_pcm_substream *sub)
 
 static  int clubb_i2s_comp_probe(struct snd_soc_component *component)
 {
-	struct clubb *drvdata = dev_get_drvdata(component->dev);
+	struct clubb *clubb = snd_soc_component_get_drvdata(component);
 	struct clubb_i2s *priv;
+	struct device_node *np;
 
 	priv = devm_kzalloc(component->dev, sizeof(struct clubb_i2s), GFP_KERNEL);
 	if (!priv)
@@ -373,12 +374,16 @@ static  int clubb_i2s_comp_probe(struct snd_soc_component *component)
 
 	INIT_LIST_HEAD(&priv->pending_list);
 	INIT_LIST_HEAD(&priv->reuse_list);
-	priv->udev = drvdata->udev;
-	priv->udev->dev.init_name = "clubb-i2s";
+	priv->clubb = clubb;
 	spin_lock_init(&priv->send_lock);
 	spin_lock_init(&priv->reuse_lock);
 	init_completion(&priv->l_completion);
 	init_completion(&priv->r_completion);
+
+	np = of_find_compatible_node(NULL, NULL, "cirrus,clubb-i2s");
+	if (np)
+		component->dev->of_node = np;
+	of_node_put(np);
 
 	snd_soc_component_set_drvdata(component, priv);
 
@@ -422,13 +427,14 @@ const struct snd_soc_component_driver clubb_i2s_component = {
 
 static int clubb_i2s_probe(struct platform_device *pdev)
 {
-	struct clubb *drvdata;
+	struct clubb *clubb;
 	int ret = 0;
 
-	drvdata = dev_get_drvdata(pdev->dev.parent);
-	if (!drvdata)
+	clubb = dev_get_drvdata(pdev->dev.parent);
+	if (!clubb)
 		return -EPROBE_DEFER;
-	platform_set_drvdata(pdev, drvdata);
+
+	platform_set_drvdata(pdev, clubb);
 
 	ret = devm_snd_soc_register_component(&pdev->dev, &clubb_i2s_component, clubb_i2s_dai,
 					      ARRAY_SIZE(clubb_i2s_dai));
@@ -448,7 +454,7 @@ static struct platform_driver clubb_i2s_driver = {
 	.probe		= clubb_i2s_probe,
 	.remove		= clubb_i2s_remove,
 	.driver		= {
-		.name	= "clubb-i2s",
+		.name	= DRV_NAME,
 	},
 };
 

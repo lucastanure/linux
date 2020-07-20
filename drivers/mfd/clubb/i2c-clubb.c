@@ -100,9 +100,12 @@ static int clubb_i2c_probe(struct platform_device *pdev)
 	struct device_node *np;
 	int ret;
 
+	pr_info("clubb_i2c_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
-	if (!clubb)
+	if (!clubb) {
+		pr_info("fuck!!");
 		return -EPROBE_DEFER;
+	}
 
 	i2c_dev = devm_kzalloc(&pdev->dev, sizeof(*i2c_dev), GFP_KERNEL);
 	if (!i2c_dev)

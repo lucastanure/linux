@@ -18,44 +18,16 @@
 #include <linux/mfd/clubb/clubb.h>
 
 static const struct mfd_cell clubb_devs[] = {
-	{ .name = "clubb-gpio", },
-	//{ .name = "clubb-i2c", },
+	//{ .name = "clubb-i2s"},
 	{ .name = "clubb-spi"},
+	{ .name = "clubb-i2c", },
+	{ .name = "clubb-gpio", },
 };
 
-/*
-void prr(__u8 request, __u8 requesttype){
-	switch(request) {
-		case I2C_WRITE:
-			pr_info("I2C_WRITE %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case I2C_READ:
-			pr_info("I2C_READ %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case I2C_ADDR:
-			pr_info("I2C_ADDR %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case GPIO_SET:
-			pr_info("GPIO_SET %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case IRQ_READ:
-			pr_info("IRQ_READ %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case SPI_WRITE:
-			pr_info("SPI_WRITE %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		case SPI_READ:
-			pr_info("SPI_READ %s", (requesttype & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN? "USB_DIR_IN": "USB_DIR_OUT");
-			break;
-		default:
-			break;
-	}
-}
-*/
+
 int clubb_control_msg(struct clubb *clubb, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size)
 {
 	int ret = 0;
-	//prr(request, requesttype);
 	mutex_lock(&clubb->mutex_ep0);
 	ret = usb_control_msg(clubb->udev, usb_sndctrlpipe(clubb->udev, 0), request, requesttype, value, index, data, size, 1000);
 	if (ret < 0)
