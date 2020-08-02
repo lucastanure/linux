@@ -27,27 +27,6 @@ struct clubb_spi {
 static int clubb_spi_setup(struct spi_device *spi_dev)
 {
 	//struct clubb_spi *spi = spi_master_get_devdata(spi_dev->master);
-
-	if (spi_dev->mode & SPI_CPHA)
-		pr_info("%s spi->mode SPI_CPHA", __FUNCTION__);
-	if (spi_dev->mode & SPI_CPOL)
-		pr_info("%s spi->mode SPI_CPOL", __FUNCTION__);
-	if (spi_dev->mode & SPI_MODE_0)
-		pr_info("%s spi->mode SPI_MODE_0", __FUNCTION__);
-	if (spi_dev->mode & SPI_MODE_1)
-		pr_info("%s spi->mode SPI_MODE_1", __FUNCTION__);
-	if (spi_dev->mode & SPI_MODE_2)
-		pr_info("%s spi->mode SPI_MODE_2", __FUNCTION__);
-	if (spi_dev->mode & SPI_MODE_3)
-		pr_info("%s spi->mode SPI_MODE_3", __FUNCTION__);
-	if (spi_dev->mode & SPI_CS_HIGH)
-		pr_info("%s spi->mode SPI_CS_HIGH", __FUNCTION__);
-
-	pr_info("%s spi->chip_select   %d", __FUNCTION__, spi_dev->chip_select);
-	pr_info("%s spi->cs_gpio       %d", __FUNCTION__, spi_dev->cs_gpio);
-	pr_info("%s spi->bits_per_word %d", __FUNCTION__, spi_dev->bits_per_word);
-	pr_info("%s spi->max_speed_hz  %d", __FUNCTION__, spi_dev->max_speed_hz);
-
 	if (spi_dev->chip_select > 1) {
 		pr_err("setup: only one native chip-selects are supported\n");
 		return -EINVAL;
@@ -58,13 +37,22 @@ static int clubb_spi_setup(struct spi_device *spi_dev)
 static void clubb_spi_set_cs(struct spi_device *spi, bool gpio_level)
 {
 	struct clubb_spi *spi_dev = spi_master_get_devdata(spi->master);
+	struct clubb *clubb = spi_dev->clubb;
 
-	clubb_control_msg(spi_dev->clubb, SPI_CS, USB_DIR_OUT | USB_TYPE_VENDOR , gpio_level, 0, NULL, 0);
+	if (gpio_level) {
+		mutex_unlock(&clubb->mutex_ep0);
+	}
+	else {
+		mutex_lock(&clubb->mutex_ep0);
+	}
+
+	clubb_control_msg2(spi_dev->clubb, SPI_CS, USB_DIR_OUT | USB_TYPE_VENDOR , gpio_level, 0, NULL, 0);
 }
 
 static int clubb_spi_transfer_one(struct spi_master *master, struct spi_device *spi, struct spi_transfer *tfr)
 {
 	struct clubb_spi *spi_dev = spi_master_get_devdata(master);
+	struct clubb *clubb = spi_dev->clubb;
 	unsigned transfer_size = tfr->len;
 	unsigned current_size;
 	uint8_t *buf;
@@ -78,13 +66,13 @@ static int clubb_spi_transfer_one(struct spi_master *master, struct spi_device *
 			else
 				current_size = 4096;
 
-			clubb_control_msg(spi_dev->clubb, SPI_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR, 0, 0, buf, current_size);
+			clubb_control_msg2(spi_dev->clubb, SPI_WRITE, USB_DIR_OUT | USB_TYPE_VENDOR, 0, 0, buf, current_size);
 			transfer_size -= current_size;
 			buf = &buf[current_size];
 		}
 	}
 	if (tfr->rx_buf != NULL)
-		clubb_control_msg(spi_dev->clubb, SPI_READ, USB_DIR_IN | USB_TYPE_VENDOR, 0, 0, tfr->rx_buf, tfr->len);
+		clubb_control_msg2(spi_dev->clubb, SPI_READ, USB_DIR_IN | USB_TYPE_VENDOR, 0, 0, tfr->rx_buf, tfr->len);
 
 	return 0;
 }
@@ -97,21 +85,6 @@ static void clubb_spi_handle_err(struct spi_master *master, struct spi_message *
 static int clubb_spi_prepare_message(struct spi_master *master, struct spi_message *msg)
 {
 
-	if (msg->spi->mode & SPI_CPHA)
-		pr_info( "%s spi->mode SPI_CPHA", __FUNCTION__);
-	if (msg->spi->mode & SPI_CPOL)
-		pr_info( "%s spi->mode SPI_CPOL", __FUNCTION__);
-	if (msg->spi->mode & SPI_MODE_0)
-		pr_info( "%s spi->mode SPI_MODE_0", __FUNCTION__);
-	if (msg->spi->mode & SPI_MODE_1)
-		pr_info( "%s spi->mode SPI_MODE_1", __FUNCTION__);
-	if (msg->spi->mode & SPI_MODE_2)
-		pr_info( "%s spi->mode SPI_MODE_2", __FUNCTION__);
-	if (msg->spi->mode & SPI_MODE_3)
-		pr_info( "%s spi->mode SPI_MODE_3", __FUNCTION__);
-	if (msg->spi->mode & SPI_CS_HIGH)
-		pr_info( "%s spi->mode SPI_CS_HIGH", __FUNCTION__);
-
 	return 0;
 }
 
@@ -123,7 +96,6 @@ static int clubb_spi_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	int ret;
 
-	pr_info("clubb_spi_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
 	if (!clubb) {
 		pr_info("fuck clubb_spi_probe!!");

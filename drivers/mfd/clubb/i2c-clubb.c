@@ -100,7 +100,6 @@ static int clubb_i2c_probe(struct platform_device *pdev)
 	struct device_node *np;
 	int ret;
 
-	pr_info("clubb_i2c_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
 	if (!clubb) {
 		pr_info("fuck!!");

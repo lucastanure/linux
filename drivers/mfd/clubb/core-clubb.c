@@ -18,7 +18,7 @@
 #include <linux/mfd/clubb/clubb.h>
 
 static const struct mfd_cell clubb_devs[] = {
-	//{ .name = "clubb-i2s"},
+	{ .name = "clubb-i2s"},
 	{ .name = "clubb-spi"},
 	{ .name = "clubb-i2c", },
 	{ .name = "clubb-gpio", },
@@ -36,6 +36,16 @@ int clubb_control_msg(struct clubb *clubb, __u8 request, __u8 requesttype, __u16
 	return ret;
 }
 EXPORT_SYMBOL_GPL(clubb_control_msg);
+
+int clubb_control_msg2(struct clubb *clubb, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size)
+{
+	int ret = 0;
+	ret = usb_control_msg(clubb->udev, usb_sndctrlpipe(clubb->udev, 0), request, requesttype, value, index, data, size, 1000);
+	if (ret < 0)
+		pr_err("clubb_control_msg %x %d", request, ret);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(clubb_control_msg2);
 
 static int clubb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {

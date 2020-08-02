@@ -428,6 +428,7 @@ const struct snd_soc_component_driver clubb_i2s_component = {
 static int clubb_i2s_probe(struct platform_device *pdev)
 {
 	struct clubb *clubb;
+	struct device_node *np;
 	int ret = 0;
 
 	clubb = dev_get_drvdata(pdev->dev.parent);
@@ -435,6 +436,11 @@ static int clubb_i2s_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 
 	platform_set_drvdata(pdev, clubb);
+
+	np = of_find_compatible_node(NULL, NULL, "cirrus,clubb-i2s");
+	if (np)
+		pdev->dev.of_node = np;
+	of_node_put(np);
 
 	ret = devm_snd_soc_register_component(&pdev->dev, &clubb_i2s_component, clubb_i2s_dai,
 					      ARRAY_SIZE(clubb_i2s_dai));

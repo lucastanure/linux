@@ -15,12 +15,22 @@
 			clubb_usb: clubb_usb {
 				compatible = "cirrus,clubb";
 				status = "okay";
-				
 			};
 		};
 	};
 
 	fragment@1 {
+		target = <&soc>;
+		__overlay__ {
+			clubb_i2s: clubb_i2s {
+				#sound-dai-cells = <1>;
+				compatible = "cirrus,clubb-i2s";
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@2 {
 		target = <&clubb_usb>;
 		__overlay__ {
 			
@@ -51,12 +61,12 @@
 					VDD_IO1-supply =  <&regulator_dummy_1v8>;
 					VDD_D-supply   =  <&regulator_dummy_0v9>;
 
-					reset-gpio = <&clubb_gpio 2 GPIO_ACTIVE_HIGH>;
+					reset-gpio = <&clubb_gpio 3 GPIO_ACTIVE_HIGH>;
 
 					volatile_memory;
 
 					pinctrl-names = "default";
-					pinctrl-0 = <&cs48lv41_defaults &ff_pins>;
+					pinctrl-0 = <&cs48lv41_defaults>;
 					cs48lv40_pinctrl: tacna-pinctrl {
 						compatible = "cirrus,tacna-pinctrl";
 
@@ -143,19 +153,16 @@
 			
 				clock-frequency = <100000>;
 
-				cs35l41@40{
+				left_amp: cs35l41@40{
 					#sound-dai-cells = <1>;
 					compatible = "cirrus,cs35l41";
 					reg = <0x40>; 
 					#interrupt-cells = <2>;
-					interrupts = <16 8>;
+					interrupts = <1 8>;
 					interrupt-controller;
-					interrupt-parent = <&gpio>;
+					interrupt-parent = <&clubb_gpio>;
 					VA-supply = <&regulator_dummy_1v8>;
 					VP-supply = <&regulator_dummy_5v>;
-
-					pinctrl-names = "default";
-					pinctrl-0 = <&ampL_pins>;
 
 					cirrus,boost-peak-milliamp = <4500>;
 					cirrus,boost-ind-nanohenry = <1000>;
@@ -164,7 +171,7 @@
 					gpio-controller;
 					#gpio-cells = <2>;
 
-					reset-gpio = <&clubb_gpio 1 GPIO_ACTIVE_HIGH>;
+					reset-gpio = <&clubb_gpio 2 GPIO_ACTIVE_HIGH>;
 					cirrus,gpio-config1 {
 						cirrus,gpio-src-select = <0x2>;
 					};
@@ -174,19 +181,16 @@
 					};
 				};
 
-				cs35l41@41{
+				right_amp: cs35l41@41{
 					#sound-dai-cells = <1>;
 					compatible = "cirrus,cs35l41";
 					reg = <0x41>;
 					#interrupt-cells = <2>;
-					interrupts = <12 8>;
+					interrupts = <3 8>;
 					interrupt-controller;
-					interrupt-parent = <&gpio>;
+					interrupt-parent = <&clubb_gpio>;
 					VA-supply = <&regulator_dummy_1v8>;
 					VP-supply = <&regulator_dummy_5v>;
-
-					pinctrl-names = "default";
-					pinctrl-0 = <&ampR_pins>;
 
 					cirrus,boost-peak-milliamp = <4500>;
 					cirrus,boost-ind-nanohenry = <1000>;
@@ -195,7 +199,7 @@
 					gpio-controller;
 					#gpio-cells = <2>;
 
-					reset-gpio = <&clubb_gpio 0 GPIO_ACTIVE_HIGH>;
+					reset-gpio = <&clubb_gpio 2 GPIO_ACTIVE_HIGH>;
 					cirrus,right-channel-amp;
 					cirrus,gpio-config1 {
 						cirrus,gpio-src-select = <0x2>;
@@ -205,7 +209,7 @@
 						cirrus,gpio-output-enable;
 					};
 				};
-				
+				/*
 				wm8998: wm8998@1a {
 					#sound-dai-cells = <1>;
 					compatible = "wlf,wm8998";
@@ -223,11 +227,8 @@
 					clocks = <&mclk1 &mclk2>;
 					clock-names = "mclk1", "mclk2";
 
-					pinctrl-names = "default";
-					pinctrl-0 = <&cdc_pins>;
-
-					wlf,ldoena = <&gpio 23 GPIO_ACTIVE_HIGH>;
-					wlf,reset  = <&clubb_gpio 0 GPIO_ACTIVE_HIGH>;
+					wlf,ldoena = <&clubb_gpio 0 GPIO_ACTIVE_HIGH>;
+					wlf,reset  = <&clubb_gpio 1 GPIO_ACTIVE_HIGH>;
 
 					CPVDD-supply = <&regulator_dummy_1v8>;
 					AVDD-supply = <&regulator_dummy_1v8>;
@@ -238,7 +239,7 @@
 					SPKVDDR-supply = <&regulator_dummy_5v>;
 
 					wlf,jd-invert = <1>;
-					wlf,inmode   = <0 0 1 0>;/*IN1 Single-ended*/
+					wlf,inmode   = <0 0 1 0>;
 					wlf,dmic-ref = <0 0 0 0>;
 
 					wlf,gpio-defaults = <
@@ -257,7 +258,7 @@
 						regulator-max-microvolt = <1800000>;
 					};
 				};
-
+*/
 			};
 		};
 	};
@@ -309,62 +310,6 @@
 	};
 
 	fragment@6 {
-		target = <&gpio>;
-		__overlay__ {
-			ff_pins: ff_pins {
-				/*FFI_RST_3V3, FF_IRQ_3v3 */
-				brcm,pins = <17 27>;
-				brcm,function = <
-					BCM2835_FSEL_GPIO_OUT
-					BCM2835_FSEL_GPIO_IN
-				>;
-				brcm,pull = <
-					BCM2835_PUD_UP
-					BCM2835_PUD_OFF
-				>;
-			};
-
-			ampL_pins: ampL_pins {
-				/*AMP_RST_3v3, AMP_IRQ_L_3v3 */
-				brcm,pins = <26 16>;
-				brcm,function = <
-					BCM2835_FSEL_GPIO_OUT
-					BCM2835_FSEL_GPIO_IN
-				>;
-				brcm,pull = <
-					BCM2835_PUD_UP
-					BCM2835_PUD_OFF
-				>;
-			};
-
-			ampR_pins: ampR_pins {
-				/*AMP_RST_3v3, AMP_IRQ_R_3v3 */
-				brcm,pins = <12>;
-				brcm,function = <
-					BCM2835_FSEL_GPIO_IN
-				>;
-				brcm,pull = <
-					BCM2835_PUD_OFF
-				>;
-			};
-			
-			cdc_pins: cdc_pins {
-				/*CDC_RST_3v3, CDC_LDOENA_3v3, CDC_IRQ_3v3 */
-				brcm,pins = <13 23 6>;
-				brcm,function = <
-					BCM2835_FSEL_GPIO_OUT
-					BCM2835_FSEL_GPIO_OUT
-					BCM2835_FSEL_GPIO_IN
-				>;
-				brcm,pull = <BCM2835_PUD_UP
-					     BCM2835_PUD_OFF /* Unpop */
-					     BCM2835_PUD_OFF
-				>;
-			};
-		};
-	};
-	
-	fragment@7 {
 		target = <&clocks>;
 		__overlay__ {
 			mclk1: mclk1 {
@@ -380,4 +325,14 @@
 			};
 		};
 	};
+	
+        fragment@7 {
+                target = <&sound>;
+                __overlay__ {
+                        compatible = "cirrus,clubb-soundcard";
+                        i2s-controller = <&clubb_i2s>;
+                        status = "okay";
+                };
+        };
+
 };

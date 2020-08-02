@@ -24,3 +24,4 @@ struct clubb {
 };
 
 int clubb_control_msg(struct clubb *clubb, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size);
+int clubb_control_msg2(struct clubb *clubb, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size);

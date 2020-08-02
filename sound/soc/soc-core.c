@@ -16,7 +16,7 @@
 //   o More testing with other codecs/machines.
 //   o Add more codecs and platforms to ensure good API coverage.
 //   o Support TDM on PCM and I2S
-#define DEBUG
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -868,7 +868,7 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	cpu_dai_component.dai_name = dai_link->cpu_dai_name;
 	rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);
 	if (!rtd->cpu_dai) {
-		//dev_info(card->dev, "ASoC: CPU DAI %s not registered - will retry\n",dai_link->cpu_dai_name);
+		dev_info(card->dev, "ASoC: CPU DAI %s not registered - will retry\n",dai_link->cpu_dai_name);
 		goto _err_defer;
 	}
 	snd_soc_rtdcom_add(rtd, rtd->cpu_dai->component);
@@ -880,7 +880,7 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	for (i = 0; i < rtd->num_codecs; i++) {
 		codec_dais[i] = snd_soc_find_dai(&codecs[i]);
 		if (!codec_dais[i]) {
-			//dev_info(card->dev, "ASoC: CODEC DAI %s not registered - will retry\n", codecs[i].dai_name);
+			dev_info(card->dev, "ASoC: CODEC DAI %s not registered - will retry\n", codecs[i].dai_name);
 			goto _err_defer;
 		}
 		snd_soc_rtdcom_add(rtd, codec_dais[i]->component);

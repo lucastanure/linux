@@ -54,6 +54,10 @@ static void clubb_irq_poll_callback(struct work_struct *work)
 			irq = gpio->gc.to_irq(&gpio->gc, 2);
 			handle_nested_irq(irq);
 		}
+		if (buf[3]) {
+			irq = gpio->gc.to_irq(&gpio->gc, 3);
+			handle_nested_irq(irq);
+		}
 		msleep(10);
 	}
 
@@ -133,7 +137,6 @@ static int clubb_gpio_probe(struct platform_device *pdev)
 	struct irq_chip *irqchip;
 	int ret;
 
-	pr_info("clubb_gpio_probe!!");
 	clubb = dev_get_drvdata(pdev->dev.parent);
 	if (!clubb){
 		pr_info("fuck clubb_gpio_probe!!");
@@ -152,7 +155,7 @@ static int clubb_gpio_probe(struct platform_device *pdev)
 	gc->set			= clubb_gpio_set;
 	gc->get			= clubb_gpio_get;
 	gc->base		= -1;
-	gc->ngpio		= 2;
+	gc->ngpio		= 4;
 	gc->can_sleep		= 1;
 	gc->parent		= &pdev->dev;
 
