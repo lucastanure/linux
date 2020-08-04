@@ -24,3 +24,6 @@ obj-$(CONFIG_SND_SOC_CLUBB_SOUNDCARD)		+= snd-soc-clubb-soundcard.o
 snd-soc-clubb-simple-soundcard-objs			:= clubb-simple-soundcard.o
 obj-$(CONFIG_SND_SOC_CLUBB_SIMPLE_SOUNDCARD)	+= snd-soc-clubb-simple-soundcard.o
 
+# Cirrus Quartet SoundCard Support
+snd-soc-quartet-simplified-soundcard-objs	:= quartet-simplified-soundcard.o
+obj-$(CONFIG_SND_SOC_QUARTET_SIMPLE_SOUNDCARD)	+= snd-soc-quartet-simplified-soundcard.o

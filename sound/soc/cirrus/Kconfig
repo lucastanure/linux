@@ -71,3 +71,9 @@ config SND_SOC_CLUBB_SIMPLE_SOUNDCARD
        select SND_SOC_PCM5102A
        help
           Say Y or M if you want to add support for simple Clubb soundcard
+
+config SND_SOC_QUARTET_SIMPLE_SOUNDCARD
+       tristate "Support for Cirrus Quartet Simple soundcard"
+       select SND_SOC_CLSIC_CODEC
+       help
+          Say Y or M if you want to add support for Cirrus Quartet Simple soundcard

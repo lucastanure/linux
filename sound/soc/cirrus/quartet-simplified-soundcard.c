@@ -13,22 +13,24 @@
 #include <linux/module.h>
 #include <sound/pcm_params.h>
 #include "../codecs/tacna.h"
+#ifdef CONFIG_SND_SOC_CS35L41
 #include "../codecs/cs35l41.h"
 
-enum DAI_ID { CODEC_DAI, LEFT_AMP_DAI, RIGHT_AMP_DAI};
+enum DAI_ID { CODEC_DAI, LEFT_AMP_DAI, RIGHT_AMP_DAI, VTE_COMPRESS_STREAM, TRACE_COMPRESS_STREAM };
 
+#else
+enum DAI_ID { CODEC_DAI, VTE_COMPRESS_STREAM, TRACE_COMPRESS_STREAM };
+#endif
 
 #define BITS		32
 #define CHANNELS	2
 #define AUDIO_RATE	48000
 #define MCLK1_RATE	24576000
 #define FLLOUT_RATE	49152000
-#define ASP_BCLK	3072000 //1536000
 #define SYSCLK_RATE	98304000
 #define AMPCLK_RATE	(AUDIO_RATE * CHANNELS * BITS)
 
-static int clubb_set_bias_level(struct snd_soc_card *card,
-				  struct snd_soc_dapm_context *dapm,
+static int quartet_set_bias_level(struct snd_soc_card *card, struct snd_soc_dapm_context *dapm,
 				  enum snd_soc_bias_level level)
 {
 	struct snd_soc_pcm_runtime *rtd;
@@ -45,8 +47,7 @@ static int clubb_set_bias_level(struct snd_soc_card *card,
 	case SND_SOC_BIAS_PREPARE:
 		if (dapm->bias_level != SND_SOC_BIAS_STANDBY)
 			break;
-		ret = snd_soc_component_set_pll(cdc_dai->component, TACNA_CLK_SYSCLK_1,
-					    TACNA_FLL_SRC_MCLK1,
+		ret = snd_soc_component_set_pll(cdc_dai->component, TACNA_CLK_SYSCLK_1, TACNA_FLL_SRC_MCLK1,
 					    MCLK1_RATE,
 					    FLLOUT_RATE);
 		if (ret < 0)
@@ -58,8 +59,8 @@ static int clubb_set_bias_level(struct snd_soc_card *card,
 	return ret;
 }
 
-static int clubb_set_bias_level_post(struct snd_soc_card *card, struct snd_soc_dapm_context *dapm,
-				     enum snd_soc_bias_level level)
+static int quartet_set_bias_level_post(struct snd_soc_card *card, struct snd_soc_dapm_context *dapm,
+				       enum snd_soc_bias_level level)
 {
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_dai *cdc_dai;
@@ -85,7 +86,8 @@ static int clubb_set_bias_level_post(struct snd_soc_card *card, struct snd_soc_d
 	return 0;
 }
 
-static int clubb_amp_late_probe(struct snd_soc_card *card, unsigned int amp)
+#ifdef CONFIG_SND_SOC_CS35L41
+static int quartet_amp_late_probe(struct snd_soc_card *card, unsigned int amp)
 {
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_dai *asp_dai;
@@ -112,8 +114,9 @@ static int clubb_amp_late_probe(struct snd_soc_card *card, unsigned int amp)
 
 	return 0;
 }
+#endif
 
-static int clubb_late_probe(struct snd_soc_card *card)
+static int quartet_late_probe(struct snd_soc_card *card)
 {
 	struct snd_soc_pcm_runtime *rtd;
 	struct snd_soc_dai *asp_dai;
@@ -136,29 +139,29 @@ static int clubb_late_probe(struct snd_soc_card *card)
 		dev_err(card->dev, "Failed to set %s clock: %d\n", asp_dai->name, ret);
 		return ret;
 	}
+#ifdef CONFIG_SND_SOC_CS35L41
 	/* Configure clock for AMPS */
-	ret = clubb_amp_late_probe(card, LEFT_AMP_DAI);
+	ret = quartet_amp_late_probe(card, LEFT_AMP_DAI);
 	if (ret != 0) {
 		dev_err(card->dev, "Failed to config Left Amp.\n");
 		return ret;
 	}
 
-	ret = clubb_amp_late_probe(card, RIGHT_AMP_DAI);
+	ret = quartet_amp_late_probe(card, RIGHT_AMP_DAI);
 	if (ret != 0) {
 		dev_err(card->dev, "Failed to config Right Amp.\n");
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
-static struct snd_soc_codec_conf clubb_codec_conf[] = {
+#ifdef CONFIG_SND_SOC_CS35L41
+static struct snd_soc_codec_conf quartet_codec_conf[] = {
 	{
-		.dev_name = "cs35l41.7-0040",
 		.name_prefix = "Left_AMP",
 	},
 	{
-		.dev_name = "cs35l41.7-0041",
 		.name_prefix = "Right_AMP",
 	},
 };
@@ -171,22 +174,29 @@ static const struct snd_soc_pcm_stream cs35l41_params = {
 	.channels_min = CHANNELS,
 	.channels_max = CHANNELS,
 };
+#endif
 
-static struct snd_soc_dai_link clubb_dai[] = {
+static const struct snd_soc_dapm_route quartet_routes[] = {
+	{"DSP1", NULL, "DSP1 Preloader"},
+	{"DSP2", NULL, "DSP2 Preloader"},
+	{"DSP1 Preloader", NULL, "VPU1 Preloader"},
+	{"DSP2 Preloader", NULL, "VPU1 Preloader"},
+};
+
+static struct snd_soc_dai_link quartet_dai[] = {
 	{
-		.name = "cpu-codec1",
-		.stream_name = "cpu-codec1",
-		.cpu_dai_name = "clubb-i2s-sai1",
+		.name = "cpu-codec",
+		.stream_name = "cpu-codec",
 		.codec_dai_name = "clsic-asp1",
 		.codec_name = "clsic-codec",
-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFM,
 	},
+#ifdef CONFIG_SND_SOC_CS35L41
 	{
 		.name = "codec-left-amp",
 		.stream_name = "codec-left-amp",
 		.cpu_dai_name = "clsic-asp4",
-		.codec_dai_name = "cs35l41.7-0040",
-		.codec_name = "cs35l41.7-0040",
+		.codec_dai_name = "cs35l41.1-0040",
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
 		.params = &cs35l41_params,
 	},
@@ -194,44 +204,93 @@ static struct snd_soc_dai_link clubb_dai[] = {
 		.name = "codec-right-amp",
 		.stream_name = "codec-right-amp",
 		.cpu_dai_name = "clsic-asp4",
-		.codec_dai_name = "cs35l41.7-0041",
-		.codec_name = "cs35l41.7-0041",
+		.codec_dai_name = "cs35l41.1-0041",
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS,
 		.params = &cs35l41_params,
 	},
+#endif
+	{
+		.name = "voice-ctrl",
+		.stream_name = "voice-ctrl",
+		.cpu_dai_name = "cs48lv41-cpu-voicectrl",
+		.codec_dai_name = "cs48lv41-dsp-voicectrl",
+		.codec_name = "cs48lv41_alg",
+	},
+	{
+		.name = "trace",
+		.stream_name = "trace",
+		.cpu_dai_name = "cs48lv41-cpu-trace",
+		.codec_dai_name = "cs48lv41-dsp-trace",
+		.codec_name = "cs48lv41_alg",
+	},
 };
 
-static struct snd_soc_card clubb_sndcard = {
-	.name			= "Clubb-SoundCard",
-	.long_name		= "Cirrus Clubb SoundCard",
-	.dai_link		= clubb_dai,
-	.num_links		= ARRAY_SIZE(clubb_dai),
+static struct snd_soc_card quartet_sndcard = {
+	.name			= "Quartet-Audio",
+	.long_name		= "Cirrus Quartet Simplified SoundCard",
+	.dai_link		= quartet_dai,
+	.num_links		= ARRAY_SIZE(quartet_dai),
 
-	.codec_conf		= clubb_codec_conf,
-	.num_configs		= ARRAY_SIZE(clubb_codec_conf),
-	.late_probe		= clubb_late_probe,
+	.dapm_routes		= quartet_routes,
+	.num_dapm_routes	= ARRAY_SIZE(quartet_routes),
 
-	.set_bias_level		= clubb_set_bias_level,
-	.set_bias_level_post	= clubb_set_bias_level_post,
+#ifdef CONFIG_SND_SOC_CS35L41
+	.codec_conf		= quartet_codec_conf,
+	.num_configs		= ARRAY_SIZE(quartet_codec_conf),
+#endif
+	.late_probe		= quartet_late_probe,
+
+	.set_bias_level		= quartet_set_bias_level,
+	.set_bias_level_post	= quartet_set_bias_level_post,
 };
 
-static int clubb_probe(struct platform_device *pdev)
+static int quartet_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct device_node *i2s_node;
-	struct snd_soc_card *card = &clubb_sndcard;
+	struct snd_soc_card *card = &quartet_sndcard;
 
 	card->dev = &pdev->dev;
-	dev_info(card->dev, "Clubb SoundCard\n");
+	dev_info(card->dev, "Quartet Simplified Version\n");
 
-        i2s_node = of_parse_phandle(pdev->dev.of_node, "i2s-controller", 0);
-        if (!i2s_node) {
-                dev_err(&pdev->dev, "i2s-controller missing in DT\n");
-                return -ENODEV;
-        }
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "i2s-controller", 0);
+	if (!i2s_node) {
+		dev_err(&pdev->dev, "i2s-controller missing in DT\n");
+		return -ENODEV;
+	}
 
-        clubb_dai[CODEC_DAI].cpu_of_node = i2s_node;
-        clubb_dai[CODEC_DAI].platform_of_node = i2s_node;
+	quartet_dai[CODEC_DAI].cpu_of_node = i2s_node;
+	quartet_dai[CODEC_DAI].platform_of_node = i2s_node;
+
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "platform-controller", 0);
+	if (!i2s_node) {
+		dev_err(&pdev->dev, "platform-controller missing in DT\n");
+		return -ENODEV;
+	}
+
+	quartet_dai[VTE_COMPRESS_STREAM].cpu_of_node = i2s_node;
+	quartet_dai[VTE_COMPRESS_STREAM].platform_of_node = i2s_node;
+
+	quartet_dai[TRACE_COMPRESS_STREAM].cpu_of_node = i2s_node;
+	quartet_dai[TRACE_COMPRESS_STREAM].platform_of_node = i2s_node;
+
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "left-amp", 0);
+	if (!i2s_node) {
+		dev_err(&pdev->dev, "left-amp missing in DT\n");
+		return -ENODEV;
+	}
+
+	quartet_dai[LEFT_AMP_DAI].codec_of_node = i2s_node;
+	quartet_codec_conf[0].of_node = i2s_node;
+
+	i2s_node = of_parse_phandle(pdev->dev.of_node, "right-amp", 0);
+	if (!i2s_node) {
+		dev_err(&pdev->dev, "right-amp missing in DT\n");
+		return -ENODEV;
+	}
+
+	quartet_dai[RIGHT_AMP_DAI].codec_of_node = i2s_node;
+	quartet_codec_conf[1].of_node = i2s_node;
 
 	ret = devm_snd_soc_register_card(card->dev, card);
 	if (ret && ret != -EPROBE_DEFER)
@@ -241,24 +300,25 @@ static int clubb_probe(struct platform_device *pdev)
 }
 
 #if IS_ENABLED(CONFIG_OF)
-static const struct of_device_id snd_clubb_of_match[] = {
-	{ .compatible = "cirrus,clubb-soundcard", },
+static const struct of_device_id snd_quartet_of_match[] = {
+	{ .compatible = "cirrus,quartet-simplified-soundcard", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, snd_clubb_of_match);
+MODULE_DEVICE_TABLE(of, snd_quartet_of_match);
 #endif /* CONFIG_OF */
 
-static struct platform_driver snd_clubb_soundcard_driver = {
+static struct platform_driver snd_quartet_soundcard_driver = {
 	.driver		= {
-		.name	= "clubb-soundcard",
-		.of_match_table = of_match_ptr(snd_clubb_of_match),
+		.name	= "quartet-simplified-soundcard",
+		.of_match_table = of_match_ptr(snd_quartet_of_match),
 	},
-	.probe		= clubb_probe,
+	.probe		= quartet_probe,
 };
 
-module_platform_driver(snd_clubb_soundcard_driver);
+module_platform_driver(snd_quartet_soundcard_driver);
 
-MODULE_DESCRIPTION("ASoC driver for Cirrus Clubb Soundcard");
+MODULE_DESCRIPTION("ASoC driver for Cirrus Quartet Simplified Soundcard");
+MODULE_AUTHOR("Andrew Ford <andrew.ford@opensource.cirrus.com>");
 MODULE_AUTHOR("Lucas Tanure <tanureal@opensource.cirrus.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:cirrus-clubb-soundcard");
+MODULE_ALIAS("platform:cirrus-quartet-simplified-soundcard");

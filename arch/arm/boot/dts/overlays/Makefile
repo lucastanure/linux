@@ -26,6 +26,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	audremap.dtbo \
 	balena-fin.dtbo \
 	bmp085_i2c-sensor.dtbo \
+	cirrus-quartet-simplified-soundcard.dtbo \
 	cirrus-clubb-cs48lv41.dtbo \
 	cirrus-clubb-simple.dtbo \
 	dht11.dtbo \

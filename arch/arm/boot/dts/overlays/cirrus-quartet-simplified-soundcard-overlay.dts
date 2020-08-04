@@ -1,0 +1,355 @@
+// Definitions for Quartet Soundcard - Simplified implementation
+// Please refer to https://www.raspberrypi.org/documentation/configuration/device-tree.md
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/pinctrl/bcm2835.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/mfd/arizona.h>
+
+/{
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&sound>;
+		__overlay__ {
+			compatible = "cirrus,quartet-simplified-soundcard";
+			i2s-controller = <&i2s>;
+			left-amp = <&left_amp>;
+			right-amp = <&right_amp>;
+			platform-controller = <&cs48lv41_alg>;
+			status = "okay";
+		};
+	};
+
+	fragment@1 {
+		target = <&spi0>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			spidev@1{
+				status = "disabled";
+			};
+
+			cs48lv41: cs48lv41@1{
+				#sound-dai-cells = <1>;
+				spi-max-frequency = <12500000>;
+				spi-pad-bits = <32>;
+				compatible = "cirrus,clsic";
+				reg = <1>; /* Id of Chip Select on SPI Bus */
+				status = "okay";
+
+				interrupts = <27 8>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&gpio>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+				VDD_A-supply   =  <&regulator_dummy_1v8>;
+				VDD_IO1-supply =  <&regulator_dummy_1v8>;
+				VDD_D-supply   =  <&regulator_dummy_0v9>;
+
+				/* 17 is RPI GPIO Number */
+				reset-gpio = <&gpio 17 GPIO_ACTIVE_HIGH>;
+
+				volatile_memory;
+
+				pinctrl-names = "default", "active";
+				pinctrl-0 = <&ff_pins>;
+				pinctrl-1 = <&cs48lv41_defaults>;
+
+				/* Documentation/devicetree/bindings/mfd/tacna.txt */
+				cs48lv41_pinctrl: tacna-pinctrl {
+					compatible = "cirrus,tacna-pinctrl";
+
+					cs48lv41_defaults: defaults {
+						asp1 {
+							groups = "asp1";
+							function = "asp1";
+							bias-bus-hold;
+						};
+						asp2 {
+							groups = "asp2";
+							function = "asp2";
+							bias-bus-hold;
+						};
+						asp3 {
+							groups = "asp3";
+							function = "asp3";
+							bias-bus-hold;
+						};
+						asp4 {
+							groups = "asp4";
+							function = "asp4";
+							bias-bus-hold;
+						};
+						in1-pdm {
+							groups = "in1-pdm";
+							function ="in1-pdm";
+							bias-bus-hold;
+						};
+						in2-pdm {
+							groups = "in2-pdm";
+							function ="in2-pdm";
+							bias-bus-hold;
+						};
+						in3-pdm {
+							groups = "in3-pdm";
+							function ="in3-pdm";
+							bias-bus-hold;
+						};
+						in4-pdm {
+							groups = "in4-pdm";
+							function ="in4-pdm";
+							bias-bus-hold;
+						};
+					};
+				};
+
+				MICBIAS1A {
+					regulator-active-discharge = <1>;
+				};
+
+				MICBIAS1B {
+					regulator-active-discharge = <1>;
+				};
+
+				MICBIAS1C {
+					regulator-active-discharge = <1>;
+				};
+
+				MICBIAS1D {
+					regulator-active-discharge = <1>;
+				};
+
+				cs48lv41_alg: cs48lv41_alg@0 {
+					compatible = "cirrus,clsic-alg";
+					#sound-dai-cells = <1>;
+					cirrus,service-type = <0x4C41>;
+				};
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			left_amp: cs35l41@40{
+				#sound-dai-cells = <1>;
+				compatible = "cirrus,cs35l41";
+				reg = <0x40>;
+				#interrupt-cells = <2>;
+				interrupts = <16 8>;
+				interrupt-controller;
+				interrupt-parent = <&gpio>;
+				VA-supply = <&regulator_dummy_1v8>;
+				VP-supply = <&regulator_dummy_5v>;
+
+				cirrus,boost-peak-milliamp = <4500>;
+				cirrus,boost-ind-nanohenry = <1000>;
+				cirrus,boost-cap-microfarad = <15>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+				reset-gpio = <&gpio 26 GPIO_ACTIVE_HIGH>;
+				cirrus,gpio-config1 {
+					cirrus,gpio-src-select = <0x2>;
+				};
+				cirrus,gpio-config2 {
+					cirrus,gpio-src-select = <0x4>;
+					cirrus,gpio-output-enable;
+				};
+			};
+
+			right_amp: cs35l41@41{
+				#sound-dai-cells = <1>;
+				compatible = "cirrus,cs35l41";
+				reg = <0x41>;
+				#interrupt-cells = <2>;
+				interrupts = <12 8>;
+				interrupt-controller;
+				interrupt-parent = <&gpio>;
+				VA-supply = <&regulator_dummy_1v8>;
+				VP-supply = <&regulator_dummy_5v>;
+
+				cirrus,boost-peak-milliamp = <4500>;
+				cirrus,boost-ind-nanohenry = <1000>;
+				cirrus,boost-cap-microfarad = <15>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+				reset-gpio = <&gpio 26 GPIO_ACTIVE_HIGH>;
+				cirrus,right-channel-amp;
+				cirrus,gpio-config1 {
+					cirrus,gpio-src-select = <0x2>;
+				};
+				cirrus,gpio-config2 {
+					cirrus,gpio-src-select = <0x4>;
+					cirrus,gpio-output-enable;
+				};
+			};
+
+			wm8998: wm8998@1a {
+				#sound-dai-cells = <1>;
+				compatible = "wlf,wm8998";
+				reg = <0x1a>;
+				status = "okay";
+
+				interrupts = <6 8>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&gpio>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+				clocks = <&mclk1 &mclk2>;
+				clock-names = "mclk1", "mclk2";
+
+				wlf,ldoena = <&gpio 23 GPIO_ACTIVE_HIGH>;
+				wlf,reset  = <&gpio 13 GPIO_ACTIVE_HIGH>;
+
+				CPVDD-supply = <&regulator_dummy_1v8>;
+				AVDD-supply = <&regulator_dummy_1v8>;
+				DBVDD1-supply = <&regulator_dummy_1v8>;
+				DBVDD2-supply = <&regulator_dummy_1v8>;
+				DBVDD3-supply = <&regulator_dummy_1v8>;
+				SPKVDDL-supply = <&regulator_dummy_5v>;
+				SPKVDDR-supply = <&regulator_dummy_5v>;
+
+				wlf,jd-invert = <1>;
+				wlf,inmode   = <0 0 1 0>;
+				wlf,dmic-ref = <0 0 0 0>;
+
+				wlf,gpio-defaults = <
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+					ARIZONA_GP_DEFAULT
+				>;
+
+				ldo1 {
+					regulator-name = "LDO1";
+					// default constraints as in
+					// arizona-ldo1.c
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1800000>;
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&soc>;
+		__overlay__ {
+			regulator_dummy_0v9: regulator_dummy_0v9 {
+				compatible = "regulator-fixed";
+				regulator-name = "CDC_VDD_0.9V";
+				regulator-min-microvolt = <900000>;
+				regulator-max-microvolt = <900000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+			regulator_dummy_1v8: regulator_dummy_1v8 {
+				compatible = "regulator-fixed";
+				regulator-name = "CDC_VDD_1.8V";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+			regulator_dummy_5v: regulator_dummy_5v {
+				compatible = "regulator-fixed";
+				regulator-name = "CDC_VDD_5V";
+				regulator-min-microvolt = <5000000>;
+				regulator-max-microvolt = <5000000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+		};
+	};
+
+	fragment@4 {
+		target = <&gpio>;
+		__overlay__ {
+			ff_pins: ff_pins {
+				/*FFI_RST_3V3, FF_IRQ_3v3 */
+				brcm,pins = <17 27>;
+				brcm,function = <
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_IN
+				>;
+				brcm,pull = <
+					BCM2835_PUD_UP
+					BCM2835_PUD_OFF
+				>;
+			};
+
+			amp_pins: amp_pins {
+				/*AMP_RST_3v3, AMP_IRQ_L_3v3, AMP_IRQ_R_3v3 */
+				brcm,pins = <26 16 12>;
+				brcm,function = <
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_IN
+					BCM2835_FSEL_GPIO_IN
+				>;
+				brcm,pull = <
+					BCM2835_PUD_UP
+					BCM2835_PUD_OFF
+					BCM2835_PUD_OFF
+				>;
+			};
+
+			cdc_pins: cdc_pins {
+				/*CDC_RST_3v3, CDC_LDOENA_3v3, CDC_IRQ_3v3 */
+				brcm,pins = <13 23 6>;
+				brcm,function = <
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_OUT
+					BCM2835_FSEL_GPIO_IN
+				>;
+				brcm,pull = <
+					BCM2835_PUD_UP
+					BCM2835_PUD_OFF /* Unpop */
+					BCM2835_PUD_OFF
+				>;
+			};
+
+		};
+	};
+
+	fragment@5 {
+		target = <&clocks>;
+		__overlay__ {
+			mclk1: mclk1 {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <24576000>;
+			};
+
+			mclk2: mclk2 {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <32768>;
+			};
+		};
+	};
+
+	fragment@6 {
+		target = <&i2s>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+};

@@ -10,27 +10,15 @@
 	compatible = "brcm,bcm2835";
 
 	fragment@0 {
-		target = <&soc>;
+		target = <&sound>;
 		__overlay__ {
-			clubb_usb: clubb_usb {
-				compatible = "cirrus,clubb";
-				status = "okay";
-			};
+			compatible = "cirrus,clubb-soundcard";
+			i2s-controller = <&clubb_i2s>;
+			status = "okay";
 		};
 	};
 
 	fragment@1 {
-		target = <&soc>;
-		__overlay__ {
-			clubb_i2s: clubb_i2s {
-				#sound-dai-cells = <1>;
-				compatible = "cirrus,clubb-i2s";
-				status = "okay";
-			};
-		};
-	};
-
-	fragment@2 {
 		target = <&clubb_usb>;
 		__overlay__ {
 			
@@ -140,7 +128,7 @@
 		};
 	};
 
-	fragment@3 {
+	fragment@2 {
 		target = <&clubb_usb>;
 		__overlay__ {
 			status = "okay";
@@ -263,7 +251,7 @@
 		};
 	};
 
-	fragment@4 {
+	fragment@3 {
 		target = <&soc>;
 		__overlay__ {
 			regulator_dummy_0v9: regulator_dummy_0v9 {
@@ -293,7 +281,7 @@
 		};
 	};
 
-	fragment@5 {
+	fragment@4 {
 		target = <&clubb_usb>;
 		__overlay__ {
 			clubb_gpio: clubb_gpio {
@@ -309,7 +297,7 @@
 		};
 	};
 
-	fragment@6 {
+	fragment@5 {
 		target = <&clocks>;
 		__overlay__ {
 			mclk1: mclk1 {
@@ -325,14 +313,29 @@
 			};
 		};
 	};
+
+
+	fragment@6 {
+		target = <&soc>;
+		__overlay__ {
+			clubb_usb: clubb_usb {
+				compatible = "cirrus,clubb";
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@7 {
+		target = <&soc>;
+		__overlay__ {
+			clubb_i2s: clubb_i2s {
+				#sound-dai-cells = <1>;
+				compatible = "cirrus,clubb-i2s";
+				status = "okay";
+			};
+		};
+	};
 	
-        fragment@7 {
-                target = <&sound>;
-                __overlay__ {
-                        compatible = "cirrus,clubb-soundcard";
-                        i2s-controller = <&clubb_i2s>;
-                        status = "okay";
-                };
-        };
+
 
 };
