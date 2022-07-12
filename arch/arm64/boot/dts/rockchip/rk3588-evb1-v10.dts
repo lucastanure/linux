@@ -9,6 +9,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/pinctrl/rockchip.h>
 #include "rk3588.dtsi"
+#include "rk3588s-rk806-dual.dtsi"
 
 / {
 	model = "Rockchip RK3588 EVB1 V10 Board";
