@@ -42,6 +42,8 @@ properties:
               - rockchip,rv1108-dw-mshc
               - rockchip,rv1126-dw-mshc
           - const: rockchip,rk3288-dw-mshc
+      # for Rockchip RK3588
+      - const: rockchip,rk3588-dw-mshc
 
   reg:
     maxItems: 1
