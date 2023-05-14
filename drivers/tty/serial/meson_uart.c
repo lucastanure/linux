@@ -4,13 +4,17 @@
  *
  * Copyright (C) 2014 Carlo Caione <carlo@caione.org>
  */
+#define SKIP_IO_TRACE
+
+#if defined(CONFIG_SERIAL_MESON_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
+#define SUPPORT_SYSRQ
+#endif
 
 #include <linux/clk.h>
 #include <linux/console.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
@@ -19,6 +23,7 @@
 #include <linux/serial_core.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/pinctrl/consumer.h>
 
 /* Register offsets */
 #define AML_UART_WFIFO			0x00
@@ -55,10 +60,11 @@
 #define AML_UART_RX_EMPTY		BIT(20)
 #define AML_UART_TX_FULL		BIT(21)
 #define AML_UART_TX_EMPTY		BIT(22)
+#define AML_UART_RX_FIFO_OVERFLOW	BIT(24)
 #define AML_UART_XMIT_BUSY		BIT(25)
 #define AML_UART_ERR			(AML_UART_PARITY_ERR | \
 					 AML_UART_FRAME_ERR  | \
-					 AML_UART_TX_FIFO_WERR)
+					 AML_UART_RX_FIFO_OVERFLOW)
 
 /* AML_UART_MISC bits */
 #define AML_UART_XMIT_IRQ(c)		(((c) & 0xff) << 8)
@@ -68,14 +74,13 @@
 #define AML_UART_BAUD_MASK		0x7fffff
 #define AML_UART_BAUD_USE		BIT(23)
 #define AML_UART_BAUD_XTAL		BIT(24)
-#define AML_UART_BAUD_XTAL_DIV2		BIT(27)
+#define AML_UART_BAUD_XTAL_TICK	BIT(26)
+#define AML_UART_BAUD_XTAL_DIV2	BIT(27)
 
 #define AML_UART_PORT_NUM		12
 #define AML_UART_PORT_OFFSET		6
 #define AML_UART_DEV_NAME		"ttyAML"
 
-#define AML_UART_POLL_USEC		5
-#define AML_UART_TIMEOUT_USEC		10000
 
 static struct uart_driver meson_uart_driver;
 
@@ -448,64 +453,6 @@ static void meson_uart_config_port(struct uart_port *port, int flags)
 	}
 }
 
-#ifdef CONFIG_CONSOLE_POLL
-/*
- * Console polling routines for writing and reading from the uart while
- * in an interrupt or debug context (i.e. kgdb).
- */
-
-static int meson_uart_poll_get_char(struct uart_port *port)
-{
-	u32 c;
-	unsigned long flags;
-
-	spin_lock_irqsave(&port->lock, flags);
-
-	if (readl(port->membase + AML_UART_STATUS) & AML_UART_RX_EMPTY)
-		c = NO_POLL_CHAR;
-	else
-		c = readl(port->membase + AML_UART_RFIFO);
-
-	spin_unlock_irqrestore(&port->lock, flags);
-
-	return c;
-}
-
-static void meson_uart_poll_put_char(struct uart_port *port, unsigned char c)
-{
-	unsigned long flags;
-	u32 reg;
-	int ret;
-
-	spin_lock_irqsave(&port->lock, flags);
-
-	/* Wait until FIFO is empty or timeout */
-	ret = readl_poll_timeout_atomic(port->membase + AML_UART_STATUS, reg,
-					reg & AML_UART_TX_EMPTY,
-					AML_UART_POLL_USEC,
-					AML_UART_TIMEOUT_USEC);
-	if (ret == -ETIMEDOUT) {
-		dev_err(port->dev, "Timeout waiting for UART TX EMPTY\n");
-		goto out;
-	}
-
-	/* Write the character */
-	writel(c, port->membase + AML_UART_WFIFO);
-
-	/* Wait until FIFO is empty or timeout */
-	ret = readl_poll_timeout_atomic(port->membase + AML_UART_STATUS, reg,
-					reg & AML_UART_TX_EMPTY,
-					AML_UART_POLL_USEC,
-					AML_UART_TIMEOUT_USEC);
-	if (ret == -ETIMEDOUT)
-		dev_err(port->dev, "Timeout waiting for UART TX EMPTY\n");
-
-out:
-	spin_unlock_irqrestore(&port->lock, flags);
-}
-
-#endif /* CONFIG_CONSOLE_POLL */
-
 static const struct uart_ops meson_uart_ops = {
 	.set_mctrl      = meson_uart_set_mctrl,
 	.get_mctrl      = meson_uart_get_mctrl,
@@ -521,10 +468,6 @@ static const struct uart_ops meson_uart_ops = {
 	.request_port	= meson_uart_request_port,
 	.release_port	= meson_uart_release_port,
 	.verify_port	= meson_uart_verify_port,
-#ifdef CONFIG_CONSOLE_POLL
-	.poll_get_char	= meson_uart_poll_get_char,
-	.poll_put_char	= meson_uart_poll_put_char,
-#endif
 };
 
 #ifdef CONFIG_SERIAL_MESON_CONSOLE
@@ -626,6 +569,7 @@ static int __init meson_serial_console_init(void)
 	register_console(&meson_serial_console);
 	return 0;
 }
+//console_initcall(meson_serial_console_init);
 
 static void meson_serial_early_console_write(struct console *co,
 					     const char *s,
@@ -666,6 +610,48 @@ static struct uart_driver meson_uart_driver = {
 	.cons		= MESON_SERIAL_CONSOLE,
 };
 
+static inline struct clk *meson_uart_probe_clock(struct device *dev,
+						 const char *id)
+{
+	struct clk *clk = NULL;
+	int ret;
+
+	clk = devm_clk_get(dev, id);
+	if (IS_ERR(clk))
+		return clk;
+
+	ret = clk_prepare_enable(clk);
+	if (ret) {
+		dev_err(dev, "couldn't enable clk\n");
+		return ERR_PTR(ret);
+	}
+
+	devm_add_action_or_reset(dev,
+			(void(*)(void *))clk_disable_unprepare,
+			clk);
+
+	return clk;
+}
+
+/*
+ * This function gets clocks in the legacy non-stable DT bindings.
+ * This code will be remove once all the platforms switch to the
+ * new DT bindings.
+ */
+static int meson_uart_probe_clocks_legacy(struct platform_device *pdev,
+					  struct uart_port *port)
+{
+	struct clk *clk = NULL;
+
+	clk = meson_uart_probe_clock(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	port->uartclk = clk_get_rate(clk);
+
+	return 0;
+}
+
 static int meson_uart_probe_clocks(struct platform_device *pdev,
 				   struct uart_port *port)
 {
@@ -673,15 +659,15 @@ static int meson_uart_probe_clocks(struct platform_device *pdev,
 	struct clk *clk_pclk = NULL;
 	struct clk *clk_baud = NULL;
 
-	clk_pclk = devm_clk_get_enabled(&pdev->dev, "pclk");
+	clk_pclk = meson_uart_probe_clock(&pdev->dev, "pclk");
 	if (IS_ERR(clk_pclk))
 		return PTR_ERR(clk_pclk);
 
-	clk_xtal = devm_clk_get_enabled(&pdev->dev, "xtal");
+	clk_xtal = meson_uart_probe_clock(&pdev->dev, "xtal");
 	if (IS_ERR(clk_xtal))
 		return PTR_ERR(clk_xtal);
 
-	clk_baud = devm_clk_get_enabled(&pdev->dev, "baud");
+	clk_baud = meson_uart_probe_clock(&pdev->dev, "baud");
 	if (IS_ERR(clk_baud))
 		return PTR_ERR(clk_baud);
 
@@ -734,7 +720,12 @@ static int meson_uart_probe(struct platform_device *pdev)
 	if (!port)
 		return -ENOMEM;
 
-	ret = meson_uart_probe_clocks(pdev, port);
+	/* Use legacy way until all platforms switch to new bindings */
+	if (of_device_is_compatible(pdev->dev.of_node, "amlogic,meson-uart"))
+		ret = meson_uart_probe_clocks_legacy(pdev, port);
+	else
+		ret = meson_uart_probe_clocks(pdev, port);
+
 	if (ret)
 		return ret;
 
@@ -794,6 +785,10 @@ static const struct of_device_id meson_uart_dt_match[] = {
 	},
 	{
 		.compatible = "amlogic,meson-s4-uart",
+		.data = (void *)&meson_g12a_uart_data,
+	},
+	{
+		.compatible = "amlogic,meson-t7-uart",
 		.data = (void *)&meson_g12a_uart_data,
 	},
 	{ /* sentinel */ },
