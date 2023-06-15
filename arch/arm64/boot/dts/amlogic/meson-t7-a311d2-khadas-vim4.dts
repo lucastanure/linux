@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2022 Wesion, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+
+#include "meson-t7.dtsi"
+
+/ {
+	model = "Khadas VIM4";
+
+	aliases {
+		serial0 = &uart_A;
+	};
+	
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x0 0x2 0x0>; /* 8 GB */
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* 3 MiB reserved for ARM Trusted Firmware (BL31) */
+		secmon_reserved: secmon@5000000 {
+			reg = <0x0 0x05000000 0x0 0x300000>;
+			no-map;
+		};
+
+		/* 32 MiB reserved for ARM Trusted Firmware (BL32) */
+		secmon_reserved_bl32: secmon@5300000 {
+			reg = <0x0 0x05300000 0x0 0x2000000>;
+			no-map;
+		};
+	};
+
+	xtal: xtal-clk {
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		clock-output-names = "xtal";
+		#clock-cells = <0>;
+	};
+
+	vddcpu_a: regulator-vddcpu-a {
+		/*
+		 * MP8756GD Regulator.
+		 */
+		compatible = "pwm-regulator";
+
+		regulator-name = "VDDCPU_A";
+		regulator-min-microvolt = <689000>;
+		regulator-max-microvolt = <1049000>;
+
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	vddcpu_b: regulator-vddcpu-a {
+		/*
+		 * MP8756GD Regulator.
+		 */
+		compatible = "pwm-regulator";
+
+		regulator-name = "VDDCPU_B";
+		regulator-min-microvolt = <689000>;
+		regulator-max-microvolt = <1049000>;
+
+		regulator-boot-on;
+		regulator-always-on;
+	};
+};
+
+&uart_A {
+	status = "okay";
+};
+
+&cpu0 {
+	cpu-supply = <&vddcpu_a>;
+};
+
+&cpu1 {
+	cpu-supply = <&vddcpu_a>;
+};
+
+&cpu2 {
+	cpu-supply = <&vddcpu_a>;
+};
+
+&cpu3 {
+	cpu-supply = <&vddcpu_a>;
+};
+
+&cpu100 {
+	cpu-supply = <&vddcpu_b>;
+};
+
+&cpu101 {
+	cpu-supply = <&vddcpu_b>;
+};
+
+&cpu102 {
+	cpu-supply = <&vddcpu_b>;
+};
+
+&cpu103 {
+	cpu-supply = <&vddcpu_b>;
+};
+
