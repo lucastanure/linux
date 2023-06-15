@@ -159,6 +159,13 @@ properties:
           - const: amlogic,a311d
           - const: amlogic,g12b
 
+      - description: Boards with the Amlogic Meson t7 A311D2 SoC
+        items:
+          - enum:
+              - khadas,vim4
+          - const: amlogic,a311d2
+          - const: amlogic,t7
+
       - description: Boards using the BPI-CM4 module with Amlogic Meson G12B A311D SoC
         items:
           - enum:
