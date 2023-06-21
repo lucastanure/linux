@@ -46,6 +46,12 @@ properties:
           - amlogic,meson8b-uart
           - amlogic,meson-gx-uart
           - amlogic,meson-s4-uart
+      - description: Everything-Else power domain UART controller on G12A compatible SoCs
+        items:
+          - enum:
+              - amlogic,meson-t7-uart
+          - const: amlogic,meson-g12a-uart
+          - const: amlogic,meson-ao-uart
       - description: Everything-Else power domain UART controller on G12A SoCs
         items:
           - const: amlogic,meson-g12a-uart
